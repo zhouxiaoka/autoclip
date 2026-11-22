@@ -1,9 +1,9 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Icon, fmtDuration } from '../../ui'
 import { exportPoster, studioApi } from './api'
-import { trackOutputShare } from '../../analytics/studio'
+import { trackOutputPlayed, trackOutputShare } from '../../analytics/studio'
 import { draftExportState, type ExportStatus } from './draftExportState'
 import StudioDownloadLink from './StudioDownloadLink'
 import PublishKit from './PublishKit'
@@ -23,6 +23,7 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const { status, completed, active, failure, previous } = draftExportState(draft, jobs)
   const thumbnail = studioApi.thumbnail(projectId, draft.id, draft.revision, completed?.job_id)
   const [failedThumbnail, setFailedThumbnail] = useState('')
+  const playedRef = useRef(false)
   const [changedCover, setChangedCover] = useState<{ id: string; stamp: number }>()
   const jobId = completed?.job_id
   const coverStamp = changedCover && changedCover.id === jobId ? changedCover.stamp : 0
@@ -39,6 +40,7 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   return <article className="ac-card studio-output-card" aria-label={`${draft.title} · ${t(statusLabels[status])}`} data-draft-id={draft.id} data-draft-status={status}>
     {completed ? <div className="studio-variant-thumb" title={poster ? t('封面') : thumbnailLabel}>
       <video className="studio-variant-video" aria-label={t('播放成片')} controls preload="metadata"
+        onPlay={() => { if (!playedRef.current) { playedRef.current = true; trackOutputPlayed(projectId) } }}
         poster={poster || thumbnail} src={studioApi.video(projectId, completed.job_id)} />
       <span className="ac-tag ac-tag--br">{fmtDuration(completed.result?.duration ?? draftDuration(draft))}</span>
     </div> :

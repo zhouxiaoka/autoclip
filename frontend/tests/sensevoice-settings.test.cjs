@@ -31,6 +31,7 @@ test('DefaultModels switches local ASR engines without a cloud connection', () =
   const updates = []
   const Select = () => null
   const DefaultModels = loadTs('DefaultModels.tsx', {
+    react: { ...React, useState: initial => [initial, () => {}] },
     antd: { Select },
     'react-i18next': { useTranslation: () => {} },
     '../../i18n': i18n,
@@ -56,6 +57,7 @@ test('DefaultModels switches local ASR engines without a cloud connection', () =
 
 test('the cover model card can grant and revoke frame uploads independently of the model', () => {
   const DefaultModels = loadTs('DefaultModels.tsx', {
+    react: { ...React, useState: initial => [initial, () => {}] },
     antd: { Select: () => null }, 'react-i18next': { useTranslation() {} }, '../../i18n': i18n,
   }).default
   let settings = { connections: [], cover_enabled: true, allow_send_frame: false, cover: { model: 'fixture-image' } }

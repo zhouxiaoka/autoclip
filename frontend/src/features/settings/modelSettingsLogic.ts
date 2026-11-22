@@ -82,6 +82,43 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
   }
 }
 
+/** Explicitly clear the saved API key for one connection without removing its endpoint row. */
+export function clearConnectionKey(s: ModelSettings, id: string): ModelSettings {
+  return {
+    ...s,
+    connections: s.connections.map(c => c.id !== id ? c : {
+      ...c,
+      api_key: '',
+      has_key: false,
+      api_key_masked: '',
+      validation_status: 'unchecked' as const,
+      validation_error_type: '',
+      failed_model_checks: [],
+    }),
+  }
+}
+
+/** Remove one connection and cleanly detach any role bindings that pointed to it. */
+export function removeConnection(s: ModelSettings, id: string): ModelSettings {
+  const analysis = s.analysis?.connection_id === id ? null : s.analysis
+  const vision = s.vision?.connection_id === id ? null : s.vision
+  const coverRemoved = s.cover?.connection_id === id
+  const cover = coverRemoved ? null : s.cover
+  const transcription = s.transcription?.provider === 'cloud' && s.transcription.connection_id === id
+    ? { provider: 'whisper_local' as const, model: 'base', model_source: 'preset' as const }
+    : s.transcription
+  return {
+    ...s,
+    connections: s.connections.filter(c => c.id !== id),
+    analysis,
+    vision,
+    cover,
+    cover_enabled: coverRemoved ? false : s.cover_enabled,
+    cover_follows_analysis: coverRemoved ? false : s.cover_follows_analysis,
+    transcription,
+  }
+}
+
 export function failedCheck(connection: Connection, purpose: Role, model: string) {
   return connection.validation_status === 'failed' || !!connection.failed_model_checks?.some(item => item.model === model && item.purpose === purpose)
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
@@ -33,9 +33,9 @@ type Choice = {
   apply: () => ModelSettings
 }
 
-function PurposeSelect({ settings, lists, purpose, title, onChange }: {
+function PurposeSelect({ settings, lists, purpose, title, onChange, showSmartChoices = false }: {
   settings: ModelSettings; lists: Record<string, ModelList>; purpose: PurposeId; title: string
-  onChange: (next: ModelSettings) => void
+  onChange: (next: ModelSettings) => void; showSmartChoices?: boolean
 }) {
   const choices: Choice[] = []
   if (purpose === 'vision') choices.push({
@@ -67,7 +67,7 @@ function PurposeSelect({ settings, lists, purpose, title, onChange }: {
       })
     }
     const preferred = preferredOffer(offers)
-    if (preferred) choices.push({
+    if (preferred && (showSmartChoices || isSmartSelected(settings, purpose, modelId, preferred))) choices.push({
       value: JSON.stringify(['preset', preferred.connectionId, modelId]),
       label: `${modelId} · ${preferred.displayName} · ${t('智能选择')}`,
       selected: isSmartSelected(settings, purpose, modelId, preferred),
@@ -107,6 +107,7 @@ export default function DefaultModels({ settings, lists, onChange, transcription
   transcriptionNote?: ReactNode
 }) {
   useTranslation()
+  const [showSmartChoices, setShowSmartChoices] = useState(false)
   const analysis = settings.analysis
   const analysisList = analysis && lists[analysis.connection_id]
   const analysisEntry = analysisList?.models.find(entry => entry.id === analysis?.model)
@@ -119,7 +120,7 @@ export default function DefaultModels({ settings, lists, onChange, transcription
             <label className="ac-purpose-title" htmlFor={`ai-defaults-select-${slot.id}`}>{t(slot.titleKey)}</label>
             <span className="ac-purpose-kind">{t(slot.kindKey)}</span>
           </div>
-          <PurposeSelect settings={settings} lists={lists} purpose={slot.id} title={t(slot.titleKey)} onChange={onChange} />
+          <PurposeSelect settings={settings} lists={lists} purpose={slot.id} title={t(slot.titleKey)} onChange={onChange} showSmartChoices={showSmartChoices} />
           {slot.id === 'analysis' && analysis && analysisEntry?.analysis && !analysisEntry.capability && !analysisList?.preview && (
             <label className="ac-note">
               {t('服务商未标明输入类型，可按模型文档选择。')}
@@ -201,6 +202,10 @@ export default function DefaultModels({ settings, lists, onChange, transcription
       <div className="ac-purpose-grid">
         {PURPOSE_SLOTS.map(renderSlot)}
       </div>
+      <label className="ac-note" style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <input type="checkbox" checked={showSmartChoices} onChange={event => setShowSmartChoices(event.target.checked)} />
+        {t('高级：显示智能回退选项')}
+      </label>
     </div>
   )
 }

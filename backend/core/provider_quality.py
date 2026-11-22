@@ -269,7 +269,7 @@ def display_catalog_group(group: str, *, sponsor: bool, success_tier_value: Opti
 
 
 def recommended_provider_ids() -> list[str]:
-    """Sponsors pinned in catalog order, then non-sponsors by success tier and rate."""
+    """Measured high-tier providers first, then sponsors in catalog order, then other recommended."""
     from backend.core.provider_presets import get_catalog
 
     ranked: list[tuple[tuple, str]] = []
@@ -281,12 +281,16 @@ def recommended_provider_ids() -> list[str]:
         )
         if shown != "recommended":
             continue
-        if preset.sponsor:
-            key = (0, index, 0, 0.0)
+        if not preset.sponsor and tier == "high":
+            rank = _TIER_RANK.get(tier or "", 9)
+            rate = -(row.success_rate if row else 0.0)
+            key = (0, rank, rate, index)
+        elif preset.sponsor:
+            key = (1, index, 0.0, index)
         else:
             rank = _TIER_RANK.get(tier or "", 9)
             rate = -(row.success_rate if row else 0.0)
-            key = (1, rank, rate, index)
+            key = (2, rank, rate, index)
         ranked.append((key, preset.id))
     ranked.sort(key=lambda item: item[0])
     return [provider_id for _, provider_id in ranked]

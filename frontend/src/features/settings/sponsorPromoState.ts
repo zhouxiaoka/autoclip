@@ -94,7 +94,7 @@ export function promotionRegisterUrl(id: string, packaged = ''): string | null {
   return packaged
 }
 
-/** Remote default when it is still selectable. Null when nothing legal remains. */
+/** Remote default when an accepted remote view explicitly sets one. Packaged defaults follow ranked order. */
 export function promotionSetupChoice(candidates: readonly string[]): string | null {
   const listed = candidates.filter(id =>
     !!id
@@ -102,15 +102,15 @@ export function promotionSetupChoice(candidates: readonly string[]): string | nu
     && current?.statuses?.[id] !== 'out_of_service'
     && promotionEligible(id)
   )
-  const preferred = current?.defaultChoice
+  const preferred = current && current.source !== 'bundled' ? current.defaultChoice : null
   if (preferred && listed.includes(preferred)) return preferred
   return listed[0] || null
 }
 
-/** Remote order when a view is accepted. Null keeps the packaged sort. */
+/** Remote order among promoted sponsors when a view is accepted. Null keeps quality-first ordering. */
 export function promotionRank(id: string): number | null {
   if (!current) return null
   if (current.statuses[id] === 'out_of_service') return 1000
   const index = current.choices.indexOf(id)
-  return index === -1 ? 100 : index
+  return index === -1 ? null : index
 }

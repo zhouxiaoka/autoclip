@@ -4,7 +4,7 @@ import { message } from 'antd'
 import { studioDownloadRequested, observeStudioDownload, type VariantProperties } from '../../analytics/studio'
 import { captureStudioException } from '../../desktop/sentry'
 import { studioApi } from './api'
-import { isDesktopDownload, saveStudioExport } from './nativeDownload'
+import { isDesktopDownload, revealInFolder, saveStudioExport } from './nativeDownload'
 import { markOutputTaken } from './overrides'
 
 export default function StudioDownloadLink({ projectId, jobId, className = 'studio-link', onSaved, variant }: {
@@ -15,25 +15,39 @@ export default function StudioDownloadLink({ projectId, jobId, className = 'stud
   const { t } = useTranslation()
   const pending = useRef(false)
   const [busy, setBusy] = useState(false)
-  return <a className={className} href={studioApi.video(projectId, jobId, true)} download
-    aria-busy={busy} aria-disabled={busy}
-    onClick={async event => {
-      if (!isDesktopDownload()) { markOutputTaken(projectId); studioDownloadRequested(projectId, jobId, variant); onSaved?.(); return }
-      event.preventDefault()
-      if (pending.current) return
-      pending.current = true
-      setBusy(true)
-      try {
-        await observeStudioDownload(() => saveStudioExport(projectId, jobId), projectId, jobId, variant)
-        markOutputTaken(projectId)
-        message.success(t('已保存到下载文件夹'))
-        onSaved?.()
-      } catch (error) {
-        captureStudioException(error, 'native_download')
-        message.error(t('下载失败，请稍后重试'))
-      } finally {
-        pending.current = false
-        setBusy(false)
-      }
-    }}>{t('下载成片')}</a>
+  const [savedPath, setSavedPath] = useState('')
+  return <>
+    <a className={className} href={studioApi.video(projectId, jobId, true)} download
+      aria-busy={busy} aria-disabled={busy}
+      onClick={async event => {
+        if (!isDesktopDownload()) { markOutputTaken(projectId); studioDownloadRequested(projectId, jobId, variant); onSaved?.(); return }
+        event.preventDefault()
+        if (pending.current) return
+        pending.current = true
+        setBusy(true)
+        try {
+          const localPath = await observeStudioDownload(() => saveStudioExport(projectId, jobId), projectId, jobId, variant)
+          if (localPath) setSavedPath(localPath)
+          markOutputTaken(projectId)
+          message.success(t('已保存到下载文件夹'))
+          onSaved?.()
+        } catch (error) {
+          captureStudioException(error, 'native_download')
+          message.error(t('下载失败，请稍后重试'))
+        } finally {
+          pending.current = false
+          setBusy(false)
+        }
+      }}>{t('下载成片')}</a>
+    {savedPath && (
+      <button
+        type="button"
+        className="studio-link"
+        data-testid="reveal-in-folder-btn"
+        onClick={() => void revealInFolder(savedPath).catch(() => message.error(t('无法打开所在文件夹')))}
+      >
+        {t('打开所在文件夹')}
+      </button>
+    )}
+  </>
 }

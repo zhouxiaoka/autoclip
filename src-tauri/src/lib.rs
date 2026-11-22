@@ -58,7 +58,8 @@ pub fn run() {
             set_keep_awake,
             crate::tray::set_tray_language,
             crate::quit_guard::quit_guard_ready,
-            save_local_download
+            save_local_download,
+            reveal_in_folder
         ])
         .manage(BackendManager::new())
         .manage(crate::quit_guard::QuitGuardState::new())

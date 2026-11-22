@@ -192,26 +192,53 @@ export default function ProviderDetail({
             {canTest && connection && (
               <div className="ac-provider-test-row">
                 <p className="ac-note">{t('settings.providers.test_cost')}</p>
-                {persisted && <><p className="ac-note">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>
-                  <Btn variant="cta" size="sm" disabled={testDisabled || m.saving} onClick={() => void m.configureProvider(persisted)}>{t('一键配置模型')}</Btn></>}
+                {persisted && <p className="ac-note">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                  <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={(testing && m.testingKind === 'quick') || !!listing} onClick={onTest}>
-                    {t('快速测试')}
-                  </Btn>
-                  <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={testing && m.testingKind === 'trial'} onClick={() => {
-                    if (!connection) return
-                    void m.testCatalogProvider(preset.id, {
-                      api_key: connection.api_key,
-                      base_url: connection.base_url,
-                      has_key: connection.has_key,
-                    }, 'trial')
-                  }}>
-                    {t('试跑一段')}
-                  </Btn>
+                  {persisted ? (
+                    <Btn variant="cta" size="sm" disabled={testDisabled || m.saving} loading={m.saving} onClick={() => void m.configureProvider(persisted)}>
+                      {t('测试并启用')}
+                    </Btn>
+                  ) : (
+                    <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={testDisabled} loading={(testing && m.testingKind === 'quick') || !!listing} onClick={onTest}>
+                      {t('快速测试')}
+                    </Btn>
+                  )}
                   {testing && m.testingKind === 'trial' && (
                     <Btn size="sm" variant="text" onClick={() => m.cancelTrial()}>{t('取消试跑')}</Btn>
                   )}
                 </div>
+                <details className="ac-provider-advanced" data-testid="provider-advanced-actions">
+                  <summary className="ac-note">{t('更多操作')}</summary>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    {persisted && (
+                      <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={(testing && m.testingKind === 'quick') || !!listing} onClick={onTest}>
+                        {t('快速测试')}
+                      </Btn>
+                    )}
+                    <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={testing && m.testingKind === 'trial'} onClick={() => {
+                      if (!connection) return
+                      void m.testCatalogProvider(preset.id, {
+                        api_key: connection.api_key,
+                        base_url: connection.base_url,
+                        has_key: connection.has_key,
+                      }, 'trial')
+                    }}>
+                      {t('试跑一段')}
+                    </Btn>
+                    {persisted && persisted.has_key && m.clearConnectionKey && (
+                      <Btn size="sm" variant="text" disabled={m.saving} onClick={() => void m.clearConnectionKey(persisted.id)}>
+                        {t('清除已保存密钥')}
+                      </Btn>
+                    )}
+                    {persisted && m.removeConnection && (
+                      <Btn size="sm" variant="danger" disabled={m.saving} onClick={() => {
+                        void m.removeConnection(persisted.id).then(() => onBack())
+                      }}>
+                        {t('删除此服务商')}
+                      </Btn>
+                    )}
+                  </div>
+                </details>
                 {status === 'failed' && (
                   <p className="ac-note ac-note--error" role="alert">{validationCopy(connection.validation_error_type)}</p>
                 )}
