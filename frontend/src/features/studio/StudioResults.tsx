@@ -256,6 +256,10 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const startAnotherPlatform = () => {
     dismissMorePlatformBanner()
     setBannerDismissed(true)
+    if (!project.source_url) {
+      setRemaking(true)
+      return
+    }
     stashReuseImport({
       platforms: [morePlatformId],
       sourceUrl: project.source_url || undefined,
@@ -280,14 +284,14 @@ export default function StudioResults({ project, children, onCreateCollection, o
     </div>}
     {remaking && <PlanEditDialog remake projectId={project.id} plan={workspace.plan} onClose={() => setRemaking(false)}
       onSubmitted={() => { setRemaking(false); refresh() }} />}
-    {managed && !automatic && workspace.analysis?.status === 'awaiting_confirmation' && workspace.plan &&
+    {(managed || !!workspace.plan) && !automatic && workspace.analysis?.status === 'awaiting_confirmation' && workspace.plan &&
       <PlanSummary key={workspace.plan.id} projectId={project.id} plan={workspace.plan} remake
         status={workspace.analysis.status} onChanged={refresh} />}
     {automatic && workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}
     {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={resultCount} description={automatic ? generationDescription : showDraftList ? (sourceDuration != null ? t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) }) : undefined) : visual ? t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。") : t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions">
         {managed && loaded && !automatic && !hideLegacy && workspace.analysis?.status !== 'awaiting_confirmation' &&
           <Btn size="sm" disabled={loading || workspace.analysis?.status === 'running'} onClick={() => { noteLegacy('plan_adjust'); setRemaking(true) }}>{t('再做一版')}</Btn>}
-        {automatic && genDone && <Btn size="sm" disabled={loading} onClick={startAnotherPlatform}>{t('用同一素材再做一个')}</Btn>}
+        {automatic && genDone && <Btn size="sm" disabled={loading || workspace.analysis?.status === 'running'} onClick={startAnotherPlatform}>{t('用同一素材再做一个')}</Btn>}
         <Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}{completedExportCount > 0 && <> <span className="ac-mono">{completedExportCount}</span></>}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
       {progress && <div className="ac-empty studio-processing">
         <div className="studio-progress" role="progressbar" aria-busy={progress.indeterminate || undefined} aria-valuenow={progress.indeterminate ? undefined : progress.percent} aria-valuemin={progress.indeterminate ? undefined : 0} aria-valuemax={progress.indeterminate ? undefined : 100} aria-valuetext={t(progress.label)}>
@@ -346,7 +350,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
       {!showDraftList && project.clips?.map(c=><div className="studio-source-row" key={c.id}><div><b>{c.generated_title||c.title}</b><p className="studio-muted">{c.start_time}–{c.end_time}</p></div><Btn size="sm" disabled={!!busy} loading={busy===c.id} onClick={()=>createLegacy(c)}>{t("用于新成片")}</Btn></div>)}
     </details>}
     <details className="studio-details studio-source-details"><summary>{t("原素材")}</summary><video controls preload="none" className="studio-source-video" src={studioApi.source(project.id)}/></details>
-    <ExportHistory projectId={project.id} jobs={workspace.jobs} open={history} onClose={()=>setHistory(false)}/>
+    <ExportHistory projectId={project.id} jobs={workspace.jobs} variants={workspace.output_variants} open={history} onClose={()=>setHistory(false)}/>
     <Dialog open={!!preview} title={preview?.label||t("原片")} onClose={()=>setPreview(null)}>{preview&&<video key={preview.id} controls preload="metadata" className="studio-source-video" src={`${studioApi.source(project.id)}#t=${preview.start},${preview.end}`}/>}<p className="studio-muted">{preview?.evidence}</p></Dialog>
     <Dialog open={!!exporting} title={t("导出成片")} onClose={()=>!busy&&setExporting(null)} description={t("按当前草稿设置渲染，完成后在导出记录下载。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setExporting(null)}>{t("关闭")}</Btn><Btn variant="cta" disabled={!!busy} loading={busy==='export'} onClick={()=>exporting&&act('export',async()=>{await studioApi.export(project.id,exporting.id,exporting.revision, exporting);setExporting(null);setHistory(true)})}>{t("确认导出")}</Btn></div>}><p>{exporting?.title}</p><p className="studio-muted">{exporting?.aspect==='portrait'?t("9:16 竖屏"):exporting?.aspect==='landscape'?t("16:9 横屏"):t("原画幅")} · MP4 · 30 fps</p>{actionError&&<p className="studio-error">{actionError}</p>}</Dialog>
     <DiagnosePanel open={diagnoseOpen} onClose={() => setDiagnoseOpen(false)} info={{ ...resolvedCause, error: resolvedCause.error || workspace.analysis?.error }} reason={detailView.reason} onSettings={destination => navigate(settingsReturnUrl(destination, project.id))} />

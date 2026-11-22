@@ -13,8 +13,15 @@ type Props = {
   coverStamp?: number; onCoverChanged?: () => void
 }
 
-export function coverWarningMessage(warning?: string | null): string {
-  if (!warning) return ''
+export function coverWarningMessage(
+  warning?: string | null,
+  cfg?: { enabled?: boolean; configured?: boolean; allow_send_frame?: boolean } | null,
+): string {
+  if (!warning) {
+    return cfg?.enabled && cfg?.configured && cfg.allow_send_frame === false
+      ? t('已关闭上传参考帧，当前使用本地排版封面')
+      : ''
+  }
   if (warning === 'frame_sending_disabled') return t('已关闭上传参考帧，当前使用本地排版封面')
   if (warning === 'needs_source_validation') return t('当前是截帧封面')
   if (warning === 'text_unavailable' || warning === 'text_mismatch') return t('生图标题校对未通过，已改成本地排版')
@@ -58,7 +65,7 @@ export default function ExportCover({ projectId, job, variant, coverStamp = 0, o
       setDesign(view?.options || { mode: cfg?.design_mode || 'crop_grade_text_only', recipe: 'auto' })
       setTimes(view?.candidate_times || [])
       setFrameLocked(!!view?.frame_locked)
-      setWarning(coverWarningMessage(view?.warning))
+      setWarning(coverWarningMessage(view?.warning, cfg))
       setAskReference(!!cfg?.enabled && cfg.configured && !cfg.allow_send_frame)
       setReferenceOnce(false)
     })
