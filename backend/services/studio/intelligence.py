@@ -139,6 +139,22 @@ def _http_error_detail(error) -> str:
     return detail
 
 
+from contextlib import contextmanager
+import contextvars
+
+_vision_before_emit_hook: contextvars.ContextVar = contextvars.ContextVar('vision_before_emit_hook', default=None)
+
+
+@contextmanager
+def vision_degrade_hook(callback):
+    """Run ``callback(parsed_value, error)`` inside vision_call before llm_request_finished emits."""
+    token = _vision_before_emit_hook.set(callback)
+    try:
+        yield
+    finally:
+        _vision_before_emit_hook.reset(token)
+
+
 def vision_call(content, config=None, *, allow_event_list=False):
     from backend.core.project_cancellation import checkpoint
     checkpoint()  # the project was deleted: no more paid calls for it (RC156 #12)
@@ -203,7 +219,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
             raise
 
     started = time.monotonic()
-    _telem = {'retries': 0, 'result': None, 'error': None}
+    _telem = {'retries': 0, 'result': None, 'parsed': None, 'error': None}
     from backend.core.llm_emit import begin_logical_call
     begin_logical_call()  # E2: each vision call counts its own retry once
 
@@ -305,6 +321,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                     value = {'events': value}
                 if not isinstance(value, dict):
                     raise ValueError('Expected a JSON object')
+                _telem['parsed'] = value
                 return value
             except (VisionRequestError, UserFacingError):
                 raise
@@ -345,6 +362,12 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 usage_obj.get('completion_tokens', usage_obj.get('output_tokens')),
                 comp_chars, elapsed,
             )
+        before_emit = _vision_before_emit_hook.get()
+        if callable(before_emit):
+            try:
+                before_emit(_telem['parsed'], _telem['error'])
+            except Exception:  # noqa: BLE001 - degrade hooks must never drop request telemetry
+                logger.warning("Vision before-emit hook failed", exc_info=True)
         sent = config if model == config.get('model') else {**config, 'model': model}
         emit_vision_request(config=sent, started=started, error=_telem['error'], result=_telem['result'], retries=_telem['retries'], identity=identity)
 
