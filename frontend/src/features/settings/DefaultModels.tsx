@@ -139,10 +139,16 @@ export default function DefaultModels({ settings, lists, onChange, transcription
             </select></label>}
           {slot.id === 'cover' && settings.cover_enabled && settings.cover?.model && (
             <label className="ac-note"><input type="checkbox" checked={settings.allow_send_frame}
-              onChange={event => onChange({ ...settings, allow_send_frame: event.target.checked })} /> {t('允许上传参考帧')}</label>
+              onChange={event => onChange({ ...settings, allow_send_frame: event.target.checked })} /> {t('允许向封面生图模型上传参考帧')}</label>
+          )}
+          {slot.id === 'cover' && settings.cover_enabled && settings.cover?.model && (settings.cover_design_mode || 'crop_grade_text_only') !== 'editorial_edit' && (
+            <p className="ac-note" role="status">{t('当前为「原帧排版」，不会调用所选生图模型；切到「模型编辑」后生效。')}</p>
+          )}
+          {slot.id === 'cover' && settings.cover_enabled && settings.cover?.model && settings.cover_design_mode === 'editorial_edit' && !settings.allow_send_frame && (
+            <p className="ac-note" role="status">{t('已关闭向封面生图模型上传参考帧，将仅使用本机排版，不会调用所选生图模型（不影响画面理解）。')}</p>
           )}
           {slot.id === 'cover' && !settings.cover_enabled && settings.cover?.model && (
-            <button type="button" className="ac-link-button" onClick={() => onChange({ ...settings, cover_enabled: true, prefer_local_cover: false })}>
+            <button type="button" className="ac-link-button" onClick={() => onChange({ ...settings, cover_enabled: true, prefer_local_cover: false, cover_design_mode: 'editorial_edit' })}>
               {t('启用 {{model}}', { model: settings.cover.model })}
             </button>
           )}

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import base64
+import contextvars
 import json
+import logging
 import math
 import os
 import re
@@ -10,6 +12,7 @@ import time
 from pathlib import Path
 import subprocess
 import tempfile
+from urllib.parse import urlparse
 import wave
 
 import httpx
@@ -17,6 +20,27 @@ import httpx
 from backend.core.asr_model_catalog import adapter
 from backend.services.ai_model_settings import chat_endpoint
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
+
+logger = logging.getLogger(__name__)
+_last_asr_info: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar('last_asr_info', default=None)
+
+
+def record_asr_info(*, asr_provider: str = '', asr_model: str = '', asr_route: str = '') -> dict[str, str]:
+    info = {
+        'asr_provider': asr_provider,
+        'asr_model': asr_model,
+        'asr_route': asr_route,
+    }
+    _last_asr_info.set(info)
+    return info
+
+
+def last_asr_info() -> dict[str, str]:
+    return dict(_last_asr_info.get() or {})
+
+
+def clear_asr_info() -> None:
+    _last_asr_info.set(None)
 
 
 def _workers() -> int:
@@ -227,9 +251,14 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
         if completed.returncode:
             raise CloudTranscriptionError('无法提取视频音频，请检查视频是否包含音轨。')
         segments = []
+        from backend.core import llm_usage
         from backend.core.llm_providers import is_local_url
         from backend.services.studio.failure_identity import connection_identity
         identity = connection_identity(connection, selection.model, full=True)  # this call's connection
+        route = adapter(connection.provider, selection.model) or ''
+        endpoint_url = chat_endpoint(connection, selection.model)['base_url']
+        host = (urlparse(endpoint_url).hostname or '').lower()
+        started = time.monotonic()
         try:
             # Cut every chunk first, then upload them side by side: one request after another made a
             # three-hour talk ~60 sequential round trips. Offsets come from exact sample counts.
@@ -246,8 +275,12 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                     duration = len(samples) / 32000
                     chunks.append((chunk, offset, duration))
                     offset += duration
+            logger.info(
+                'Cloud ASR started: provider=%s model=%s route=%s host=%s chunks=%d language=%s',
+                connection.provider, selection.model, route, host, len(chunks), language,
+            )
             with httpx.Client(timeout=timeout or 300, follow_redirects=False,
-                              trust_env=not is_local_url(chat_endpoint(connection, '')['base_url'])) as client:
+                              trust_env=not is_local_url(endpoint_url)) as client:
                 def one(part):
                     chunk, start, duration = part
                     for attempt in range(CHUNK_ATTEMPTS):
@@ -302,4 +335,19 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
             sidecar_path(output).unlink(missing_ok=True)
         finally:
             pending.unlink(missing_ok=True)
+        elapsed = round(time.monotonic() - started, 2)
+        record_asr_info(asr_provider=connection.provider, asr_model=selection.model, asr_route=route)
+        llm_usage.record_asr(
+            connection.provider,
+            selection.model,
+            route=route,
+            seconds=elapsed,
+            chunks=len(chunks),
+            segments=len(segments),
+            host=host,
+        )
+        logger.info(
+            'Cloud ASR completed: provider=%s model=%s route=%s host=%s chunks=%d segments=%d seconds=%.2f',
+            connection.provider, selection.model, route, host, len(chunks), len(segments), elapsed,
+        )
     return output

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import uuid
@@ -19,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.services.studio import cover_design as cd
 from backend.core.llm_telemetry import sanitize_model
+
+logger = logging.getLogger(__name__)
 
 VERSION = "brief-7"
 Recipe = Literal["auto", "photo_focus", "culture_editorial", "tech_question", "bold_statement"]
@@ -647,6 +650,14 @@ def record_rejection(path, token, rejection):
                 ensure_ascii=False,
             ).encode(),
         )
+        logger.warning(
+            "Cover model rejected: file=%s provider=%s model=%s attempts=%d fallback_reason=%s",
+            path.name,
+            rejection.audit.get("provider") or "",
+            rejection.audit.get("model") or "",
+            int(rejection.audit.get("attempts") or 0),
+            rejection.audit.get("fallback_reason"),
+        )
 
 
 def atomic(path, data):
@@ -690,7 +701,7 @@ def _repair_prompt(b, fidelity, layout):
     return "\n".join(instructions)
 
 
-def make(b, frame, cfg, *, can_send, generate, check, previous=False):
+def make(b, frame, cfg, *, can_send, generate, check, previous=False, allow_model=True):
     """Both producers use this decision, including the bounded edit retry and the same-frame fallback."""
     from backend.core.image_providers import ImageError, ImageRequest
     from backend.services import cover_fidelity
@@ -714,7 +725,12 @@ def make(b, frame, cfg, *, can_send, generate, check, previous=False):
             raise ValueError("需要核实原素材，无法使用参考案例作为封面")
         return fit_model(frame, size), record(b, method="source_frame", check="unavailable", reason=b.status)
     if b.permissions["mode"] == "editorial_edit":
-        if can_send and cfg.enabled and cfg.configured:
+        if not allow_model:
+            if not can_send:
+                reason = "frame_sending_disabled"
+            elif not (cfg.enabled and cfg.configured):
+                reason = "image_service_unavailable"
+        elif can_send and cfg.enabled and cfg.configured:
             prompt = compile_prompt(b)
             req = ImageRequest(
                 prompt=prompt,
@@ -860,6 +876,15 @@ def save(meta_path, token, data, frame, metadata):
                 ),
                 ensure_ascii=False,
             ).encode(),
+        )
+        logger.info(
+            "Cover artifact saved: file=%s result=%s provider=%s model=%s attempts=%d fallback_reason=%s",
+            meta_path.name,
+            metadata.get("result") or "",
+            metadata.get("provider") or "",
+            metadata.get("model") or "",
+            int(metadata.get("attempts") or 0),
+            metadata.get("fallback_reason"),
         )
 
 

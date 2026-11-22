@@ -1295,6 +1295,10 @@ def request_ai_cover(project_id, variant_id, render_job_id=None, *, allow_local=
     mode = options.mode if options else getattr(cfg, "design_mode", "crop_grade_text_only")
     use_model = mode == "editorial_edit" and cfg.enabled and cfg.configured and cfg.allow_send_frame
     if not (use_model or allow_local):
+        logger.info(
+            "AI cover skipped: project=%s variant=%s mode=%s enabled=%s configured=%s allow_send_frame=%s model=%s",
+            project_id, variant_id, mode, cfg.enabled, cfg.configured, cfg.allow_send_frame, getattr(cfg, "model", ""),
+        )
         return None
     job_id = uuid.uuid4().hex
 
@@ -1402,12 +1406,13 @@ def _ai_cover_job(project_id, variant_id, job_id, *, mode="ai"):
             request_token=task.get("design_token"),
         )
         if mode == "ai":
-            with llm_usage.timed("ai_cover"):
+            with llm_usage.tracking(project_id), llm_usage.timed("ai_cover"):
                 result = publish_kit.ai_cover(*args, **params)
                 made = bool(result)
                 cover_kind = "design" if result in ("local_design", "source_frame") else "ai"
         else:
-            publish_kit.redesign_local_cover(*args, **params)
+            with llm_usage.tracking(project_id):
+                publish_kit.redesign_local_cover(*args, **params)
             cover_kind, made = "design", True
     except Exception as error:  # noqa: BLE001 - the designed cover stays
         store.raise_owned_read_error(error)

@@ -4,6 +4,7 @@ from backend.core.llm_stream import StreamError
 from backend.core.failure_attribution import ModelResponseInvalid  
 import base64
 import json
+import logging
 import math
 import re
 import subprocess
@@ -19,6 +20,8 @@ from pydantic import Field
 from backend.services.studio.models import Scene, Draft, Preferences
 from backend.services.publish_export import _probe
 from backend.utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
+
+logger = logging.getLogger(__name__)
 
 
 def visual_config():
@@ -159,7 +162,8 @@ def vision_call(content, config=None, *, allow_event_list=False):
     from backend.core.model_catalog import known_text_only
 
     def build_body(name):
-        payload = {'model': name, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}
+        max_tokens = int(config['max_tokens']) if config.get('max_tokens') else (1000 if config.get('quick_screening') else 4000)
+        payload = {'model': name, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': max_tokens}
         # Structured visual observation must finish within the bounded request budget.
         # Other compatible providers must not receive Seed-specific parameters.
         if name.lower().startswith('doubao-seed'):
@@ -310,7 +314,37 @@ def vision_call(content, config=None, *, allow_event_list=False):
         _telem['error'] = error
         raise
     finally:
+        from backend.core import llm_usage
         from backend.core.llm_telemetry import emit_vision_request
+        err = _telem['error']
+        elapsed = getattr(err, 'elapsed_seconds', None)
+        if elapsed is None:
+            try:
+                elapsed = time.monotonic() - started
+            except StopIteration:
+                elapsed = 0.0
+        elapsed = round(float(elapsed), 2)
+        images_count = sum(1 for part in content if isinstance(part, dict) and part.get('type') == 'image_url')
+        stage_name = llm_usage.current_stage()
+        res_obj = _telem['result'] if isinstance(_telem['result'], dict) else {}
+        usage_obj = res_obj.get('usage') if isinstance(res_obj.get('usage'), dict) else {}
+        comp_chars = len(str(((res_obj.get('choices') or [{}])[0].get('message') or {}).get('content') or '')) if res_obj else 0
+        if err is None:
+            logger.info(
+                "Vision call completed: stage=%s model=%s images=%d prompt_tokens=%s completion_tokens=%s completion_chars=%d elapsed_s=%.2f",
+                stage_name, model, images_count,
+                usage_obj.get('prompt_tokens', usage_obj.get('input_tokens')),
+                usage_obj.get('completion_tokens', usage_obj.get('output_tokens')),
+                comp_chars, elapsed,
+            )
+        else:
+            logger.warning(
+                "Vision call failed: stage=%s model=%s images=%d error_type=%s error_code=%s http_status=%s completion_tokens=%s completion_chars=%d elapsed_s=%.2f",
+                stage_name, model, images_count, type(err).__name__,
+                getattr(err, 'code', ''), getattr(err, 'http_status', None),
+                usage_obj.get('completion_tokens', usage_obj.get('output_tokens')),
+                comp_chars, elapsed,
+            )
         sent = config if model == config.get('model') else {**config, 'model': model}
         emit_vision_request(config=sent, started=started, error=_telem['error'], result=_telem['result'], retries=_telem['retries'], identity=identity)
 

@@ -371,6 +371,8 @@ def deepseek_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Di
 # - 开源 Qwen3（qwen3-32b 等）与 Omni 系列另有流式限制，不碰；
 # - 不在清单里的型号、不是百炼地址的兼容接口（中转 / 代理 / 本地），请求体一律不变。
 QWEN_HYBRID_THINKING_MODELS = frozenset({
+    # Qwen4
+    "qwen4-max",
     # Qwen3.8
     "qwen3.8-max", "qwen3.8-max-0902", "qwen3.8-flash", "qwen3.8-27b",
     # Qwen3.7（qwen3.7-max-preview / qwen3.7-max-2026-05-17 仅思考，不在这里）

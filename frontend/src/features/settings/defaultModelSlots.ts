@@ -186,7 +186,15 @@ function bindPurpose(settings: ModelSettings, purpose: PurposeId, connectionId: 
   if (purpose === 'cover') {
     // E1: picking a fixed or smart cover model is an explicit provider choice → independent.
     // Only the 「跟随分析」 entry (setCoverSeparate(false)) turns following on.
-    return { ...settings, cover_enabled: true, prefer_local_cover: false, cover_follows_analysis: false, cover: assignment(connectionId, model, source) }
+    // Selecting an image cover model switches cover design mode to editorial_edit so the chosen model actually runs.
+    return {
+      ...settings,
+      cover_enabled: true,
+      prefer_local_cover: false,
+      cover_follows_analysis: false,
+      cover_design_mode: 'editorial_edit',
+      cover: assignment(connectionId, model, source),
+    }
   }
   const next = { ...settings, [purpose]: assignment(connectionId, model, source) }
   return purpose === 'analysis' ? syncFollowingCover(settings, next) : next

@@ -330,7 +330,15 @@ class SimplePipelineAdapter:
                         _apply_source_window_to_srt(Path(srt_path), start, end, shift=shift)
                     if not TextProcessor.has_usable_srt(Path(srt_path)):
                         raise PipelineFailure('SUBTITLE', sentence('transcription_empty'), code='transcription_empty')
-                    logger.info(f"转写生成字幕成功: {srt_path}")
+                    from backend.services.cloud_transcription import last_asr_info
+                    asr_info = last_asr_info()
+                    logger.info(
+                        "转写生成字幕成功: %s (provider=%s model=%s route=%s)",
+                        srt_path,
+                        asr_info.get('asr_provider', ''),
+                        asr_info.get('asr_model', ''),
+                        asr_info.get('asr_route', ''),
+                    )
                     emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=TRANSCRIBE_DONE_SUBPERCENT)
                     return srt_path
                 logger.warning("转写生成字幕失败")
@@ -503,9 +511,11 @@ class SimplePipelineAdapter:
                 logger.info(f"自动生成字幕成功: {srt_path}")
                 # Stamp source fingerprint as soon as transcription is accepted.
                 # P1 #6: mark ASR origin so 「从头重做」 can safely delete only Whisper/cloud SRT.
+                from backend.services.cloud_transcription import last_asr_info
+                asr_extra = {k: v for k, v in last_asr_info().items() if v}
                 pipeline_resume.write_stamp(
                     metadata_dir, video=video_path, prompt_files=prompt_files,
-                    extra={'srt_origin': 'asr'},
+                    extra={'srt_origin': 'asr', **asr_extra},
                 )
 
             # T2: existing / platform SRT still needs the source_window filter (ASR path already applied it).

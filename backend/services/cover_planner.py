@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from backend.services.studio import cover_design as cd, intelligence
+
+logger = logging.getLogger(__name__)
 
 Note = Annotated[str, Field(min_length=1, max_length=180)]
 
@@ -123,9 +126,10 @@ def inspect(candidates, ctx, rows, *, speaker_hints=()):
         )
     try:
         with llm_usage.stage("cover_frame"):
-            reply = intelligence.vision_call(
-                content, {**effective(), "quick_screening": True}
-            )
+            # Do not reuse the 1000-token quick_screening cap: 6 candidate frames plus
+            # a 13-field editorial direction easily exceeds 1000 tokens (especially on
+            # models that allocate reasoning tokens), causing output_truncated.
+            reply = intelligence.vision_call(content, effective())
     except ProjectDeleted:
         raise
     except (
@@ -134,16 +138,36 @@ def inspect(candidates, ctx, rows, *, speaker_hints=()):
         OSError,
         ValueError,
     ) as exc:
-        return dict(audit, status="vision_unavailable", error_type=type(exc).__name__)
+        from backend.core import llm_telemetry
+
+        error_code = getattr(exc, "code", "") or ""
+        llm_telemetry.increment_degrade_count()
+        logger.warning(
+            "Cover planner vision failed: error_type=%s error_code=%s http_status=%s",
+            type(exc).__name__,
+            error_code,
+            getattr(exc, "http_status", None),
+        )
+        return dict(
+            audit,
+            status="vision_unavailable",
+            error_type=type(exc).__name__,
+            error_code=error_code,
+        )
     try:
         direction = Direction.model_validate(reply)
     except ValidationError:
-        return dict(
-            audit,
-            status="no_suitable_frame"
+        status = (
+            "no_suitable_frame"
             if isinstance(reply, dict) and reply.get("best") == 0
-            else "invalid_direction",
+            else "invalid_direction"
         )
+        if status == "invalid_direction":
+            from backend.core import llm_telemetry
+
+            llm_telemetry.increment_degrade_count()
+            logger.warning("Cover planner returned unusable direction: status=%s", status)
+        return dict(audit, status=status)
     i, alt = direction.best, direction.runner_up
     multiple = len(candidates) > 1
     title = ctx["title"]
@@ -166,6 +190,10 @@ def inspect(candidates, ctx, rows, *, speaker_hints=()):
         or not same_text
         or direction.emphasis not in title
     ):
+        from backend.core import llm_telemetry
+
+        llm_telemetry.increment_degrade_count()
+        logger.warning("Cover planner direction rejected by editorial checks: status=invalid_direction")
         return dict(audit, status="invalid_direction")
     frame = candidates[i - 1][0]
     return dict(

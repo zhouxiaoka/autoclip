@@ -171,7 +171,8 @@ def _deliver(project_id, job_id, strategy_id, frame, brief, options, token, allo
             brief,
             frame,
             cfg,
-            can_send=allow_model and cfg.allow_send_frame,
+            can_send=cfg.allow_send_frame,
+            allow_model=allow_model,
             generate=generate,
             check=_title_ok,
             previous=kit_cover_path(project_id, job_id, strategy_id, variant_id).is_file(),
@@ -187,6 +188,11 @@ def _deliver(project_id, job_id, strategy_id, frame, brief, options, token, allo
         layout_version=brief.design["revision"],
     )
     cb.save(cd_meta_path(project_id, job_id, strategy_id, variant_id), token, data, frame, audit)
+    logger.info(
+        "Studio cover delivered: project=%s job=%s strategy=%s allow_model=%s mode=%s allow_send_frame=%s result=%s attempts=%d fallback_reason=%s",
+        project_id, job_id, strategy_id, allow_model, brief.permissions.get("mode"), cfg.allow_send_frame,
+        audit.get("result"), int(audit.get("attempts") or 0), audit.get("fallback_reason"),
+    )
     return audit['result']
 
 
