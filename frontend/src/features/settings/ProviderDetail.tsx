@@ -7,6 +7,8 @@ import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import type { ProviderPreset } from './providerPresets'
 import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
+import CustomRequestOptions from './CustomRequestOptions'
+import { presetKey } from './modelSettingsLogic'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
 import TrialRunPanel from './TrialRunPanel'
@@ -309,6 +311,12 @@ export default function ProviderDetail({
               <p className="ac-note">{t('settings.providers.models_empty')}</p>
             )}
           </section>
+        )}
+        {connection && (connection.provider === 'compatible' || presetKey(connection) === 'compatible') && (
+          <details className="ac-disclosure ac-provider-detail-card" data-panel="advanced">
+            <summary>{t('高级')}</summary>
+            <CustomRequestOptions value={connection} onEdit={persistEdit} />
+          </details>
         )}
       </div>
     </div>

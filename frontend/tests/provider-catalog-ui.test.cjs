@@ -7,6 +7,7 @@ const { loadTs } = require('./load-ts.cjs')
 
 function loadDetail(mocks) {
   return loadTs('ProviderDetail.tsx', {
+    './CustomRequestOptions': { default: () => null },
     ...mocks,
     react: { ...React, useRef: current => ({ current }), ...(mocks.react || {}) },
   }).default
@@ -270,6 +271,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
   const m = { settings: value, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
   const Page = loadTs('AIModelSettings.tsx', {
     './ModelSettingsLeaveGuard': { default: () => null },
+    './CustomRequestOptions': { default: props => React.createElement('request-options', props) },
     './AddCustomProviderDialog': { default: () => null },
     react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {}, useRef: initial => ({ current: initial }) },
     'react-i18next': { useTranslation: () => {} },
@@ -334,6 +336,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
     }
     const Page = loadTs('AIModelSettings.tsx', {
     './ModelSettingsLeaveGuard': { default: () => null },
+    './CustomRequestOptions': { default: props => React.createElement('request-options', props) },
       './AddCustomProviderDialog': { default: () => null },
       react: {
         ...React,
@@ -364,6 +367,8 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
     const nodes = flatten(Page({ requestedSection: 'model', requestedProvider }))
     if (requestedProvider.startsWith('custom:')) {
       assert.ok(nodes.some(node => node.props?.['data-connect-kind'] === 'compatible'))
+      assert.equal(nodes.filter(node => node.type === 'request-options').length, 1)
+      assert.equal(nodes.find(node => node.type === 'request-options').props.value.id, 'ds')
     } else {
       assert.ok(nodes.some(node => node.props?.['data-detail'] === 'deepseek' || node.props?.['data-provider-id'] === 'deepseek'))
     }
