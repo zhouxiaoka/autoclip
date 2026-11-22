@@ -247,6 +247,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       replace(next)
     }
     if (connection) void discover(connection, false, 'provider_change')
+    return connection?.id
   }
   const assignAnalysisConnection = (connection: Connection) => {
     if (!settings) return
@@ -656,19 +657,28 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     if (!settings) return
     const preset = catalogPreset(presetId)
     if (!preset) return
-    const ensured = ensureCatalogConnection(settings, preset)
-    let next = ensured.settings
+    const existing = draft?.id ? settings.connections.find(row => row.id === draft.id) : undefined
+    const ensured = existing
+      ? { settings, connection: existing }
+      : ensureCatalogConnection(settings, preset)
+    let next = existing && !settings.analysis && preset.capabilities.includes('language')
+      ? assignAnalysis(settings, existing)
+      : ensured.settings
     let connection = ensured.connection
     if (!connection) return
-    const patch: Partial<Connection> = { ...(draft || {}) }
-    if (!(patch.base_url ?? connection.base_url)?.trim() && preset.base_url) {
-      patch.base_url = preset.base_url
+    if (!existing) {
+      const patch: Partial<Connection> = { ...(draft || {}) }
+      delete patch.id
+      if (!(patch.base_url ?? connection.base_url)?.trim() && preset.base_url) {
+        patch.base_url = preset.base_url
+      }
+      if (Object.keys(patch).length) {
+        next = logic.editConnection(next, connection.id, patch)
+        connection = next.connections.find(row => row.id === connection!.id) || connection
+      }
     }
-    if (Object.keys(patch).length) {
-      next = logic.editConnection(next, connection.id, patch)
-      connection = next.connections.find(row => row.id === connection!.id) || connection
-    }
-    if (!connection.base_url.trim() && preset.protocol !== 'local') {
+    const effectiveBaseUrl = (existing ? (draft?.base_url ?? connection.base_url) : connection.base_url).trim()
+    if (!effectiveBaseUrl && preset.protocol !== 'local') {
       const text = t('请先填写接口地址。')
       setError(text)
       message.error(text)

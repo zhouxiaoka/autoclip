@@ -307,3 +307,27 @@ test('saving during a provider list refresh reuses the validated vision capabili
   await render().testCatalogProvider('openai')
   assert.equal(calls.length, 2)
 })
+
+test('testing a catalog connection after editing its base_url reuses the same connection id (#636)', async () => {
+  const state = { ...whisperSettings(), saved: true, analysis: null, connections: [] }
+  const model = 'gpt-4o-mini'
+  const tested = []
+  const render = settingsHook(state, {
+    discover: async () => ({ source: 'live', models: [{ id: model, analysis: true, capability: 'text' }] }),
+    test: async (c, id, vision, role, kind) => { tested.push([c.id, c.base_url, kind]); return { ok: true, probe_kind: kind } },
+    save: async value => value,
+  })
+  await render().load()
+  const id = render().ensureCatalogProvider('openai', { base_url: 'https://gateway.example/final/v1', api_key: 'fixture' })
+  assert.ok(id)
+  const edited = render().settings.connections.find(row => row.id === id)
+  assert.equal(edited.base_url, 'https://gateway.example/final/v1')
+  for (const kind of ['quick', 'trial']) {
+    await render().testCatalogProvider('openai', edited, kind)
+  }
+  assert.equal(render().settings.connections.length, 1)
+  assert.deepEqual(tested, [
+    [id, 'https://gateway.example/final/v1', 'quick'],
+    [id, 'https://gateway.example/final/v1', 'trial'],
+  ])
+})
