@@ -11,8 +11,6 @@ from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
-import requests
-
 from backend.core import gemini_transport
 from backend.core.failure_attribution import ProviderTransportError
 from backend.core.llm_retry import retry_after_from_error
@@ -751,6 +749,8 @@ class GeminiProvider(LLMProvider):
 
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用Gemini API"""
+        import requests
+
         try:
             full_input = self._build_full_input(prompt, input_data)
 
