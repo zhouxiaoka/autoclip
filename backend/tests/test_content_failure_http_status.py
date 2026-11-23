@@ -235,3 +235,93 @@ def test_r28_i450_an_uncoded_wrapper_over_a_bare_status_is_not_a_model_failure(p
 
     assert raised.value.code != 'provider_error'
     assert 'upstream_error_type' not in studio_failure_context(raised.value, 'production')
+
+
+@pytest.mark.parametrize('pipeline', [True], indirect=True)
+@pytest.mark.parametrize('status,kind,expected_code', [
+    (401, 'invalid_key', 'llm_auth_invalid'),
+    (402, 'insufficient_quota', 'provider_error'),
+    (404, 'bad_endpoint', 'provider_error'),
+    (429, 'rate_limited', 'rate_limited'),
+])
+def test_one_pass_provider_failure_becomes_coded_analyze_failure_without_logging_exception(
+    pipeline, monkeypatch, caplog, status, kind, expected_code,
+):
+    """PYTHON-FASTAPI-67: one-pass clip_finder _LogSafeLLMError must become a coded ANALYZE
+    PipelineFailure and never hit logger.exception (which bypassed Sentry tags via LoggingIntegration)."""
+    import logging
+    from backend.core.llm_telemetry import _LogSafeLLMError, log_safe_exception
+    from backend.core.sentry_setup import studio_error_code, studio_failure_context
+    from backend.pipeline import clip_finder
+    from backend.pipeline.failures import PipelineFailure
+    from backend.services.studio import intelligence, jobs
+
+    mod, video = pipeline
+    monkeypatch.setattr(clip_finder, 'backoff_seconds', lambda *a: 0)
+    original = ProviderError('controlled provider failure', status)
+    original.body = {'error': {'code': kind, 'message': kind}}
+    safe = log_safe_exception(original)
+
+    def request(*args):
+        raise safe
+
+    monkeypatch.setattr(intelligence, 'text_json', request)
+    monkeypatch.setattr(mod, 'run_step1_outline', lambda *a, **k: pytest.fail('must not start legacy calls'))
+
+    with caplog.at_level(logging.ERROR, logger='backend.services.simple_pipeline_adapter'):
+        with pytest.raises(PipelineFailure) as caught:
+            jobs.run_content('p', video)
+
+    assert caught.value.stage == 'ANALYZE'
+    assert studio_error_code(caught.value) == expected_code
+    assert '流水线处理失败:' not in str(caught.value)
+    context = studio_failure_context(caught.value, 'production')
+    assert context['http_status'] == status
+    assert context['upstream_error_type'] == kind
+    # No ERROR log record may attach _LogSafeLLMError exc_info (would fire Sentry LoggingIntegration).
+    leaked = [
+        rec for rec in caplog.records
+        if rec.levelno >= logging.ERROR and rec.exc_info and isinstance(rec.exc_info[1], _LogSafeLLMError)
+    ]
+    assert leaked == []
+
+
+def test_before_send_drops_tagless_logging_event_for_expected_log_safe_llm_error(monkeypatch):
+    """Defense-in-depth for PYTHON-FASTAPI-67: LoggingIntegration sends _LogSafeLLMError without tags."""
+    from backend.core import sentry_setup
+    from backend.core.llm_telemetry import log_safe_exception
+
+    monkeypatch.setattr(sentry_setup, 'crash_reports_enabled', lambda: True)
+    for status, kind in ((401, 'invalid_key'), (402, 'insufficient_quota'), (429, 'rate_limited')):
+        original = ProviderError('controlled failure', status)
+        original.body = {'error': {'code': kind, 'message': kind}}
+        safe = log_safe_exception(original)
+        event = {
+            'logger': 'backend.services.simple_pipeline_adapter',
+            'exception': {'values': [{'type': '_LogSafeLLMError', 'value': str(safe), 'stacktrace': {'frames': []}}]},
+            'tags': {'runtime': 'python', 'os': 'windows'},
+        }
+        assert sentry_setup.before_send(event, {'exc_info': (type(safe), safe, None)}) is None
+
+    # An unrecognized _LogSafeLLMError without an expected upstream status/type must still be reported.
+    unknown_safe = log_safe_exception(RuntimeError('unrecognized internal failure'))
+    event = {
+        'logger': 'backend.services.simple_pipeline_adapter',
+        'exception': {'values': [{'type': '_LogSafeLLMError', 'value': str(unknown_safe), 'stacktrace': {'frames': []}}]},
+        'tags': {'runtime': 'python', 'os': 'windows'},
+    }
+    assert sentry_setup.before_send(event, {'exc_info': (type(unknown_safe), unknown_safe, None)}) is not None
+
+
+@pytest.mark.parametrize('pipeline', [True], indirect=True)
+def test_one_pass_local_programming_bug_stays_unexpected(pipeline, monkeypatch):
+    from backend.core.sentry_setup import studio_error_code
+    from backend.pipeline.failures import PipelineFailure
+    from backend.services.studio import intelligence, jobs
+
+    mod, video = pipeline
+    monkeypatch.setattr(intelligence, 'text_json', lambda *args: (_ for _ in ()).throw(KeyError('missing_key')))
+    with pytest.raises(RuntimeError) as caught:
+        jobs.run_content('p', video)
+    assert not isinstance(caught.value, PipelineFailure)
+    assert studio_error_code(caught.value) == 'unexpected'

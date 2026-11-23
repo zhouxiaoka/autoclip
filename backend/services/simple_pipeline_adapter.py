@@ -546,8 +546,16 @@ class SimplePipelineAdapter:
             if titled_clips is None and clips_only and start_step in ('step1', 'done', None):
                 # Model changed or no reusable steps: re-run one-pass (still skip transcription).
                 if start_step != 'done' or not reuse_steps:
-                    titled_clips = self._find_clips_in_one_pass(
-                        srt_path, metadata_dir, platform_min_sec, platform_min_label)
+                    try:
+                        titled_clips = self._find_clips_in_one_pass(
+                            srt_path, metadata_dir, platform_min_sec, platform_min_label)
+                    except (ProjectDeleted, JobStopped, ServiceRestarted, JobDurationExceeded, PipelineFailure):
+                        raise
+                    except Exception as error:
+                        converted = _one_pass_pipeline_failure(error)
+                        if converted is not None:
+                            raise converted from None
+                        raise
             if titled_clips is not None and start_step == 'done':
                 pass  # already set outlines/timeline/scored above when reused
             elif titled_clips is not None:
@@ -774,6 +782,58 @@ class SimplePipelineAdapter:
             # whole (run_content restores it, the store writes it as is; nothing downstream re-judges).
             _carry_attribution(failed, e)
             return failed
+
+
+def _one_pass_pipeline_failure(error: Exception) -> PipelineFailure | None:
+    """Wrap a one-pass clip_finder provider failure into a coded ANALYZE PipelineFailure.
+
+    `_find_clips_in_one_pass` keeps raising the raw request error for boundary/retry callers.
+    Converting it here prevents `process_project_sync`'s catch-all `logger.exception` from
+    leaking expected upstream `_LogSafeLLMError`s into Sentry via LoggingIntegration
+    (PYTHON-FASTAPI-67) and keeps stage/error_code/user message intact.
+    """
+    from backend.core.failure_attribution import (
+        FailureKind,
+        attributed,
+        classify_failure,
+        frozen_error_code,
+    )
+    from backend.core.llm_emit import attribution_snapshot
+    from backend.core.llm_retry import studio_code_for
+    from backend.core.llm_telemetry import _LogSafeLLMError
+    from backend.core.upstream_errors import (
+        UpstreamErrorType,
+        classify_exception,
+        http_error_parts,
+    )
+    from backend.pipeline.failures import AttributedPipelineFailure, MODEL_CALL_MESSAGES
+
+    if not (isinstance(error, _LogSafeLLMError) or classify_failure(error).kind is FailureKind.MODEL):
+        return None
+    info = classify_exception(error)
+    status = http_status_of(error) or http_error_parts(error)[0]
+    snap = getattr(error, "attribution", None) or attribution_snapshot(error)
+    kind = (
+        info.error_type.value
+        if info.error_type is not UpstreamErrorType.UNKNOWN
+        else (getattr(snap, "upstream_error_type", "") or "")
+    )
+    code = frozen_error_code(error) or studio_code_for(info.error_type, status)
+    if info.error_type is UpstreamErrorType.INVALID_KEY:
+        message = MODEL_CALL_MESSAGES["llm_auth_invalid"]
+    elif info.error_type is not UpstreamErrorType.UNKNOWN:
+        message = info.hint_key
+    else:
+        message = MODEL_CALL_MESSAGES.get(code) or info.hint_key
+    failure = AttributedPipelineFailure(
+        "ANALYZE",
+        message,
+        "",
+        code=code,
+        http_status=status,
+        upstream_error_type=kind,
+    )
+    return attributed(failure, snap, http_status=status, error_code=code)
 
 
 def _carry_attribution(failed: dict, error: BaseException) -> None:
