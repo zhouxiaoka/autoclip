@@ -233,11 +233,8 @@ class TextProcessor:
             return []
 
         try:
-            try:
-                subs = pysrt.open(str(srt_path), encoding='utf-8')
-            except UnicodeDecodeError:
-                logger.warning("UTF-8解码失败，尝试使用 utf-8-sig...")
-                subs = pysrt.open(str(srt_path), encoding='utf-8-sig')
+            # Let pysrt detect a byte order mark before falling back to UTF-8.
+            subs = pysrt.open(str(srt_path))
 
             subtitles = []
             for sub in subs:

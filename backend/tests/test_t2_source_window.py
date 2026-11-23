@@ -38,7 +38,8 @@ def test_planning_duration_uses_window(source, monkeypatch):
     assert planning.planning_duration(5400.0, ImportOptions(source_window=SourceWindow(start=0, end=1800))) == 1800.0
 
 
-def test_apply_source_window_to_srt_filters_and_shifts(tmp_path: Path):
+@pytest.mark.parametrize('encoding', ['utf-8', 'utf-16'])
+def test_apply_source_window_to_srt_filters_and_shifts(tmp_path: Path, encoding):
     srt = tmp_path / 'full.srt'
     subs = pysrt.SubRipFile()
     for i, (s, e, text) in enumerate([
@@ -48,7 +49,7 @@ def test_apply_source_window_to_srt_filters_and_shifts(tmp_path: Path):
     ], start=1):
         item = pysrt.SubRipItem(index=i, start=pysrt.SubRipTime(seconds=s), end=pysrt.SubRipTime(seconds=e), text=text)
         subs.append(item)
-    subs.save(str(srt), encoding='utf-8')
+    subs.save(str(srt), encoding=encoding)
 
     out = _apply_source_window_to_srt(srt, 0, 1800, shift=0.0, dest=tmp_path / 'windowed.srt')
     kept = pysrt.open(str(out), encoding='utf-8')

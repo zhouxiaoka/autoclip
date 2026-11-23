@@ -76,6 +76,26 @@ def test_valid_numeric_cue_is_preserved_without_transcription(case):
     assert 'asr' not in calls
 
 
+def test_attached_utf16_subtitles_reach_analysis_without_asr(case, monkeypatch):
+    from backend.utils.text_processor import TextProcessor
+
+    adapter, video, srt, calls = case
+    srt.write_text(SRT, encoding='utf-16')
+    original = srt.read_bytes()
+
+    def analyse(path, *_args):
+        calls.append(('analyse', TextProcessor.parse_srt(path)))
+        raise PipelineFailure('ANALYZE', 'stop after subtitle acceptance', code='fixture_stop')
+
+    monkeypatch.setattr(adapter, '_find_clips_in_one_pass', analyse)
+    result = asyncio.run(adapter.process_project_sync(str(video), str(srt), clips_only=True))
+    assert result['error_code'] == 'fixture_stop'
+    assert 'asr' not in calls
+    assert ('analyse', [{'start_time': '00:00:00,000', 'end_time': '00:01:00,000',
+                         'text': '有效的人声字幕。', 'index': 1}]) in calls
+    assert srt.read_bytes() == original
+
+
 def test_unexpected_asr_error_is_not_reported_as_silent_source(case, monkeypatch):
     adapter, video, srt, calls = case
     def broken(*a, **k):

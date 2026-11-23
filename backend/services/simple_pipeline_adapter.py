@@ -86,7 +86,7 @@ def _apply_source_window_to_srt(srt_path: Path, start: float, end: float, *, shi
     temp cut (relative to cut start) back onto the original timeline before filtering.
     """
     import pysrt
-    subs = pysrt.open(str(srt_path), encoding='utf-8')
+    subs = pysrt.open(str(srt_path))
     kept = pysrt.SubRipFile()
     for sub in subs:
         if shift:
