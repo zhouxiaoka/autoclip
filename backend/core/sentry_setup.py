@@ -61,6 +61,9 @@ def studio_error_code(error: Exception) -> str:
         return 'service_restarted'
     if type(error).__name__ == "QuotaExhausted":
         return "provider_error"
+    if type(error).__name__ == "CallPaused":
+        code = getattr(error, "code", None)
+        return code if isinstance(code, str) and code in STUDIO_ERROR_CODES else "provider_error"
     from backend.services.studio.intelligence import VisionRequestError
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
