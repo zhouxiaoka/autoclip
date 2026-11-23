@@ -56,6 +56,8 @@ export interface Repo {
   saveObject(row: ObjectRow): Promise<void>
   objectsFor(caseId: string): Promise<ObjectRow[]>
   allCases(): Promise<CaseRow[]>
+  activeCases(): Promise<CaseRow[]>
+  liveKeys(): Promise<Set<string>>
   reconcile(): QuotaState | Promise<QuotaState>
   commitFile(caseId: string, objectId: string, actualBytes: number, now: string): Promise<CommitResult>
 }
@@ -270,6 +272,24 @@ export class MemoryRepo {
 
   allCases(): Promise<CaseRow[]> {
     return Promise.resolve(structuredClone([...this.cases.values()]))
+  }
+
+  activeCases(): Promise<CaseRow[]> {
+    return Promise.resolve(structuredClone([...this.cases.values()].filter((row) => row.state !== 'deleted')))
+  }
+
+  liveKeys(): Promise<Set<string>> {
+    const live = new Set<string>()
+    const activeIds = new Set<string>()
+    for (const row of this.cases.values()) {
+      if (row.state === 'deleted') continue
+      activeIds.add(row.caseId)
+      live.add(`cases/${row.caseId}/manifest.json`)
+    }
+    for (const object of this.objects.values()) {
+      if (object.state !== 'aborted' && activeIds.has(object.caseId)) live.add(object.r2Key)
+    }
+    return Promise.resolve(live)
   }
 
   reconcile(): QuotaState {

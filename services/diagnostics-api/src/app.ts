@@ -551,7 +551,7 @@ export async function sweep(deps: Deps): Promise<{ aborted: number; expired: num
   const now = deps.now().getTime()
   let aborted = 0
   let expired = 0
-  for (const row of await deps.repo.allCases()) {
+  for (const row of await deps.repo.activeCases()) {
     if (row.state === 'deleted') continue
     if (row.state === 'creation_cleanup') { await purgeCase(deps, row, true); continue }
     const ageSeconds = (now - Date.parse(row.createdAt)) / 1000
@@ -566,15 +566,7 @@ export async function sweep(deps: Deps): Promise<{ aborted: number; expired: num
   // Writers register ownership before storing bytes. Check ownership *after*
   // listing, so a concurrent case cannot appear only on the storage side.
   const listed = await deps.bucket.list('cases/', new Date(now - 60 * 60 * 1000))
-  const live = new Set<string>()
-  for (const row of await deps.repo.allCases()) {
-    if (row.state === 'deleted') continue
-    live.add(`cases/${row.caseId}/manifest.json`)
-    for (const object of await deps.repo.objectsFor(row.caseId)) {
-      if (object.state !== 'aborted') live.add(object.r2Key)
-    }
-  }
-  const orphans = orphanKeys(listed, live)
+  const orphans = listed.length ? orphanKeys(listed, await deps.repo.liveKeys()) : []
   for (const key of orphans) await deps.bucket.delete(key)
   await deps.repo.reconcile()
   return { aborted, expired, orphans }
