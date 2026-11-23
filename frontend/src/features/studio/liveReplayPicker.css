@@ -72,6 +72,28 @@
 .replay-mark--discord { background: #efeffe; }
 .replay-mark--other { background: #efeeeb; }
 
+.replay-tab-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.replay-new-badge {
+  position: absolute;
+  top: -11px;
+  right: -20px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--ac-accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+}
+
 .replay-upcoming {
   margin: 14px 0 0;
   color: var(--ac-sub);

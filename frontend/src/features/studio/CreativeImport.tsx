@@ -92,6 +92,26 @@ function BrowserCookieControl({ browser, busy, onChange, assist, selectRef }: {
   </>
 }
 
+const REPLAY_TAB_SEEN_KEY = 'autoclip.seen.live_replay_tab'
+
+function readReplayTabSeen(): boolean {
+  try { return typeof localStorage !== 'undefined' && localStorage.getItem(REPLAY_TAB_SEEN_KEY) === '1' }
+  catch { return true }
+}
+
+function ReplayTabLabel({ active }: { active: boolean }) {
+  const [seen, setSeen] = useState(readReplayTabSeen)
+  useEffect(() => {
+    if (!active || seen) return
+    setSeen(true)
+    try { localStorage.setItem(REPLAY_TAB_SEEN_KEY, '1') } catch { /* ignore */ }
+  }, [active, seen])
+  return <span className="replay-tab-label">
+    {t('直播回放')}
+    {!seen && !active && <span className="replay-new-badge" aria-hidden="true">NEW</span>}
+  </span>
+}
+
 function uiLocale() {
   try { return getLocale() } catch { return 'en' }
 }
@@ -706,7 +726,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           if (v !== 'replay') { setRemote(undefined); if (replayFile.current?.file === file) { replayFile.current = null; setFile(null) } }
           if (v === 'replay') { previewTicket.current++; setPreviewLoading(false) }
           setSource(v)
-        }} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")},{value:'replay',label:t("直播回放")}]}/></div>
+        }} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")},{value:'replay',label:<ReplayTabLabel active={source === 'replay'} />}]}/></div>
         {source === 'link' ? <label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label>
           : source === 'file' ? (
             <div className="studio-file">
