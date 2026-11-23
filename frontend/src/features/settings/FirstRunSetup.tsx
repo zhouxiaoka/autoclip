@@ -15,7 +15,15 @@ import ProviderFields from './ProviderFields'
 import { connectionReady, mainConnection, needsSetup } from './modelSettingsLogic'
 import { setClipboardBannerSuppressed } from './keyGuideBus'
 import { readSponsorPromo, subscribeSponsorPromo } from './sponsorPromoWatch'
-import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl, readPromoSnapshot, subscribePromoSnapshot } from './sponsorPromoState'
+import {
+  NEUTRAL_PROVIDER_COPY,
+  promotionAllowsUpsell,
+  promotionRecommends,
+  promotionRegisterUrl,
+  readPromoSnapshot,
+  resolvePromoSlice,
+  subscribePromoSnapshot,
+} from './sponsorPromoState'
 import {
   FIRST_RUN_CHOICES,
   FIRST_RUN_DEFAULT,
@@ -88,6 +96,9 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   }, [showing, step])
   const translation = useTranslation() as { i18n?: { language?: string } } | void
   const language = translation && translation.i18n ? translation.i18n.language : undefined
+  const languageRef = useRef(language)
+  languageRef.current = language
+  const applyPromoRef = useRef<(() => void) | null>(null)
   useEffect(() => {
     if (!showing) {
       presentation.current = ''
@@ -99,6 +110,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
       setChoice(FIRST_RUN_DEFAULT)
       setChoices(FIRST_RUN_CHOICES)
       setNotices({})
+      applyPromoRef.current = null
       return
     }
     if (!presentation.current) {
@@ -108,21 +120,26 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     const apply = () => {
       const applied = readSponsorPromo()
       const snap = readPromoSnapshot()
-      const nextChoices = snap?.choices || applied?.choices
+      const resolved = resolvePromoSlice(snap, languageRef.current) || resolvePromoSlice(applied, languageRef.current)
+      const nextChoices = resolved?.choices
       if (!nextChoices) return
       setNotices(snap?.notices || applied?.notices || {})
       const locked = touched.current || frozen.current || stepRef.current !== 'choose'
       setChoices(choicesFor(nextChoices, choiceRef.current, locked))
       if (locked) return
-      const nextDefault = snap?.defaultChoice || applied?.defaultChoice || FIRST_RUN_DEFAULT
+      const nextDefault = resolved?.defaultChoice || FIRST_RUN_DEFAULT
       choiceRef.current = nextDefault
       setChoice(nextDefault)
     }
+    applyPromoRef.current = apply
     apply()
     const stopPromo = subscribeSponsorPromo(apply)
     const stopSnap = subscribePromoSnapshot(apply)
-    return () => { stopPromo(); stopSnap() }
+    return () => { applyPromoRef.current = null; stopPromo(); stopSnap() }
   }, [showing, openRequest])
+  useEffect(() => {
+    if (showing) applyPromoRef.current?.()
+  }, [showing, language])
   const otherDefault = firstRunOtherDefault(language)
   const noticeLanguage = (language || 'zh').toLowerCase().split('-')[0]
   const otherName = PROVIDERS[otherDefault].short
@@ -149,8 +166,8 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
       setStep('connect')
       return
     }
-    const sponsor = firstRunSponsor(choice)
-    if (!sponsor) return
+    const sponsor = firstRunSponsor(choice) as keyof typeof PROVIDERS | null
+    if (!sponsor || !PROVIDERS[sponsor]) return
     action('one_click', sponsor)
     const snap = readPromoSnapshot()
     const packaged = !snap || snap.source === 'bundled' ? (PROVIDERS[sponsor].sponsor?.registerUrl || '') : ''
@@ -167,11 +184,11 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   const model = settings.analysis?.model
   const status = !main || !connectionReady(main) ? t('请先粘贴服务商的 API 密钥')
     : t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')
-  const sponsorId = firstRunSponsor(choice)
+  const sponsorId = firstRunSponsor(choice) as keyof typeof PROVIDERS | null
   const snapNow = readPromoSnapshot()
-  const packagedNow = !snapNow || snapNow.source === 'bundled' ? (sponsorId ? PROVIDERS[sponsorId].sponsor?.registerUrl || '' : '') : ''
+  const packagedNow = !snapNow || snapNow.source === 'bundled' ? (sponsorId && PROVIDERS[sponsorId] ? PROVIDERS[sponsorId].sponsor?.registerUrl || '' : '') : ''
   const liveLink = sponsorId ? promotionRegisterUrl(sponsorId, packagedNow) : null
-  const sponsorName = choice === 'other' ? otherName : (sponsorId ? PROVIDERS[sponsorId].short : '')
+  const sponsorName = choice === 'other' ? otherName : (sponsorId && PROVIDERS[sponsorId] ? PROVIDERS[sponsorId].short : '')
   const label = choice !== 'other' && sponsorId && !liveLink
     ? { key: '下一步' }
     : firstRunPrimaryLabel(choice, sponsorName)

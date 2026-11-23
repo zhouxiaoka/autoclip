@@ -41,11 +41,11 @@ def test_catalog_has_forty_grouped_providers():
     assert catalog.schema_version == 1
     assert catalog.version >= 1
     assert catalog.path == CATALOG_PATH
-    assert len(catalog.providers) == 40
+    assert len(catalog.providers) == 43
     groups = {}
     for item in catalog.providers.values():
         groups[item.group] = groups.get(item.group, 0) + 1
-    assert groups == {"recommended": 1, "popular": 11, "local": 4, "more": 24}
+    assert groups == {"recommended": 1, "popular": 14, "local": 4, "more": 24}
     assert set(catalog.providers) >= {
         "api88", "infistar", "apimart", "deepseek", "dashscope", "siliconflow", "seed", "glm",
         "kimi", "minimax-cn", "xiaomi", "openai", "gemini", "whisper", "sensevoice",
@@ -59,7 +59,7 @@ def test_existing_product_defaults_are_preserved():
     assert cloud_presets.CLOUD_PRESETS["api88"].base_url == "https://api.88api.ai/v1"
     assert cloud_presets.CLOUD_PRESETS["api88"].default_model == ""
     assert cloud_presets.CLOUD_PRESETS["infistar"].base_url == "https://infistar.cc/v1"
-    assert set(cloud_presets.CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart"}
+    assert set(cloud_presets.CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart", "cometapi", "novita", "poyo"}
     assert local_presets.LOCAL_PRESETS["ollama"].base_url == "http://localhost:11434/v1"
     assert local_presets.LOCAL_PRESETS["ollama"].default_model == "qwen2.5:7b"
     assert local_presets.LOCAL_PRESETS["lmstudio"].base_url == "http://localhost:1234/v1"
@@ -158,7 +158,7 @@ def test_importlib_resources_finds_the_catalog():
     assert found == CATALOG_PATH
     catalog = provider_presets.load_provider_catalog()
     assert catalog.path == CATALOG_PATH
-    assert len(catalog.providers) == 40
+    assert len(catalog.providers) == 43
 
 
 def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
@@ -211,7 +211,7 @@ assert Path(backend.__file__).resolve().is_relative_to(root)
 assert Path(provider_presets.__file__).resolve().is_relative_to(root)
 provider_presets.reset_catalog_cache()
 catalog = provider_presets.get_catalog()
-assert len(catalog.providers) == 40
+assert len(catalog.providers) == 43
 assert catalog.path.resolve().is_relative_to(root)
 resource = provider_presets._resource_presets_path()
 assert resource is not None and resource.resolve().is_relative_to(root)

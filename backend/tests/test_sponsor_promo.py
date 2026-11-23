@@ -98,11 +98,13 @@ def _client(tmp_path, private, public, http, clock=None, busy=None, **config):
     )
 
 
-def test_packaged_config_does_not_fetch_and_catalog_stays_local(profiles):
+def test_packaged_config_uses_valid_https_worker_and_catalog_stays_local(profiles):
     packaged = load_packaged_config()
-    assert packaged.enabled is False
-    assert packaged.url == ""
-    assert packaged.public_key == ""
+    assert packaged.enabled is True
+    assert packaged.url == "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json"
+    assert len(base64.b64decode(packaged.public_key, validate=True)) == 32
+    assert "PRIVATE" not in packaged.public_key
+    assert packaged.min_sequence >= 1
     source = Path("backend/core/provider_presets.py").read_text(encoding="utf-8")
     assert "out of scope" in source
     assert "sponsor_promo" not in source
@@ -643,11 +645,18 @@ def test_endpoint_follow_up_sees_the_delayed_accept(monkeypatch, tmp_path, profi
     assert followed.json()["pending"] is False
 
 
-def test_endpoint_returns_bundle_without_saving_settings(monkeypatch, profiles):
+def test_endpoint_returns_bundle_without_saving_settings(monkeypatch, tmp_path, profiles):
     def refuse(*_args, **_kwargs):
         raise AssertionError("settings must not be saved")
 
     monkeypatch.setattr("backend.services.ai_model_settings.save", refuse)
+    offline = SponsorPromoClient(
+        PromoConfig(enabled=False, url="", public_key=""),
+        data_dir=tmp_path,
+        app_version="1.5.9",
+        http_get=lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not fetch")),
+    )
+    monkeypatch.setattr("backend.core.sponsor_promo_client.get_client", lambda: offline)
     app = FastAPI()
     app.include_router(router)
     response = TestClient(app).get("/settings/sponsor-promo")
@@ -719,3 +728,152 @@ def test_sign_script_refuses_a_private_key_inside_the_repo(tmp_path):
     spec.loader.exec_module(tool)
     with pytest.raises(SystemExit, match="inside the repository"):
         tool._generate(Path("backend/presets/not-a-production-key.pem"))
+
+
+def test_locale_routing_disjoint_defaults_and_localized_register_urls(monkeypatch, tmp_path, profiles):
+    private, public = _keys()
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    payload = _payload(sequence=15, sponsors=[
+        {
+            "id": "apimart",
+            "order": 1,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": ["zh"],
+            "register_urls": {"zh": "https://go.apimart.ai/cn-autoclip"},
+        },
+        {
+            "id": "api88",
+            "order": 2,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": overseas,
+            "register_urls": {
+                "en": "https://88api.ai/sign-up?aff=global",
+                "ja": "https://88api.ai/sign-up?aff=jp",
+            },
+        },
+    ])
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, payload))
+    assert client.refresh_sync() == "ok"
+
+    zh_view = client.view(locale="zh-CN")
+    assert zh_view["choices"] == ["apimart", "other"]
+    assert zh_view["default"] == "apimart"
+    assert zh_view["register_urls"] == {"apimart": "https://go.apimart.ai/cn-autoclip"}
+    assert zh_view["by_locale"]["en"]["choices"] == ["api88", "other"]
+    assert zh_view["by_locale"]["en"]["default"] == "api88"
+    assert zh_view["by_locale"]["en"]["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=global"}
+    assert zh_view["by_locale"]["ja"]["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=jp"}
+    assert zh_view["by_locale"]["ko"]["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=global"}
+
+    en_view = client.view(locale="en-US")
+    assert en_view["choices"] == ["api88", "other"]
+    assert en_view["default"] == "api88"
+    assert en_view["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=global"}
+
+    monkeypatch.setattr("backend.core.sponsor_promo_client.get_client", lambda: client)
+    app = FastAPI()
+    app.include_router(router)
+    api = TestClient(app)
+    res_zh = api.get("/settings/sponsor-promo", params={"locale": "zh"}).json()
+    res_en = api.get("/settings/sponsor-promo", params={"locale": "en"}).json()
+    assert res_zh["default"] == "apimart"
+    assert res_zh["choices"] == ["apimart", "other"]
+    assert res_en["default"] == "api88"
+    assert res_en["choices"] == ["api88", "other"]
+
+    # zh-only sponsor leaves overseas cleanly on "other"
+    zh_only = _payload(sequence=16, sponsors=[
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
+    ])
+    client_zh_only = _client(tmp_path / "zh_only", private, public, lambda url, timeout, max_bytes: _envelope(private, zh_only))
+    assert client_zh_only.refresh_sync() == "ok"
+    assert client_zh_only.view(locale="en")["choices"] == ["other"]
+    assert client_zh_only.view(locale="en")["default"] == "other"
+    assert client_zh_only.view(locale="zh")["choices"] == ["apimart", "other"]
+
+
+@pytest.mark.parametrize("bad_sponsors", [
+    [
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh", "en"]},
+        {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["en"]},
+    ],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": []}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["zh", "zh"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["de"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {"en": "https://evil.example/steal"}}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {}}],
+])
+def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tmp_path, profiles, bad_sponsors):
+    private, public = _keys()
+    client = _client(
+        tmp_path,
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, _payload(sequence=20, sponsors=bad_sponsors)),
+    )
+    assert client.refresh_sync() == "sponsors"
+    assert client.view()["source"] == "bundled"
+
+
+def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_path, profiles):
+    assert sponsor_promo.builtin_sponsor_hosts()["cometapi"] == "www.cometapi.com"
+    private, public = _keys()
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    good = _payload(sequence=30, sponsors=[
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
+        {
+            "id": "cometapi",
+            "order": 2,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": overseas,
+            "register_url": "https://www.cometapi.com/?ref=kris",
+        },
+    ])
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, good))
+    assert client.refresh_sync() == "ok"
+    assert client.view(locale="en")["choices"] == ["cometapi", "other"]
+    assert client.view(locale="en")["default"] == "cometapi"
+    assert client.view(locale="en")["register_urls"] == {"cometapi": "https://www.cometapi.com/?ref=kris"}
+    assert client.view(locale="zh")["choices"] == ["apimart", "other"]
+
+    bad = _payload(sequence=31, sponsors=[
+        {"id": "cometapi", "order": 1, "status": "healthy", "register_url": "https://evil.example/?ref=kris"},
+    ])
+    bad_client = _client(tmp_path / "bad", private, public, lambda url, timeout, max_bytes: _envelope(private, bad))
+    assert bad_client.refresh_sync() == "sponsors"
+
+
+def test_novita_and_poyo_are_trusted_for_overseas_promo(tmp_path, profiles):
+    hosts = sponsor_promo.builtin_sponsor_hosts()
+    assert hosts["novita"] == "novita.ai"
+    assert hosts["poyo"] == "poyo.ai"
+    private, public = _keys()
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    good = _payload(sequence=32, sponsors=[
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
+        {
+            "id": "novita",
+            "order": 2,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": overseas,
+            "register_url": "https://novita.ai/?ref=nzvindf&utm_source=affiliate",
+        },
+        {
+            "id": "poyo",
+            "order": 3,
+            "status": "healthy",
+            "locales": overseas,
+            "register_url": "https://poyo.ai/?affiliate_code=christ520482&open_signup=1",
+        },
+    ])
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, good))
+    assert client.refresh_sync() == "ok"
+    en = client.view(locale="en")
+    assert en["choices"] == ["novita", "poyo", "other"]
+    assert en["default"] == "novita"
+    assert en["register_urls"]["novita"] == "https://novita.ai/?ref=nzvindf&utm_source=affiliate"
+    assert en["register_urls"]["poyo"] == "https://poyo.ai/?affiliate_code=christ520482&open_signup=1"

@@ -150,6 +150,9 @@ class LLMManager:
             "infistar_api_key": "",
             "api88_api_key": "",
             "apimart_api_key": "",
+            "cometapi_api_key": "",
+            "novita_api_key": "",
+            "poyo_api_key": "",
             "seed_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
@@ -178,6 +181,9 @@ class LLMManager:
                             "infistar_api_key": api_keys.get("infistar", ""),
                             "api88_api_key": api_keys.get("api88", ""),
                             "apimart_api_key": api_keys.get("apimart", ""),
+                            "cometapi_api_key": api_keys.get("cometapi", ""),
+                            "novita_api_key": api_keys.get("novita", ""),
+                            "poyo_api_key": api_keys.get("poyo", ""),
                             "seed_api_key": api_keys.get("seed", ""),
                             "model_name": api.get("api_model", "qwen-plus")
                         })
@@ -293,6 +299,9 @@ class LLMManager:
         "infistar_api_key": ("API_INFISTAR_API_KEY", "INFISTAR_API_KEY"),
         "api88_api_key": ("API_API88_API_KEY", "API88_API_KEY"),
         "apimart_api_key": ("API_APIMART_API_KEY", "APIMART_API_KEY"),
+        "cometapi_api_key": ("API_COMETAPI_API_KEY", "COMETAPI_API_KEY"),
+        "novita_api_key": ("API_NOVITA_API_KEY", "NOVITA_API_KEY"),
+        "poyo_api_key": ("API_POYO_API_KEY", "POYO_API_KEY"),
         "seed_api_key": ("API_SEED_API_KEY", "ARK_API_KEY", "VOLCENGINE_API_KEY", "DOUBAO_API_KEY"),
     }
 

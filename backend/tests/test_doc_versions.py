@@ -16,6 +16,7 @@ SURFACES = (
     'README-PT.md',
     'README-RU.md',
     'README-FR.md',
+    'README-TR.md',
 )
 RELEASE_URL = re.compile(r'releases/(?:tag|download)/v\d+\.\d+\.\d+')
 WHEEL_PIN = re.compile(r'autoclip-\d+\.\d+\.\d+-')

@@ -6,6 +6,7 @@
  * 「其他」 connects DeepSeek, or on zh the higher tier of DeepSeek and DashScope.
  */
 import { firstRunOtherDefault, pickHigherQuality } from './providerQuality'
+import { isTrustedSponsorId } from './sponsorPromoState'
 
 export const FIRST_RUN_CHOICES = ['apimart', 'other'] as const
 export type FirstRunChoice = (typeof FIRST_RUN_CHOICES)[number]
@@ -19,9 +20,8 @@ export function firstRunPrimaryAction(choice: string): Exclude<FirstRunAction, '
   return choice === 'other' ? 'connect_recommended' : 'one_click'
 }
 
-export function firstRunSponsor(choice: string): 'apimart' | 'api88' | 'infistar' | null {
-  if (choice === 'apimart' || choice === 'api88' || choice === 'infistar') return choice
-  return null
+export function firstRunSponsor(choice: string): string | null {
+  return isTrustedSponsorId(choice) ? choice : null
 }
 
 export function firstRunPrimaryLabel(choice: string, sponsorName = ''): { key: string; values?: { name: string } } {

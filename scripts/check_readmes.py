@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
     "README.md", "README-EN.md", "README-JA.md", "README-KO.md",
-    "README-ES.md", "README-PT.md", "README-RU.md", "README-FR.md",
+    "README-ES.md", "README-PT.md", "README-RU.md", "README-FR.md", "README-TR.md",
 )
 GUIDES = (
     "DOCKER.md", "docs/DOCKER.en.md", "docs/README.md", "docs/i18n.md",

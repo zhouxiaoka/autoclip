@@ -9,6 +9,7 @@ import pt from './locales/pt.json'
 import ru from './locales/ru.json'
 import fr from './locales/fr.json'
 import { resolveLanguage, readPreference, LANGUAGE_STORAGE_KEY, type LanguagePreference } from './language'
+import { setPromoLocale } from '../features/settings/sponsorPromoState'
 
 export const languages = [
   { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' },
@@ -36,7 +37,10 @@ void i18n.use(initReactI18next).init({
 
 export const t = (key: string, values?: Record<string, unknown>): string => i18n.t(key, values ?? {}) as string
 export const getLocale = () => localeTags[i18n.language as keyof typeof localeTags] ?? 'en'
-const updateDocument = () => { document.documentElement.lang = getLocale() }
+const updateDocument = () => {
+  document.documentElement.lang = getLocale()
+  setPromoLocale(i18n.language)
+}
 updateDocument()
 i18n.on('languageChanged', updateDocument)
 
