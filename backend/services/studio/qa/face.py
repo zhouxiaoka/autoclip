@@ -135,9 +135,7 @@ def _detect(cv2, image, score: float = 0.6):
         net = _nets.get(key)
         if net is None:
             from backend.services.studio import framing
-            net = cv2.FaceDetectorYN.create(
-                str(framing.MODEL), '', (width, height), score_threshold=score, nms_threshold=0.3, top_k=50,
-            )
+            net = framing.create_detector(cv2, width, height, score)
             _nets[key] = net
         return net.detect(image)
 
