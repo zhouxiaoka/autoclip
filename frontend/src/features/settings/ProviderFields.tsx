@@ -13,7 +13,7 @@ import {
 } from './providerAccess'
 import { offerPastedKey } from './keyGuideWatch'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
-import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
+import { NEUTRAL_PROVIDER_COPY, isTrustedSponsorId, promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
 
 const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
 const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
@@ -70,7 +70,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             : preset?.keyUrl
               ? <>{t('在官网创建后粘贴到这里。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a>
                 {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}
-                {preset.referralUrl && <> · <a className="ac-link" data-author-referral="1" href={preset.referralUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.referralUrl!) }}>{t('作者推荐链接')} ↗</a></>}</>
+                {preset.referralUrl && <> · <a className="ac-link" data-author-referral="1" href={preset.referralUrl} onClick={e => { e.preventDefault(); trackSponsorLinkOpened({ sponsor: key || connection.provider, target: 'referral', placement }); openExternalLink(preset.referralUrl!) }}>{t('作者推荐链接')} ↗</a></>}</>
               : t('自建服务可留空')
         }>
           <Input.Password aria-label={label(t('API 密钥'))} autoComplete="new-password" value={connection.api_key ?? ''}
@@ -86,7 +86,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             <span className="ac-hint" data-testid="masked-api-key">{t('当前已保存密钥：{{masked}}', { masked: connection.api_key_masked })}</span>
           )}
           {(() => {
-            const promo = connection.provider === 'apimart' || connection.provider === 'api88' || connection.provider === 'infistar' ? connection.provider : null
+            const promo = isTrustedSponsorId(connection.provider) ? connection.provider : null
             const href = promo ? promotionRegisterUrl(promo, preset?.sponsor?.registerUrl || '') : null
             if (!promo || !href) return null
             return (

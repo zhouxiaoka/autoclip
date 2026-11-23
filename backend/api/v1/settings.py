@@ -56,6 +56,7 @@ def get_sponsor_promo(
     trigger: Optional[Literal['startup', 'settings', 'interval', 'resume']] = None,
     after: int = 0,
     wait: float = 0,
+    locale: Optional[str] = None,
 ):
     """Chooser order and service notices. Does not read or write model settings.
 
@@ -64,8 +65,8 @@ def get_sponsor_promo(
     from backend.core.sponsor_promo_client import get_client
     client = get_client()
     if wait > 0:
-        return client.wait_for_change(after, min(wait, 3))
-    return client.view(trigger=trigger or 'settings')
+        return client.wait_for_change(after, min(wait, 3), locale=locale)
+    return client.view(trigger=trigger or 'settings', locale=locale)
 
 
 class ModelSettingsUpdate(ai_models.ModelSettings):

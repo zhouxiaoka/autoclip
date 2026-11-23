@@ -46,6 +46,7 @@ function publish(next: AppliedSponsorPromo) {
     statuses: next.statuses,
     registerUrls: next.registerUrls,
     notices: next.notices,
+    ...(next.byLocale ? { byLocale: next.byLocale } : {}),
     sequence: next.sequence,
     revision: next.revision,
     instance: next.instance,
