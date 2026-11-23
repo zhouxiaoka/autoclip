@@ -1,4 +1,7 @@
 """Style recommendation stays inside a short budget and returns enums only."""
+from pathlib import Path
+import subprocess
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -52,6 +55,46 @@ def test_recommend_route_rejects_an_empty_body_and_does_not_echo_the_url():
     assert body['template'] == 'editorial'
     assert body['reason_code'] == 'default'
     assert 'youtu' not in str(body)
+
+
+def test_recommend_route_probes_local_video_after_closing_temp_writer(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    from backend.api.v1.studio import router
+    from backend.services.studio import template_recommend
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+
+    sample = tmp_path / 'vertical.mp4'
+    subprocess.run([get_ffmpeg_path(), '-v', 'error', '-f', 'lavfi', '-i',
+                    'color=s=180x320:d=1', '-movflags', '+faststart', str(sample)], check=True)
+
+    open_temp = template_recommend.tempfile.NamedTemporaryFile
+    run = subprocess.run
+    writers = {}
+    probed = []
+
+    def track_temp_writer(*args, **kwargs):
+        writer = open_temp(*args, **kwargs)
+        writers[writer.name] = writer
+        return writer
+
+    def probe_with_windows_sharing(command, **kwargs):
+        filename = command[-1]
+        probed.append(Path(filename))
+        writer = writers.get(filename)
+        if writer is not None and not writer.closed:
+            return subprocess.CompletedProcess(command, 1, b'', b'Permission denied')
+        return run(command, **kwargs)
+
+    monkeypatch.setattr(template_recommend.tempfile, 'NamedTemporaryFile', track_temp_writer)
+    monkeypatch.setattr(template_recommend.subprocess, 'run', probe_with_windows_sharing)
+    app = FastAPI()
+    app.include_router(router, prefix='/studio')
+    response = TestClient(app).post('/studio/template-recommend', files={
+        'header': ('vertical.mp4', sample.read_bytes(), 'video/mp4'),
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()['reason_code'] == 'street_quick'
+    assert len(probed) == 1 and not probed[0].exists()
 
 
 @pytest.mark.parametrize('selected,accepted', [('street', False), ('editorial', True)])
