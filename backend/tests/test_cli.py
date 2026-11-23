@@ -90,6 +90,24 @@ def test_cli_help_runs_without_backend(data_dir):
     assert "autoclip" in p.stdout and "--provider ollama" in p.stdout
 
 
+def test_run_json_reports_unconfigured_model_provider(data_dir):
+    env = os.environ | {"AUTOCLIP_API_KEY": "", "OPENAI_API_KEY": ""}
+    result = subprocess.run(
+        [sys.executable, "-m", "backend.cli", "run", "talk.mp4", "--provider", "openai", "--json"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    assert result.returncode == 2
+    parsed = json.loads(result.stdout)
+    assert parsed["ok"] is False
+    assert parsed["error_code"] == "invalid_input"
+    assert "API Key" in parsed["error"]
+
+
 # ---------------------------------------------------------------- runner ---
 def test_summarize_project_normalizes_scores_and_paths(data_dir):
     from backend.services.local_runner import summarize_project

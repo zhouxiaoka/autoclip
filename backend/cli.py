@@ -158,7 +158,10 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         info = configure_llm(_llm_override(args))
     except Exception as e:  # noqa: BLE001
         outcome.update(ok=False, error_code='invalid_input')
-        _err(str(e))
+        if args.json:
+            print(json.dumps({'ok': False, 'error_code': 'invalid_input', 'error': str(e)}, ensure_ascii=False))
+        else:
+            _err(str(e))
         return 2
 
     from backend.services.studio.readiness import TranscriptionNotReady
