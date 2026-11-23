@@ -1,4 +1,5 @@
 import { t } from '../../i18n'
+import { isDesktopMode } from '../../utils/desktopMode'
 
 export const REPO_URL = 'https://github.com/zhouxiaoka/autoclip'
 export const USE_CASE_URL = `${REPO_URL}/discussions/new?category=use-cases`
@@ -14,7 +15,12 @@ export function shareCaption(title: string | undefined, english = false): string
 
 export async function copyText(text: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text)
+    if (await isDesktopMode()) {
+      const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+      await writeText(text)
+    } else {
+      await navigator.clipboard.writeText(text)
+    }
     return true
   } catch {
     const area = document.createElement('textarea')
@@ -23,10 +29,14 @@ export async function copyText(text: string): Promise<boolean> {
     area.style.position = 'fixed'
     area.style.opacity = '0'
     document.body.appendChild(area)
-    area.select()
-    const copied = document.execCommand('copy')
-    area.remove()
-    return copied
+    try {
+      area.select()
+      return document.execCommand('copy')
+    } catch {
+      return false
+    } finally {
+      area.remove()
+    }
   }
 }
 
