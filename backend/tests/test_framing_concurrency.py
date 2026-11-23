@@ -44,3 +44,8 @@ from backend.tests.test_pip_failure_classes import (  # noqa: E402,F401
     test_network_errors_are_network_not_no_wheel,
     test_stream_classifies_real_pip_output,
 )
+from backend.tests.test_framing_non_ascii_paths import (  # noqa: E402,F401
+    test_detector_loads_yunet_from_non_ascii_model_path,
+    test_detector_loads_yunet_natively_from_non_ascii_path,
+    test_observe_pair_reads_non_ascii_frame_and_model_paths,
+)
