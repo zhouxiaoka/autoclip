@@ -58,9 +58,9 @@ const statuses: Record<string, string> = {
   limit: 'obs.limitReached', deleted: 'obs.deleted',
 }
 
-export default function LiveReplayPicker({ disabled, onOpen, onFile, onRemote }: {
+export default function LiveReplayPicker({ disabled, inline = false, onOpen, onFile, onRemote }: {
   onRemote: (replay: RemoteReplay) => void
-  disabled: boolean; onOpen: () => void; onFile: (file: File, source: ReplayFileSource, replay?: ChannelReplay) => void
+  disabled: boolean; inline?: boolean; onOpen?: () => void; onFile: (file: File, source: ReplayFileSource, replay?: ChannelReplay) => void
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -75,17 +75,18 @@ export default function LiveReplayPicker({ disabled, onOpen, onFile, onRemote }:
   const [history, setHistory] = useState<History>()
   const [loadError, setLoadError] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const activePanel = inline || open
   useEffect(() => { void isDesktopMode().then(setDesktop) }, [])
   useEffect(() => {
-    if (!open || !desktop) return
+    if (!activePanel || !desktop) return
     let active = true
     api.get<unknown, typeof channels>('/replay-channels/availability', { retry: false }).then(result => {
       if (active) setChannels({ twitch: result.twitch === true, youtube: result.youtube === true })
     }).catch(() => {})
     return () => { active = false }
-  }, [open, desktop])
+  }, [activePanel, desktop])
   useEffect(() => {
-    if (!open || source !== 'obs' || !desktop) return
+    if (!activePanel || source !== 'obs' || !desktop) return
     let active = true
     let timer: ReturnType<typeof setTimeout>
     async function refresh() {
@@ -97,50 +98,54 @@ export default function LiveReplayPicker({ disabled, onOpen, onFile, onRemote }:
     }
     void refresh()
     return () => { active = false; clearTimeout(timer) }
-  }, [open, desktop, source])
+  }, [activePanel, desktop, source])
+  const content = <>
+    <Segmented className="replay-sources" value={source} onChange={next => { if (next !== source) { setSelected(undefined); setSource(next) } }} ariaLabel={t('replays.title')} options={
+      replayOptions.map(({ value, name, mark }) => ({
+        value,
+        label: <>
+          <span className={`replay-mark replay-mark--${value}`}><img src={mark} alt="" /></span>
+          <span className="replay-source-label">{value === 'other' ? t(name) : name}</span>
+        </>,
+      }))
+    } />
+    {source === 'obs' ? <>
+      {!desktop ? <p className="studio-muted">{t('replays.desktop')}</p> : <>
+        <div className="studio-row"><p role="status" className="studio-muted" style={{ margin: 0 }}>{loadError ? t('obs.unavailable') : history
+          ? t('obs.' + (history.connection === 'connected' && ['waiting_recording', 'live', 'unconfirmed'].includes(history.phase)
+            ? history.phase : history.connection)) : t('replays.loading')}</p>
+          <Btn size="sm" aria-expanded={configure} onClick={() => setConfigure(!configure)}>{t('replays.connection')}</Btn></div>
+        {configure && <ObsSettings />}
+        {history && !history.items.length && !loadError && <p className="studio-muted">{t('replays.empty')}</p>}
+        {history?.items.map(item => {
+          const title = 'OBS · ' + new Date(item.saved_at * 1000).toLocaleString(getLocale())
+          return <div className="studio-source-row" key={item.id}>
+            <div><b>{title}</b>
+              <p className="studio-muted">{Math.floor(item.seconds / 60)}:{String(Math.floor(item.seconds % 60)).padStart(2, '0')} · {t(statuses[item.status] || 'obs.unconfirmed')}</p></div>
+            {item.project_id && !['ready', 'manual_ready'].includes(item.status) ? <Btn size="sm" onClick={() => navigate('/project/' + item.project_id)}>{t('obs.review')}</Btn>
+              : item.selectable && <Btn size="sm" variant="cta" disabled={disabled || loadError} onClick={() => { onRemote({ kind: 'obs', id: item.id, title, seconds: item.seconds }); setOpen(false) }}>{t('channels.select')}</Btn>}
+          </div>
+        })}
+      </>}
+    </> : <div className="studio-field" style={{ margin: 0 }}>
+      {desktop && (source === 'twitch' || source === 'youtube') && channels[source] && <ChannelReplays key={source} provider={source} disabled={disabled}
+        selected={selected} onSelect={setSelected} />}
+      <p style={{ margin: '6px 0 0' }}>{selected?.direct_video_id ? t('channels.directHint') : selected ? t('channels.attach', { title: selected.title }) : t(fileSources[source].hint)}</p>
+      <div className="studio-actions">{source === 'twitch' && selected?.direct_video_id && <Btn size="sm" variant="cta" disabled={disabled}
+        onClick={() => { onRemote({ kind: 'twitch', ...selected }); setOpen(false) }}>{t('channels.directUse')}</Btn>}{dashboard && <Btn size="sm" onClick={() => void openExternalLink(dashboard.url)}>{dashboard.dashboard} ↗</Btn>}
+        <Btn size="sm" variant={selected?.direct_video_id ? undefined : "cta"} disabled={disabled} onClick={() => fileInput.current?.click()}>{t('replays.pickFile')}</Btn></div>
+      <input ref={fileInput} type="file" hidden accept=".mp4,.mkv,.mov,.webm,.avi" onChange={event => {
+        const file = event.target.files?.[0]
+        if (file) { onFile(file, source, selected); setOpen(false) }
+        event.target.value = ''
+      }} /></div>}
+    <p className="replay-upcoming">{t('replays.moreTools')}</p>
+  </>
+  if (inline) return <div className="replay-inline-panel">{content}</div>
   return <>
-    <Btn size="sm" disabled={disabled} onClick={() => { onOpen(); setSelected(undefined); setOpen(true) }}>{t('replays.choose')}</Btn>
+    <Btn size="sm" disabled={disabled} onClick={() => { onOpen?.(); setSelected(undefined); setOpen(true) }}>{t('replays.choose')}</Btn>
     <Dialog open={open} title={t('replays.title')} onClose={() => setOpen(false)}>
-      <Segmented className="replay-sources" value={source} onChange={next => { if (next !== source) { setSelected(undefined); setSource(next) } }} ariaLabel={t('replays.title')} options={
-        replayOptions.map(({ value, name, mark }) => ({
-          value,
-          label: <>
-            <span className={`replay-mark replay-mark--${value}`}><img src={mark} alt="" /></span>
-            <span className="replay-source-label">{value === 'other' ? t(name) : name}</span>
-          </>,
-        }))
-      } />
-      {source === 'obs' ? <>
-        {!desktop ? <p>{t('replays.desktop')}</p> : <>
-          <div className="studio-row"><p role="status">{loadError ? t('obs.unavailable') : history
-            ? t('obs.' + (history.connection === 'connected' && ['waiting_recording', 'live', 'unconfirmed'].includes(history.phase)
-              ? history.phase : history.connection)) : t('replays.loading')}</p>
-            <Btn size="sm" aria-expanded={configure} onClick={() => setConfigure(!configure)}>{t('replays.connection')}</Btn></div>
-          {configure && <ObsSettings />}
-          {history && !history.items.length && !loadError && <p className="studio-muted">{t('replays.empty')}</p>}
-          {history?.items.map(item => {
-            const title = 'OBS · ' + new Date(item.saved_at * 1000).toLocaleString(getLocale())
-            return <div className="studio-source-row" key={item.id}>
-              <div><b>{title}</b>
-                <p className="studio-muted">{Math.floor(item.seconds / 60)}:{String(Math.floor(item.seconds % 60)).padStart(2, '0')} · {t(statuses[item.status] || 'obs.unconfirmed')}</p></div>
-              {item.project_id && !['ready', 'manual_ready'].includes(item.status) ? <Btn size="sm" onClick={() => navigate('/project/' + item.project_id)}>{t('obs.review')}</Btn>
-                : item.selectable && <Btn size="sm" variant="cta" disabled={disabled || loadError} onClick={() => { onRemote({ kind: 'obs', id: item.id, title, seconds: item.seconds }); setOpen(false) }}>{t('channels.select')}</Btn>}
-            </div>
-          })}
-        </>}
-      </> : <div className="studio-field">
-        {desktop && (source === 'twitch' || source === 'youtube') && channels[source] && <ChannelReplays key={source} provider={source} disabled={disabled}
-          selected={selected} onSelect={setSelected} />}
-        <p>{selected?.direct_video_id ? t('channels.directHint') : selected ? t('channels.attach', { title: selected.title }) : t(fileSources[source].hint)}</p>
-        <div className="studio-actions">{source === 'twitch' && selected?.direct_video_id && <Btn variant="cta" disabled={disabled}
-          onClick={() => { onRemote({ kind: 'twitch', ...selected }); setOpen(false) }}>{t('channels.directUse')}</Btn>}{dashboard && <Btn onClick={() => void openExternalLink(dashboard.url)}>{dashboard.dashboard} ↗</Btn>}
-          <Btn variant={selected?.direct_video_id ? undefined : "cta"} disabled={disabled} onClick={() => fileInput.current?.click()}>{t('replays.pickFile')}</Btn></div>
-        <input ref={fileInput} type="file" hidden accept=".mp4,.mkv,.mov,.webm,.avi" onChange={event => {
-          const file = event.target.files?.[0]
-          if (file) { onFile(file, source, selected); setOpen(false) }
-          event.target.value = ''
-        }} /></div>}
-      <p className="replay-upcoming">{t('replays.moreTools')}</p>
+      {content}
     </Dialog>
   </>
 }

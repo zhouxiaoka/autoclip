@@ -72,10 +72,54 @@
 .replay-mark--discord { background: #efeffe; }
 .replay-mark--other { background: #efeeeb; }
 
-.ac-dialog .replay-upcoming {
-  margin-top: 18px;
+.replay-upcoming {
+  margin: 14px 0 0;
   color: var(--ac-sub);
   font-size: 12px;
+}
+
+.replay-inline-panel {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--ac-line);
+  border-radius: 12px;
+  background: var(--ac-bg);
+}
+
+.replay-inline-panel .studio-source-row:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+.replay-selected-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--ac-line);
+  border-radius: 12px;
+  background: var(--ac-bg);
+}
+
+.replay-selected-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.replay-selected-info strong {
+  font-size: 14px;
+  color: var(--ac-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-selected-info span {
+  font-size: 12px;
+  color: var(--ac-sub);
 }
 
 @media (max-width: 480px) {

@@ -400,7 +400,9 @@ test('a selected Twitch archive submits its identifiers without a file picker or
 })
 
 test('a selected OBS replay submits obs_capture_id with the home-selected platforms', async () => {
-  const view = render({ source: 'file', url: '', remote: { kind: 'obs', id: 'obs-cap-1', title: 'OBS · Stream', seconds: 300 } })
+  const view = render({ source: 'replay', url: '', remote: { kind: 'obs', id: 'obs-cap-1', title: 'OBS · Stream', seconds: 300 } })
+  const seg = nodes(view.tree).find(node => node.type === 'segmented')
+  assert.deepEqual([...seg.props.options.map(o => o.value)], ['link', 'file', 'replay'])
   await button(view.tree, 'replays.generate').props.onClick()
   assert.equal(view.calls.length, 1)
   const [form] = view.calls
