@@ -463,6 +463,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     incoming = event.get("tags") or {}
     if _provider_expected(incoming.get("http_status"), incoming.get("upstream_error_type")):
         return None
+    if _logging_provider_expected(event, hint):
+        return None
     if _is_expected_studio_noise(event, hint):
         return None
     clean["exception"] = {"values": values}
@@ -537,6 +539,28 @@ def _provider_expected(status: object, upstream: object) -> bool:
     if isinstance(status, int) and status in EXPECTED_PROVIDER_HTTP:
         return True
     return isinstance(upstream, str) and upstream in EXPECTED_PROVIDER_UPSTREAM
+
+
+def _logging_provider_expected(event: dict, hint: Optional[dict]) -> bool:
+    """Drop expected upstream `_LogSafeLLMError`s captured by LoggingIntegration without tags."""
+    if not (event.get("logger") or (hint and hint.get("log_record"))):
+        return False
+    info = (hint or {}).get("exc_info") if hint else None
+    if not (isinstance(info, tuple) and len(info) >= 2 and isinstance(info[1], BaseException)):
+        return False
+    exc = info[1]
+    from backend.core.llm_telemetry import _LogSafeLLMError
+    if not isinstance(exc, _LogSafeLLMError):
+        return False
+    snap = getattr(exc, "attribution", None)
+    status = getattr(exc, "http_status", None) or getattr(exc, "status_code", None)
+    if status is None and snap is not None:
+        status = getattr(snap, "http_status", None)
+    upstream = getattr(snap, "upstream_error_type", None) if snap is not None else None
+    if not upstream:
+        from backend.core.upstream_errors import classify_exception
+        upstream = classify_exception(exc).error_type.value
+    return _provider_expected(status, upstream)
 
 
 # one machine stuck in a loop must not use up the project quota.
