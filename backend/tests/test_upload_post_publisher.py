@@ -505,6 +505,33 @@ def test_publish_wait_keeps_last_processing_status_when_final_poll_times_out(dat
     assert timeouts == [4, 1]
 
 
+def test_cli_publish_wait_keeps_submitted_request_ids_after_poll_timeout(data_dir, capsys, monkeypatch):
+    import requests
+
+    from backend.cli import main
+    from backend.services import upload_post_publisher as up
+
+    def publish_clip(req, **kwargs):
+        return {"ok": True, "clip_id": req.clip_id, "request_id": f"req-{req.clip_id}", "status": "submitted"}
+
+    def get_status(request_id, **kwargs):
+        if request_id == "req-1":
+            raise requests.ReadTimeout
+        return {"status": "completed", "final": True, "results": []}
+
+    monkeypatch.setattr(up, "publish_clip", publish_clip)
+    monkeypatch.setattr(up, "get_status", get_status)
+
+    assert main(["publish", "p1", "--clip", "1", "--clip", "2", "--platform", "tiktok",
+                 "--wait", "--timeout", "2", "--json"]) == 1
+    output = json.loads(capsys.readouterr().out)
+    first, second = output["published"]
+    assert output["ok"] is False
+    assert (first["request_id"], first["status"], first["ok"]) == ("req-1", "submitted", False)
+    assert first["error"]
+    assert (second["request_id"], second["status"], second["ok"]) == ("req-2", "completed", True)
+
+
 def test_cli_publish_refuses_bulk_without_yes(data_dir, capsys):
     from backend.cli import main
     from backend.core.path_utils import get_project_directory

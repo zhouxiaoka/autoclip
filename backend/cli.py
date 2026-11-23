@@ -521,7 +521,13 @@ def cmd_publish(args: argparse.Namespace) -> int:
         for r in results:
             if not r.get("ok"):
                 continue
-            st = up.wait_for_status(r["request_id"], timeout_sec=args.timeout, config=cfg, project_id=args.project_id)
+            try:
+                st = up.wait_for_status(r["request_id"], timeout_sec=args.timeout, config=cfg, project_id=args.project_id)
+            except up.UploadPostError as error:
+                # Submission already succeeded; keep the ID so its status can be checked again.
+                r.update(ok=False, error=str(error))
+                _err(f"{r['request_id']}: {error}")
+                continue
             r["status"] = st.get("status")
             r["results"] = st.get("results")
             r["ok"] = st.get("status") != "failed"
