@@ -107,6 +107,20 @@ export class D1Repo {
     return rows.results.map(caseFrom)
   }
 
+  async activeCases(): Promise<CaseRow[]> {
+    const rows = await this.db.prepare(`SELECT * FROM cases WHERE state != 'deleted'`).bind().all<Record<string, unknown>>()
+    return rows.results.map(caseFrom)
+  }
+
+  async liveKeys(): Promise<Set<string>> {
+    const rows = await this.db.prepare(
+      `SELECT 'cases/' || case_id || '/manifest.json' AS r2_key FROM cases WHERE state != 'deleted'
+       UNION ALL
+       SELECT o.r2_key FROM objects o JOIN cases c ON c.case_id = o.case_id WHERE c.state != 'deleted' AND o.state != 'aborted'`,
+    ).bind().all<{ r2_key: string }>()
+    return new Set(rows.results.map((row) => String(row.r2_key)))
+  }
+
   private guardRejected(error: unknown): boolean {
     return error instanceof Error && /CHECK constraint failed/i.test(error.message)
   }
@@ -269,8 +283,15 @@ export class D1Repo {
 
   async reconcile(): Promise<QuotaState> {
     await this.db.prepare(`UPDATE quota SET
-      landed_bytes = (SELECT COALESCE(SUM(landed_bytes), 0) FROM cases WHERE state != 'deleted'),
-      reserved_bytes = (SELECT COALESCE(SUM(reserved_bytes), 0) FROM cases WHERE state != 'deleted'), updated_at = ?1 WHERE id = 1`
+      landed_bytes = agg.landed,
+      reserved_bytes = agg.reserved,
+      updated_at = ?1
+      FROM (
+        SELECT COALESCE(SUM(landed_bytes), 0) AS landed,
+               COALESCE(SUM(reserved_bytes), 0) AS reserved
+        FROM cases WHERE state != 'deleted'
+      ) AS agg
+      WHERE quota.id = 1`
     ).bind(this.now()).run()
     return this.snapshot()
   }
