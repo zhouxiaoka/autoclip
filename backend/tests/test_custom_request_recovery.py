@@ -46,7 +46,7 @@ def gateway():
             if config['require_workspace'] and self.headers.get('X-Workspace') != 'fixture-workspace':
                 self.reply(401, {'error': {'code': 'invalid_api_key', 'message': 'Missing fixture workspace'}})
                 return
-            self.reply(200, {'data': [{'id': 'gpt-4o-mini'}]})
+            self.reply(200, {'data': [{'id': 'gpt-4o-mini', 'capability': 'multimodal'}]})
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', '0'))))
@@ -130,7 +130,7 @@ def test_model_not_found_recovery_keeps_custom_header_auth(gateway, kind):
     connection = ai.Connection(id='custom', name='Custom', provider='compatible', base_url=base,
                                api_key='', http_headers={'X-Workspace': 'fixture-workspace'})
     settings = ai.ModelSettings(connections=[connection],
-                               analysis=ai.Assignment(connection_id='custom', model='gpt-4o-retired', capability='multimodal'))
+                               analysis=ai.Assignment(connection_id='custom', model='gpt-4o-retired', capability='multimodal', model_source='preset'))
     ai.save(settings)
     assert validation.fetch_list_for_connection(connection).models == ['gpt-4o-mini']
     records.clear()
@@ -162,7 +162,7 @@ def test_recovery_caches_are_scoped_to_endpoint_and_case_insensitive_headers(mon
     def listed(**kwargs):
         seen.append(kwargs)
         model = 'gpt-4o-mini' if kwargs['extra_headers'].get('X-Workspace') == 'fixture-first' else 'gpt-4.1-mini'
-        return SimpleNamespace(ok=True, models=[model], capabilities={})
+        return SimpleNamespace(ok=True, models=[model], capabilities={model: 'text'})
     monkeypatch.setattr(provider_model_fetch, 'list_account_models', listed)
     first, second = {'X-Workspace': 'fixture-first'}, {'X-Workspace': 'fixture-second'}
     def resolve(headers, base='http://127.0.0.1:12345/v1'):
@@ -203,3 +203,25 @@ def test_header_only_auth_with_official_url_never_contacts_public_provider(monke
         provider.client.close()
     assert len(requests) == 1
     assert requests[0].headers.get_list('authorization') == ['Bearer fixture-official-header']
+
+
+def test_substitution_notices_preserve_purpose_and_header_account_isolation():
+    from backend.core import model_recovery as recovery
+    from backend.services import ai_model_settings as ai
+    base = 'http://127.0.0.1:12345/v1'
+    first, second = {'X-Workspace': 'fixture-first'}, {'X-Workspace': 'fixture-second'}
+    recovery.remember_model('compatible', base, '', 'retired', 'gpt-4o-mini',
+                            purpose='analysis', extra_headers=first)
+    assert recovery.remembered_model('compatible', base, '', 'retired', purpose='analysis',
+                                     extra_headers=first) == 'gpt-4o-mini'
+    assert recovery.remembered_model('compatible', base, '', 'retired', purpose='vision',
+                                     extra_headers=first) is None
+    connection = ai.Connection(id='custom', name='Custom', provider='compatible', base_url=base,
+                               api_key='', http_headers=first)
+    settings = ai.ModelSettings(connections=[connection], analysis=ai.Assignment(
+        connection_id='custom', model='retired', model_source='preset'))
+    assert ai.public(settings)['model_substitutions'] == [
+        {'purpose': 'analysis', 'saved_model': 'retired', 'replacement': 'gpt-4o-mini', 'connection_id': 'custom'}]
+    settings.connections[0] = connection.model_copy(update={'http_headers': second})
+    assert 'model_substitutions' not in ai.public(settings)
+    assert 'fixture-first' not in repr(recovery._notices)

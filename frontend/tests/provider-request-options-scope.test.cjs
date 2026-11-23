@@ -118,18 +118,20 @@ test('an unrelated saved gateway with the draft id cannot receive new catalog ed
 })
 
 test('creating a real catalog account preserves the draft editor session key', () => {
-  let ref
+  const refs = []; let cursor = 0
   const StatefulDetail = loadTs('ProviderDetail.tsx', {
-    ...mocks, react: { ...mocks.react, useRef: initial => ref || (ref = { current: initial }) },
+    ...mocks, react: { ...mocks.react, useRef: initial => { const i = cursor++; return refs[i] || (refs[i] = { current: initial }) } },
     './ProviderFields': { default: Fields }, '../../components/SpeechRecognitionConfig': { default: () => null },
     './SenseVoiceConfig': { default: () => null }, './TrialRunPanel': { default: () => null },
   }).default
   const state = { ...settings, connections: [] }
   const created = connection({ id: 'real-created-id', catalog_provider_id: 'azure-openai', base_url: 'https://enterprise.invalid/v1', reasoning_effort: 'low' })
-  const props = { preset: catalog.catalogPreset('azure-openai'), onBack() {}, m: { settings: state, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, testing: false, ensureCatalogProvider() { state.connections = [created]; return created }, editConnection() {} } }
+  const props = { preset: catalog.catalogPreset('azure-openai'), onBack() {}, m: { settings: state, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, testing: false, ensureCatalogProvider() { state.connections = [created]; return created.id }, editConnection() {} } }
+  cursor = 0
   const before = StatefulDetail(props)
   const key = flatten(before).find(node => node.props?.['data-request-connection-id']).key
   secondary(before).props.onEdit({ reasoning_effort: 'low' })
+  cursor = 0
   const after = StatefulDetail(props)
   assert.equal(flatten(after).find(node => node.props?.['data-request-connection-id']).key, key)
   assert.equal(secondary(after).props.value.id, created.id)

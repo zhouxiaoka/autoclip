@@ -92,10 +92,10 @@ def remember_model(
             }
 
 
-def substitution_notice(purpose: str, provider: str, base_url: str, api_key: str, saved_model: str):
+def substitution_notice(purpose: str, provider: str, base_url: str, api_key: str, saved_model: str, *, extra_headers=None):
     """Only show a substitution observed for the selected account and purpose."""
     with _lock:
-        notice = _notices.get((purpose, *_slot(provider, base_url, api_key, saved_model)))
+        notice = _notices.get((purpose, *_slot(provider, base_url, api_key, saved_model, extra_headers)))
         return dict(notice) if notice else None
 
 

@@ -567,7 +567,8 @@ def _substitution_notice(settings: ModelSettings, purpose: str) -> dict | None:
         return None  # An incomplete endpoint can still be opened and repaired in Settings.
     provider = analysis_catalog(identity=connection_identity(connection, binding.model),
                                 base_url=endpoint['base_url'], named=[connection.provider])
-    notice = substitution_notice(purpose, provider, endpoint['base_url'], endpoint['api_key'], binding.model)
+    notice = substitution_notice(purpose, provider, endpoint['base_url'], endpoint['api_key'], binding.model,
+                                 **({'extra_headers': connection.http_headers} if connection.http_headers else {}))
     return {**notice, 'connection_id': connection.id} if notice else None
 
 

@@ -289,6 +289,7 @@ def test_runtime_reload_and_connection_switch_do_not_reuse_options(monkeypatch):
     manager.call('fixture')
     assert seen[-1][1]['http_headers']['X-Workspace'] == 'new-fixture-value'
     assert seen[-1][1]['reasoning_effort'] == 'low'
+    updated = ai.load()  # Reuse the fresh revision after the preceding save.
     other = ai.Connection(id='other', name='Other', provider='compatible', base_url='http://127.0.0.1:12345/v1')
     updated.connections.append(other)
     updated.analysis = ai.Assignment(connection_id='other', model='other-model')

@@ -219,3 +219,21 @@ test('desktop webview does not send $pageview and the browser still does', () =>
   host.trackPageview('/')
   assert.equal(hostEvents.length, 0)
 })
+
+test('request-option edits invalidate the in-memory discovery signature without emitting their values', () => {
+  const events = [], experience = loadExperience(events)
+  const connection = { id: 'fixture', provider: 'compatible', base_url: 'https://fixture.invalid/v1', api_key: '' }
+  const signature = value => experience.connectionSignature({ connections: [value] })
+  const original = signature(connection)
+  for (const patch of [
+    { http_headers: { 'X-Workspace': 'fixture-header-private' } },
+    { _http_headers_text: '{"X-Workspace":"fixture-header-private"}' },
+    { reasoning_effort: 'low' },
+    { extra_body: { fixture_parameter: 'fixture-body-private' } },
+    { _extra_body_text: '{"fixture_parameter":"fixture-body-private"}' },
+  ]) {
+    assert.notEqual(signature({ ...connection, ...patch }), original)
+    assert.equal(experience.shouldReportModelDiscovery('edit', signature({ ...connection, ...patch }), original), true)
+  }
+  assert.deepEqual(events, [])
+})

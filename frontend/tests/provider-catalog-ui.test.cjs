@@ -484,6 +484,7 @@ for (const [presetId, address, legacy] of [
       testCatalogProvider(id, connection, kind) { probes.push([connection.id, connection.base_url, kind]) },
     }
     const Detail = loadTs('ProviderDetail.tsx', {
+      './CustomRequestOptions': { default: () => null },
       react: { ...React, useRef: () => tracked },
       '../../i18n': i18n, '../../ui': ui,
       '../../utils/externalLinks': { openExternalLink: () => {} },

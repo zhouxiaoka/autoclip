@@ -13,7 +13,7 @@ import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
 import TrialRunPanel from './TrialRunPanel'
 import {
-  catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected, matchedCatalogPreset,
+  catalogDraftConnection, catalogHost, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected, matchedCatalogPreset,
   type LocalAsrReady,
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
@@ -73,7 +73,12 @@ export default function ProviderDetail({
     : persisted || catalogDraftConnection(preset)
   const compatible = (row: NonNullable<typeof connection>) => row.provider === 'compatible' || presetKey(row) === 'compatible'
   // A native catalog form may not select a saved compatible account on the same service.
-  const savedAdvanced = settings.connections.filter(row => compatible(row) && (row.id === persisted?.id || matchedCatalogPreset(row)?.id === preset.id))
+  const savedAdvanced = settings.connections.filter(row => compatible(row) && (
+    row.id === persisted?.id || matchedCatalogPreset(row)?.id === preset.id
+    // Official compatible accounts remain separate from the native OpenAI credential form.
+    || (preset.id === 'openai' && (!row.catalog_provider_id || row.catalog_provider_id === 'openai')
+      && catalogHost(row.base_url) === catalogHost(preset.base_url))
+  ))
   const advancedConnections = savedAdvanced.length ? savedAdvanced : connection && compatible(connection) ? [connection] : []
   const connected = isCatalogConnected(settings, preset, asrReady, persisted)
   const list = connection ? lists[connection.id] : undefined

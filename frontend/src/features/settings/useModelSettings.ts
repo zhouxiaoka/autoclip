@@ -63,7 +63,8 @@ function probeVision(settings: ModelSettings, role: Role, lists: Record<string, 
 /** Compare validation inputs only in memory. Never send this signature to analytics or persistence. */
 function probeSignature(connection: Connection, model: string, vision: boolean, role: Role) {
   return JSON.stringify([connection.id, connection.provider, connection.catalog_provider_id, connection.base_url,
-    connection.image_base_url, connection.image_api, connection.api_key, !!connection.has_key, model, vision, role])
+    connection.image_base_url, connection.image_api, connection.api_key, !!connection.has_key,
+    connection.http_headers, connection._http_headers_text, connection.reasoning_effort, connection.extra_body, connection._extra_body_text, model, vision, role])
 }
 
 /**
