@@ -502,3 +502,19 @@ test('observable authentication drift also holds a pending old-account Header', 
     assert.equal(merged.connections[0]._http_headers_text, pending.connections[0]._http_headers_text)
   }
 })
+
+test('a real catalog draft accepts empty/default metadata on first save without locking pending Headers', () => {
+  const catalog = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const row = catalog.catalogDraftConnection(catalog.catalogPreset('siliconflow'), 'first-catalog-save')
+  assert.equal(row.catalog_provider_id, undefined)
+  const sent = { ...fresh(), connections: [row] }
+  const pending = { ...sent, connections: [{ ...row, _http_headers_text: '{"X-Workspace":"fixture-first-save"}' }] }
+  const returned = { ...sent, revision: 3, connections: [{ ...row, catalog_provider_id: '', has_key: false, has_http_headers: false, api_key_masked: '' }] }
+  const merged = logic.mergeSavedSettings(sent, pending, returned)
+  assert.equal(merged.connections[0]._request_scope_conflict, undefined)
+  assert.equal(merged.connections[0]._http_headers_text, pending.connections[0]._http_headers_text)
+  assert.equal(merged.revision, 3)
+  const options = loadTs('requestOptions.ts')
+  assert.deepEqual(plain(options.wireRequestOptions(merged.connections[0]).http_headers), { 'X-Workspace': 'fixture-first-save' })
+  assert.equal(options.requestScopeIdentity(row), options.requestScopeIdentity(returned.connections[0]))
+})

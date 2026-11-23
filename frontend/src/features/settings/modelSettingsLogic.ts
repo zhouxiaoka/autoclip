@@ -1,4 +1,4 @@
-import { hasRequestHeaderAuth } from './requestOptions'
+import { hasRequestHeaderAuth, requestScopeIdentity } from './requestOptions'
 /**
  * Pure state transitions for the AI model settings document.
  * No React, no i18n: the hook and the tests both call these.
@@ -371,13 +371,12 @@ export function mergeSavedSettings(sent: ModelSettings, pending: ModelSettings, 
       'api_key', 'http_headers', '_http_headers_text', 'reasoning_effort', 'extra_body', '_extra_body_text']
     const changedRequest = before && requestFields.some(key => JSON.stringify(before[key]) !== JSON.stringify(row[key]))
     if (!changedRequest) return [merged]
-    const identityFields: Array<keyof Connection> = ['provider', 'catalog_provider_id', 'base_url', 'image_base_url', 'image_api']
     const expectedKey = before.api_key == null ? !!before.has_key : !!before.api_key
     const authMoved = returned && ((typeof returned.has_key === 'boolean' && returned.has_key !== expectedKey)
       || (typeof returned.has_http_headers === 'boolean' && returned.has_http_headers !== hasRequestHeaderAuth(before))
       || (before.api_key == null && typeof before.api_key_masked === 'string' && typeof returned.api_key_masked === 'string'
         && before.api_key_masked !== returned.api_key_masked))
-    const scopeMoved = returned && (authMoved || identityFields.some(key => JSON.stringify(before[key]) !== JSON.stringify(returned[key])))
+    const scopeMoved = returned && (authMoved || requestScopeIdentity(before) !== requestScopeIdentity(returned))
     // Keep credentials and request defaults bound to their local endpoint, never a different returned scope.
     const boundFields: Array<keyof Connection> = [...requestFields, 'has_key', 'api_key_masked', 'has_http_headers', 'base_url_source', 'preset_version']
     const bound = Object.fromEntries(boundFields.map(key => [key, row[key]]))

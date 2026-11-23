@@ -120,3 +120,9 @@ export function hasRequestHeaderAuth(value: CustomRequestDraft): boolean {
   const headers = wireRequestOptions(value).http_headers
   return headers == null ? !!value.has_http_headers : Object.keys(headers).length > 0
 }
+
+/** Missing/empty metadata and protocol defaults identify the same actual request scope. */
+export function requestScopeIdentity(value: { provider?: string; catalog_provider_id?: string; base_url?: string; image_base_url?: string; image_api?: string }): string {
+  return JSON.stringify([value.provider?.trim().toLowerCase() || '', value.catalog_provider_id?.trim() || '',
+    value.base_url?.trim().replace(/\/+$/, '') || '', value.image_base_url?.trim().replace(/\/+$/, '') || '', value.image_api || 'auto'])
+}

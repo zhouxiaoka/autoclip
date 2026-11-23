@@ -8,7 +8,7 @@ import type { ProviderPreset } from './providerPresets'
 import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
 import CustomRequestOptions from './CustomRequestOptions'
-import { hasRequestHeaderAuth } from './requestOptions'
+import { hasRequestHeaderAuth, requestScopeIdentity } from './requestOptions'
 import { presetKey } from './modelSettingsLogic'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
@@ -332,7 +332,7 @@ export default function ProviderDetail({
                 ? `new:${preset.id}` : `saved:${row.id}`
             } data-request-connection-id={row.id}>
               {(advancedConnections.length > 1 || row.id !== connection?.id) && <p className="ac-note">{row.name}</p>}
-              <CustomRequestOptions key={JSON.stringify([m.loadSession, row.provider, row.catalog_provider_id, row.base_url, row.image_base_url, row.image_api])} value={row} onEdit={patch => {
+              <CustomRequestOptions key={JSON.stringify([m.loadSession, requestScopeIdentity(row)])} value={row} onEdit={patch => {
                 const saved = savedAdvanced.find(item => item === row)
                 if (saved) m.editConnection(saved, patch)
                 else {
