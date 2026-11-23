@@ -5,7 +5,7 @@ import { Btn, Dialog, Row } from '../../ui'
 import { beginExperience } from '../../analytics/experience'
 import { modelSettingsApi } from './modelSettingsApi'
 import CustomRequestOptions from './CustomRequestOptions'
-import { requestOptionsIssue } from './customRequestOptions'
+import { requestOptionsIssue } from './requestOptions'
 import {
   MODEL_TYPES,
   addManualModel,

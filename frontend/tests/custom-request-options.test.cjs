@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 const plain = value => JSON.parse(JSON.stringify(value))
-const options = loadTs('customRequestOptions.ts')
+const options = loadTs('requestOptions.ts')
 const custom = loadTs('customProvider.ts', { '../../i18n': { t: x => x }, './providers': { PROVIDERS: { compatible: { name: 'Custom' } } } })
 
 const ready = () => custom.addManualModel({ ...custom.emptyDraft(), name: 'Fixture', base_url: 'http://127.0.0.1:12345/v1' }, 'fixture-model').draft

@@ -6,7 +6,7 @@ import { cleanupBaseUrl, normalizeProviderBaseUrl } from './providerUrl'
 import type { Connection, ModelEntry, ModelList, ModelSettings } from './modelSettingsApi'
 import { cleanBinding } from './modelSettingsLogic'
 import { isConsoleHost } from './providerAccess'
-import { requestOptionsIssue, type CustomRequestDraft } from './customRequestOptions'
+import { requestOptionsIssue, type CustomRequestDraft } from './requestOptions'
 
 export const CUSTOM_PROTOCOL = 'openai_compatible' as const
 export type CustomProtocol = typeof CUSTOM_PROTOCOL

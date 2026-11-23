@@ -331,3 +331,43 @@ test('testing a catalog connection after editing its base_url reuses the same co
     [id, 'https://gateway.example/final/v1', 'trial'],
   ])
 })
+
+test('a delayed save keeps later Header edits dirty and advances the server baseline for the next PUT', async () => {
+  const initial = whisperSettings()
+  initial.revision = 2
+  initial.connections[0] = { ...initial.connections[0], provider: 'compatible', base_url: 'https://fixture.invalid/v1', api_key: '', has_key: false, has_http_headers: false }
+  const writes = []
+  let release, notifications = 0
+  const reply = body => ({ ...body, revision: writes.length + 2, saved: true,
+    connections: body.connections.map(c => { const { http_headers, ...publicRow } = c; return { ...publicRow, api_key: null, has_key: false, has_http_headers: !!http_headers && Object.keys(http_headers).length > 0 } }),
+  })
+  const wireApi = loadTs('modelSettingsApi.ts', {
+    '../../services/api': { default: { put: async (_url, body) => {
+      writes.push(structuredClone(body))
+      if (writes.length === 1) return new Promise(resolve => { release = () => resolve(reply(body)) })
+      return reply(body)
+    } } }, '../../utils/apiConfig': {},
+  }).modelSettingsApi
+  const render = settingsHook(initial, { save: wireApi.save }, false, undefined, () => { notifications++ })
+  await render().load()
+  render().update({ chunk_size: 6000 })
+  const saving = render().save()
+  assert.equal(writes.length, 1)
+  let store = render()
+  store.editConnection(store.settings.connections[0], { _http_headers_text: '{"X-Workspace":"fixture-late-header"}' })
+  assert.equal(render().dirty, true)
+  release()
+  assert.equal((await saving).ok, true)
+  store = render()
+  assert.equal(store.settings.connections[0]._http_headers_text, '{"X-Workspace":"fixture-late-header"}')
+  assert.equal(store.settings.revision, 3)
+  assert.equal(store.dirty, true)
+  assert.equal(notifications, 0)
+  assert.equal((await store.save()).ok, true)
+  assert.equal(writes[1].revision, 3)
+  assert.deepEqual(writes[1].connections[0].http_headers, { 'X-Workspace': 'fixture-late-header' })
+  assert.deepEqual(writes[1].edited_fields, ['connections'])
+  assert.equal(render().dirty, false)
+  assert.equal(render().settings.revision, 4)
+  assert.equal(notifications, 1)
+})

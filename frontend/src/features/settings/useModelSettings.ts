@@ -1,4 +1,4 @@
-import { requestOptionsIssue } from './customRequestOptions'
+import { requestOptionsIssue } from './requestOptions'
 import { useEffect, useRef, useState } from 'react'
 import { codeFromRequestError, codeFromResult, safeHttpStatus } from '../../analytics/connectionTestCode'
 import { message } from 'antd'
@@ -79,7 +79,8 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   const [dirty, setDirtyState] = useState(false)
   // A save can navigate before React commits its next render.
   const dirtyRef = useRef(false)
-  const setDirty = (value: boolean) => { dirtyRef.current = value; setDirtyState(value) }
+  const editVersion = useRef(0)
+  const setDirty = (value: boolean) => { if (value) editVersion.current++; dirtyRef.current = value; setDirtyState(value) }
   const [conflicted, setConflicted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [matching, setMatching] = useState(false)
@@ -430,6 +431,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     const source = base ?? settings
     if (!source) return { ok: false }
     const current = patch ? { ...source, ...patch } : source
+    const savedEditVersion = editVersion.current
     if (!checked && (patch || base)) setSettings(current)
     const currentLists = checked ? { ...lists, [checked.connectionId]: checked.list } : lists
     const finish = beginExperience('provider_configuration_save', summary(current))
@@ -479,7 +481,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
             if (checked) { finish('failed', connectionTestFailure(result)); return { ok: false, validationFailed: true } }
           }
         }
-        if (!checked) setSettings(next)
+        if (!checked && editVersion.current === savedEditVersion) setSettings(next)
       }
       for (const connection of next.connections) {
         if (noticed.some(item => item.id === connection.id)) continue
@@ -492,7 +494,9 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       }
       const toast = saveToast(noticed)
       const value = await modelSettingsApi.save(logic.forSave(next), savedRef.current ? logic.forSave(savedRef.current) : undefined)
-      setSettings(value); setDirty(false); setConflicted(false); autoCover.current = false
+      const pendingEdits = editVersion.current !== savedEditVersion
+      setSettings(latest => pendingEdits && latest ? logic.mergeSavedSettings(next, latest, value) : value)
+      setDirty(pendingEdits); setConflicted(false); autoCover.current = false
       loadedSignature.current = connectionSignature(value)
       finish('completed')
       tested.current.clear()
@@ -510,7 +514,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       const visionFailed = logic.visionFollowLacksCapability(next, currentLists) || logic.visionFollowLacksCapability(value, currentLists)
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
       // back to the failed project, if settings were opened from one (SETTINGS_SAVED_EVENT in studio/settingsReturn).
-      if (value.analysis?.model && !failed && !visionFailed) notifySettingsSaved()
+      if (!pendingEdits && value.analysis?.model && !failed && !visionFailed) notifySettingsSaved()
       return { ok: true, validationFailed: failed || visionFailed }
     } catch (e) {
       finish('failed', {}, e)

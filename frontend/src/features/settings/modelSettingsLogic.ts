@@ -347,3 +347,29 @@ export function forSave(s: ModelSettings): ModelSettings {
       })),
   }
 }
+
+/** Keep edits made after a save started, but use the returned server state for unchanged fields. */
+function retainPendingFields<T extends object>(sent: T, pending: T, saved: T): T {
+  const merged = { ...saved }
+  for (const name of new Set([...Object.keys(sent), ...Object.keys(pending)])) {
+    const key = name as keyof T
+    if (JSON.stringify(sent[key]) !== JSON.stringify(pending[key])) merged[key] = pending[key]
+  }
+  return merged
+}
+
+export function mergeSavedSettings(sent: ModelSettings, pending: ModelSettings, saved: ModelSettings): ModelSettings {
+  const merged = retainPendingFields(sent, pending, saved)
+  const sentRows = new Map(sent.connections.map(row => [row.id, row]))
+  const savedRows = new Map(saved.connections.map(row => [row.id, row]))
+  merged.connections = pending.connections.flatMap(row => {
+    const before = sentRows.get(row.id), returned = savedRows.get(row.id)
+    if (before && !returned && JSON.stringify(before) === JSON.stringify(row)) return []
+    return [before && returned ? retainPendingFields(before, row, returned) : row]
+  })
+  // A server-side account added to an unedited field is not a local deletion.
+  for (const row of saved.connections) {
+    if (!sentRows.has(row.id) && !pending.connections.some(item => item.id === row.id)) merged.connections.push(row)
+  }
+  return { ...merged, revision: saved.revision, saved: saved.saved }
+}

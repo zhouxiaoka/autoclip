@@ -136,3 +136,36 @@ test('creating a real catalog account preserves the draft editor session key', (
   assert.equal(flatten(after).find(node => node.props?.['data-request-connection-id']).key, key)
   assert.equal(secondary(after).props.value.id, created.id)
 })
+
+test('only the selected compatible account can unlock Header-only catalog tests', () => {
+  const preset = catalog.catalogPreset('openrouter')
+  const base = connection({ base_url: preset.base_url, api_key: '', has_key: false })
+  const cases = [
+    [{ http_headers: { 'X-Workspace': 'fixture' } }, false],
+    [{ has_http_headers: true }, false],
+    [{ has_http_headers: true, _http_headers_text: '' }, false],
+    [{ has_http_headers: true, _http_headers_text: '{}' }, true],
+    [{ has_http_headers: true, http_headers: {} }, true],
+    [{ _http_headers_text: '{"X-Workspace":"fixture"}' }, false],
+    [{ _http_headers_text: 'invalid' }, true],
+    [{ http_headers: { Host: 'fixture.invalid' } }, true],
+    [{}, true],
+  ]
+  const labels = ['测试并启用', '快速测试', '试跑一段']
+  for (const [patch, disabled] of cases) {
+    const { tree } = renderDetail(preset, [{ ...base, ...patch }])
+    for (const label of labels) {
+      const button = flatten(tree).find(n => n.type === 'button' && n.props.children === label)
+      assert.ok(button, label)
+      assert.equal(!!button.props.disabled, disabled, `${label}: ${JSON.stringify(patch)}`)
+    }
+  }
+  const native = connection({ id: 'native', provider: 'openai', base_url: 'https://api.openai.com/v1', api_key: '', has_key: false })
+  const other = connection({ id: 'other', base_url: native.base_url, has_http_headers: true })
+  const { tree } = renderDetail(catalog.catalogPreset('openai'), [native, other])
+  assert.ok(secondary(tree))
+  for (const label of labels) {
+    const button = flatten(tree).find(n => n.type === 'button' && n.props.children === label)
+    assert.equal(button.props.disabled, true, label)
+  }
+})

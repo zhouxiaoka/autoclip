@@ -35,7 +35,7 @@ function load(name, mocks = {}, globals = {}) {
         const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../../backend/core/event_catalog.json'), 'utf8'))
         return { default: data, __esModule: true }
       }
-      if (id === './customRequestOptions') return loadTs('customRequestOptions.ts')
+      if (id === './requestOptions') return loadTs('requestOptions.ts')
       if (id === './errorText') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'))
       if (id === './runtime') return load('runtime', {}, globals)
       if (id === '../utils/apiConfig') {

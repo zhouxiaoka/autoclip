@@ -296,3 +296,49 @@ def test_runtime_reload_and_connection_switch_do_not_reuse_options(monkeypatch):
     ai.save(updated)
     manager.call('fixture')
     assert seen[-1] == ('other-model', {'base_url': other.base_url})
+
+
+@pytest.mark.parametrize('header_update', ['omitted', None, {}])
+def test_legacy_vision_route_preserves_opaque_headers_except_explicit_clear(monkeypatch, header_update):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1 import studio
+    from backend.services.studio import vision_settings as vision
+    monkeypatch.setattr(ai, 'load', lambda: None)
+    app = FastAPI()
+    app.include_router(studio.router, prefix='/studio')
+    body = {'mode': 'custom', 'base_url': 'http://127.0.0.1:12345/v1', 'model': 'fixture-model',
+            'api_key': '', 'http_headers': {'X-Workspace': 'fixture-legacy-secret'}}
+    with TestClient(app) as client:
+        assert client.put('/studio/vision-settings', json=body).status_code == 200
+        update = {key: value for key, value in body.items() if key != 'http_headers'}
+        update['timeout'] = 90
+        if header_update != 'omitted':
+            update['http_headers'] = header_update
+        response = client.put('/studio/vision-settings', json=update)
+        assert response.status_code == 200
+        assert 'fixture-legacy-secret' not in response.text
+    assert vision._saved().get('http_headers', {}) == ({} if header_update == {} else body['http_headers'])
+    assert vision._saved()['timeout'] == 90
+
+
+@pytest.mark.parametrize('changed', ['http://127.0.0.1:12346/v1', 'http://127.0.0.1:12345/other/v1'])
+def test_legacy_vision_route_never_carries_saved_header_to_a_changed_endpoint(monkeypatch, changed):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1 import studio
+    from backend.services.studio import vision_settings as vision
+    monkeypatch.setattr(ai, 'load', lambda: None)
+    app = FastAPI()
+    app.include_router(studio.router, prefix='/studio')
+    body = {'mode': 'custom', 'base_url': 'http://127.0.0.1:12345/v1', 'model': 'fixture-model',
+            'api_key': '', 'http_headers': {'X-Workspace': 'fixture-legacy-secret'}}
+    with TestClient(app) as client:
+        assert client.put('/studio/vision-settings', json=body).status_code == 200
+        changed_body = {**body, 'base_url': changed, 'http_headers': None}
+        rejected = client.put('/studio/vision-settings', json=changed_body)
+        assert rejected.status_code == 422
+        assert 'fixture-legacy-secret' not in rejected.text
+        assert vision._saved()['base_url'] == body['base_url']
+        assert client.put('/studio/vision-settings', json={**changed_body, 'http_headers': {}}).status_code == 200
+    assert not vision._saved().get('http_headers')

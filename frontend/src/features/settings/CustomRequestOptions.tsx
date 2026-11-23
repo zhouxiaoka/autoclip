@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Input, Select } from 'antd'
 import { t } from '../../i18n'
 import { Btn, Dialog, Icon, Row } from '../../ui'
-import { headerEntriesText, parseHeaderEntries, requestOptionsIssue, type CustomRequestDraft, type HeaderEntry, type ReasoningEffort } from './customRequestOptions'
+import { headerEntriesText, parseHeaderEntries, requestOptionsIssue, type CustomRequestDraft, type HeaderEntry, type ReasoningEffort } from './requestOptions'
 
 const EFFORTS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const LABELS = { none: '不推理', minimal: '最小', low: '低', medium: '中', high: '高', xhigh: '极高' }

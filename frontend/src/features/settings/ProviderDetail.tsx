@@ -8,6 +8,7 @@ import type { ProviderPreset } from './providerPresets'
 import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
 import CustomRequestOptions from './CustomRequestOptions'
+import { hasRequestHeaderAuth } from './requestOptions'
 import { presetKey } from './modelSettingsLogic'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
@@ -127,6 +128,7 @@ export default function ProviderDetail({
   const status = connection?.validation_status
   const testDisabled = !connection || testing || (
     preset.auth === 'api_key' && !(connection.api_key || '').trim() && !connection.has_key
+      && !(compatible(connection) && hasRequestHeaderAuth(connection))
   ) || !connection.base_url.trim()
 
   return (

@@ -434,3 +434,19 @@ test('a failed test belongs to its account, exact model and purpose', () => {
   const invalid = logic.applyValidation(initial, 'a', { result: 'failed', error_type: 'invalid_key' }, 'A')
   assert.equal(logic.failedCheck(invalid.connections[0], 'analysis', 'B'), true)
 })
+
+test('pending-save merge preserves local changes, opaque returned credentials and remote account changes', () => {
+  const sent = { ...fresh(), revision: 1, connections: [conn('a', 'compatible', { base_url: 'https://fixture.invalid/v1', api_key: 'fixture-submitted' }), conn('removed', 'compatible')] }
+  const pending = { ...sent, connections: [{ ...sent.connections[0], _http_headers_text: '{"X-Workspace":"fixture-late"}' }, sent.connections[1]], allow_send_frame: true }
+  const returned = { ...sent, revision: 2, saved: true, chunk_size: 8000, connections: [conn('a', 'compatible', { base_url: 'https://fixture.invalid/v1', api_key: null, has_key: true }), conn('remote-added', 'compatible')] }
+  const merged = logic.mergeSavedSettings(sent, pending, returned)
+  assert.equal(merged.revision, 2)
+  assert.equal(merged.saved, true)
+  assert.equal(merged.chunk_size, 8000)
+  assert.equal(merged.allow_send_frame, true)
+  assert.equal(merged.connections[0]._http_headers_text, '{"X-Workspace":"fixture-late"}')
+  assert.equal(merged.connections[0].api_key, null)
+  assert.equal(merged.connections[0].has_key, true)
+  assert.deepEqual(plain(merged.connections.map(c => c.id)), ['a', 'remote-added'])
+  assert.equal(sent.connections[0].api_key, 'fixture-submitted')
+})

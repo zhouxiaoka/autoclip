@@ -110,3 +110,10 @@ export function wireRequestOptions<T extends CustomRequestDraft>(value: T): Omit
     ...(_extra_body_text !== undefined ? { extra_body: body } : {}),
   }
 }
+
+/** Only this connection's validated local or opaque saved Header can satisfy keyless auth. */
+export function hasRequestHeaderAuth(value: CustomRequestDraft): boolean {
+  if (requestOptionsIssue(value)) return false
+  const headers = wireRequestOptions(value).http_headers
+  return headers == null ? !!value.has_http_headers : Object.keys(headers).length > 0
+}

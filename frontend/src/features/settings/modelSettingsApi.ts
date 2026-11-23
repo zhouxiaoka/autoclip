@@ -3,7 +3,7 @@ import { buildApiUrl } from '../../utils/apiConfig'
 import type { ValidationResult } from './providerAccess'
 
 import type { CustomModelOffer } from './customProvider'
-import { wireRequestOptions, type CustomRequestDraft } from './customRequestOptions'
+import { wireRequestOptions, type CustomRequestDraft } from './requestOptions'
 
 export type Capability = 'auto' | 'multimodal' | 'text'
 export type Source = 'preset' | 'user'
