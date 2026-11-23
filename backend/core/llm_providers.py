@@ -11,9 +11,14 @@ from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
+import requests
+
 from backend.core import gemini_transport
+from backend.core.failure_attribution import ProviderTransportError
+from backend.core.llm_retry import retry_after_from_error
 from backend.core.llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
 from backend.core.failure_logging import failure_logger
+from backend.core.upstream_errors import http_error_parts
 
 logger = failure_logger(__name__)
 
@@ -760,7 +765,6 @@ class GeminiProvider(LLMProvider):
                 'response_format': kwargs.get('response_format'),
             }
             url, headers, body = gemini_transport.request(self.base_url, self.api_key, payload)
-            import requests
             from backend.core.job_budget import clip_job_read_timeout
             from backend.core.llm_stream import budget_watch
             timeout = clip_job_read_timeout(LLM_READ_TIMEOUT_SEC)
@@ -783,6 +787,14 @@ class GeminiProvider(LLMProvider):
             from backend.core.job_budget import promote_if_budget_spent
             promote_if_budget_spent(e)
             _attach_gemini_error_body(e)
+            if isinstance(e, (requests.Timeout, requests.ConnectionError, requests.HTTPError)):
+                status, body = http_error_parts(e)
+                transport = ProviderTransportError(type(e).__name__, http_status=status,
+                                                   timed_out=isinstance(e, requests.Timeout))
+                transport.body = body if status is not None else (
+                    'timeout' if isinstance(e, requests.Timeout) else 'connection error')
+                transport.retry_after = retry_after_from_error(e)
+                e = transport
             logger.error(f"Gemini调用失败: {sanitize_exception_text(e)}")
             raise log_safe_exception(e) from None
     
