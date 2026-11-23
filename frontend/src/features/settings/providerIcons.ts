@@ -38,6 +38,9 @@ import xiaomimimo from '../../assets/providers/xiaomimimo.svg'
 import api88 from '../../assets/providers/api88.jpg'
 import infistar from '../../assets/providers/infistar.svg'
 import apimart from '../../assets/providers/apimart.svg'
+import cometapi from '../../assets/providers/cometapi.png'
+import novita from '../../assets/providers/novita.png'
+import poyo from '../../assets/providers/poyo.png'
 
 export type ProviderIconTone = 'color' | 'monochrome'
 
@@ -51,6 +54,9 @@ export const PROVIDER_ICONS: Readonly<Partial<Record<string, ProviderIcon>>> = {
   api88: color(api88),
   infistar: color(infistar),
   apimart: mono(apimart),
+  cometapi: color(cometapi),
+  novita: color(novita),
+  poyo: color(poyo),
   openai: mono(openai),
   deepseek: color(deepseek),
   gemini: color(gemini),

@@ -66,4 +66,25 @@ test('Bailian shows the author referral beside Get API key, and the console link
   cometRef.props.onClick({ preventDefault() {} })
   assert.equal(links.at(-1), 'https://www.cometapi.com/?ref=kris')
   assert.deepEqual(tracked.at(-1), { sponsor: 'cometapi', target: 'referral', placement: 'settings_model' })
+
+  for (const [id, url, base] of [
+    ['novita', 'https://novita.ai/?ref=nzvindf&utm_source=affiliate', 'https://api.novita.ai/v3/openai'],
+    ['poyo', 'https://poyo.ai/?affiliate_code=christ520482&open_signup=1', 'https://api.poyo.ai/v1'],
+  ]) {
+    const row = providers.PROVIDERS[id]
+    assert.equal(row.referralUrl, url)
+    assert.equal(row.cloud.baseUrl, base)
+    assert.equal(row.sponsor, undefined)
+    const nodesFor = flatten(Fields({
+      connection: { provider: id, api_key: '', base_url: base },
+      placement: 'settings_model',
+      onChoose() {},
+      onEdit() {},
+    }))
+    const ref = nodesFor.find(node => node?.props?.['data-author-referral'] === '1')
+    assert.equal(ref.props.href, url)
+    ref.props.onClick({ preventDefault() {} })
+    assert.equal(links.at(-1), url)
+    assert.deepEqual(tracked.at(-1), { sponsor: id, target: 'referral', placement: 'settings_model' })
+  }
 })

@@ -835,3 +835,36 @@ def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_pat
     ])
     bad_client = _client(tmp_path / "bad", private, public, lambda url, timeout, max_bytes: _envelope(private, bad))
     assert bad_client.refresh_sync() == "sponsors"
+
+
+def test_novita_and_poyo_are_trusted_for_overseas_promo(tmp_path, profiles):
+    hosts = sponsor_promo.builtin_sponsor_hosts()
+    assert hosts["novita"] == "novita.ai"
+    assert hosts["poyo"] == "poyo.ai"
+    private, public = _keys()
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    good = _payload(sequence=32, sponsors=[
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
+        {
+            "id": "novita",
+            "order": 2,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": overseas,
+            "register_url": "https://novita.ai/?ref=nzvindf&utm_source=affiliate",
+        },
+        {
+            "id": "poyo",
+            "order": 3,
+            "status": "healthy",
+            "locales": overseas,
+            "register_url": "https://poyo.ai/?affiliate_code=christ520482&open_signup=1",
+        },
+    ])
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, good))
+    assert client.refresh_sync() == "ok"
+    en = client.view(locale="en")
+    assert en["choices"] == ["novita", "poyo", "other"]
+    assert en["default"] == "novita"
+    assert en["register_urls"]["novita"] == "https://novita.ai/?ref=nzvindf&utm_source=affiliate"
+    assert en["register_urls"]["poyo"] == "https://poyo.ai/?affiliate_code=christ520482&open_signup=1"

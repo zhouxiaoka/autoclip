@@ -2311,5 +2311,9 @@
   "试跑请求失败，请检查模型权限、额度或接口兼容性。": "La solicitud de prueba falló. Revisa el acceso al modelo, la cuota o la compatibilidad del endpoint.",
   "模型已回复，但未按要求输出有效 JSON，建议换指令遵循更稳定的型号。": "El modelo respondió, pero no devolvió un JSON válido como se solicitó. Prueba un modelo con mejor seguimiento de instrucciones.",
   "CometAPI 聚合网关。一个 Key 调用多款主流模型，接口地址已预设。": "Pasarela CometAPI. Una sola clave para los principales modelos, con URL base preconfigurada.",
-  "CometAPI": "CometAPI"
+  "CometAPI": "CometAPI",
+  "Novita AI": "Novita AI",
+  "PoYo AI": "PoYo AI",
+  "Novita AI 推理平台。高性价比主流开源与闭源模型，接口地址已预设。": "Plataforma de inferencia Novita AI. Modelos abiertos y comerciales económicos, con URL base preconfigurada.",
+  "PoYo AI 聚合网关。一个 Key 调用语言、图像和视频模型，接口地址已预设。": "Pasarela PoYo AI. Una sola clave para modelos de lenguaje, imagen y video, con URL base preconfigurada."
 }
