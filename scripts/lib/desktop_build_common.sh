@@ -188,18 +188,27 @@ copy_backend_source() {
     echo "==> Copying backend source"
     rm -rf "$BACKEND_DEST"
     "$PORTABLE_PY" - backend "$BACKEND_DEST" <<'PY'
-import shutil, sys
+import json, os, shutil, sys
 src, dest = sys.argv[1], sys.argv[2]
 IGNORED_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "tests", "data", "logs", "temp"}
 IGNORED_SUFFIXES = (".pyc", ".log", ".pid", ".rdb")
 
 def ignore(_dir, names):
-    return {n for n in names if n in IGNORED_DIRS or n.endswith(IGNORED_SUFFIXES)}
+    return {n for n in names if n in IGNORED_DIRS or n.endswith(IGNORED_SUFFIXES) or n == "replay-oauth.json"}
 
 shutil.copytree(src, dest, ignore=ignore)
 # The docs registry is the source of truth; both desktop platforms ship the
 # generated copy inside backend, without relying on a repository docs folder.
 shutil.copyfile('docs/analytics/event_catalog.json', dest + '/core/event_catalog.json')
+# Bundle only public/native application registration fields, never a user's grant.
+apps = {}
+if client := os.environ.get('AUTOCLIP_TWITCH_CLIENT_ID'):
+    apps['twitch'] = {'client_id': client}
+if client := os.environ.get('AUTOCLIP_YOUTUBE_CLIENT_ID'):
+    apps['youtube'] = {'client_id': client, 'client_secret': os.environ.get('AUTOCLIP_YOUTUBE_CLIENT_SECRET', '')}
+if apps:
+    with open(dest + '/presets/replay-oauth.json', 'w', encoding='utf-8') as output:
+        json.dump(apps, output)
 PY
     echo "OK"
 }

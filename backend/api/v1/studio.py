@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Optional, Literal
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,7 +19,6 @@ from backend.core.quota_precheck import QuotaExhausted
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
 from backend.models.clip import Clip
-from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
 from backend.services.cover_brief import Options as CoverOptions
 from backend.services.platform_strategy import list_platform_strategies
@@ -63,9 +62,13 @@ def validate_draft(project_id, draft):
 async def _stage_for_gate(video, first_chunk, ext, *, subtitle_bytes: bytes | None, route: str = 'studio', goal: str | None = 'auto'):
     """Stage the upload outside any project and run the one preflight on it, in the threadpool.
     Any refusal or failure removes the staged file, so a refused import leaves no project, state or file."""
+    staged = await stage_upload(video, first_chunk, ext)
+    return await _gate_staged(staged, subtitle_bytes, route, goal)
+
+
+async def _gate_staged(staged, subtitle_bytes: bytes | None, route, goal):
     from backend.services.studio import preflight
     from backend.api.v1 import transcription_gate
-    staged = await stage_upload(video, first_chunk, ext)
     try:
         subtitle = staged.with_suffix('.srt') if subtitle_bytes is not None else None
         if subtitle is not None:
@@ -233,6 +236,7 @@ def test_vision_settings(body: vision_settings.VisionSettingsInput):
 
 @router.post('/import')
 async def import_visual(
+    request: Request,
     goal: Literal['auto', 'content', 'highlight', 'promo'] = Form('auto'),
     language: Language = Form('source'),
     aspect: Optional[Literal['original', 'portrait', 'landscape']] = Form(None),
@@ -249,15 +253,70 @@ async def import_visual(
     url: Optional[str] = Form(None),
     browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = Form(None),
     video: Optional[UploadFile] = File(None),
+    replay_source: Optional[Literal['obs', 'youtube_file', 'twitch_file', 'kick_file', 'discord_file', 'other_file']] = Form(None),
+    channel_replay_id: Optional[uuid.UUID] = Form(None),
+    twitch_video_id: Optional[str] = Form(None, pattern=r'^[0-9]{1,20}$'),
+    obs_capture_id: Optional[str] = Form(None, max_length=64),
     source_window_start: Optional[float] = Form(None, ge=0),
     source_window_end: Optional[float] = Form(None, gt=0),
     features: str = Form(''),
     db: Session = Depends(get_db),
 ):
-    if bool(url) == bool(video):
+    if obs_capture_id:
+        if (
+            getattr(request.app.state, 'mode', None) != 'desktop'
+            or replay_source != 'obs'
+            or goal != 'auto'
+            or video is not None
+            or url is not None
+            or channel_replay_id is not None
+            or twitch_video_id is not None
+        ):
+            raise HTTPException(422, 'invalid_replay_source')
+    if channel_replay_id and (getattr(request.app.state, 'mode', None) != 'desktop' or replay_source not in ('youtube_file', 'twitch_file')):
+        raise HTTPException(422, 'invalid_replay_source')
+    if twitch_video_id:
+        from backend.services import replay_channels as channels, twitch_replay_media
+        if not (twitch_replay_media.enabled() and channel_replay_id and replay_source == 'twitch_file'
+                and video is None and url is None):
+            raise HTTPException(422, 'invalid_replay_source')
+    if replay_source and (not (video or twitch_video_id or obs_capture_id) or goal != 'auto'):
+        raise HTTPException(422, 'invalid_replay_source')
+    if replay_source == 'obs' and not obs_capture_id:
+        raise HTTPException(422, 'invalid_replay_source')
+    if not twitch_video_id and not obs_capture_id and bool(url) == bool(video):
         raise HTTPException(422, '请提供一个视频链接或文件')
     from backend.services.studio import readiness
     call(readiness.ensure_analysis_usable)
+    if obs_capture_id:
+        source_window = None
+        if source_window_end is not None:
+            source_window = {'start': float(source_window_start or 0), 'end': float(source_window_end)}
+        prefs = ImportOptions(
+            goal=goal, replay_source='obs', language=language, aspect=aspect, duration=duration, instruction=instruction,
+            platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
+            recommended_template=recommended_template,
+            branding={'outro_enabled': brand_outro_enabled},
+            source_window=source_window,
+        )
+        snapshot = None
+        if features and len(features) <= 4000:
+            try:
+                parsed = json.loads(features)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                snapshot = parsed
+        from backend.services.obs import worker as obs_worker
+        pid, created = await run_in_threadpool(obs_worker.claim_manual_for_home, obs_capture_id, prefs, name.strip())
+        if not created:
+            return {'project_id': pid, 'analysis_run_id': None}
+        try:
+            run_id = call(jobs.inspect_project, pid, prefs, None, None, features=snapshot)
+        except Exception:
+            obs_worker.mark(obs_capture_id, 'dispatching', 'uncertain')
+            raise
+        return {'project_id': pid, 'analysis_run_id': run_id}
     if url:
         parsed = urlparse(url)
         host = (parsed.hostname or '').lower()
@@ -281,6 +340,17 @@ async def import_visual(
         finally:
             await subtitle.close()
     staged = None
+    twitch_source = None
+    if twitch_video_id:
+        twitch_source = await run_in_threadpool(channels.twitch_selected_source, db, twitch_video_id, str(channel_replay_id))
+        if twitch_source.get('project_id'):
+            return {'project_id': twitch_source['project_id'], 'analysis_run_id': None}
+        # Validate duration metadata before claiming the archive; download runs asynchronously in Studio worker.
+        try:
+            twitch_replay_media.duration_seconds(twitch_source.get('duration'))
+        except ValueError:
+            raise HTTPException(422, 'replay_download_failed') from None
+        db.rollback()  # Release the read transaction before BEGIN IMMEDIATE claim.
     if video:
         # 1.5.7: block before creating a project when local Whisper is required but missing.
         try:
@@ -296,18 +366,39 @@ async def import_visual(
                 'end': float(source_window_end),
             }
         prefs = ImportOptions(
-            goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+            goal=goal, replay_source='twitch_archive' if twitch_video_id else replay_source, language=language, aspect=aspect, duration=duration, instruction=instruction,
             platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
             recommended_template=recommended_template,
             branding={'outro_enabled': brand_outro_enabled},
             source_window=source_window,
         )
-        project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
+        from backend.services.studio.models import import_project_data
+        data = import_project_data(name.strip() or '智能剪辑', prefs, url=url, browser=browser)
+        if prefs.replay_source:
+            data.settings['import_source'] = prefs.replay_source
+        if twitch_video_id and twitch_source:
+            data.settings['twitch_replay'] = {
+                'video_id': twitch_video_id,
+                'archive_id': str(channel_replay_id),
+                'duration': twitch_source.get('duration'),
+            }
+        if channel_replay_id:
+            from backend.services.replay_channels import claim
+            project, created = claim(db, replay_source.removesuffix('_file'), str(channel_replay_id), data)
+            if not created:
+                if staged is not None:
+                    staged.unlink(missing_ok=True)
+                if video:
+                    await video.close()
+                return {'project_id': str(project.id), 'analysis_run_id': None}
+        else:
+            project = ProjectService(db).create_project(data)
     except BaseException:
         if staged is not None:
             staged.unlink(missing_ok=True)
         raise
     pid = str(project.id)
+    source_saved = False
     try:
         # mkdir inside the try: a failure here still runs the staging cleanup below.
         raw = store.directory(pid) / 'raw'
@@ -315,7 +406,7 @@ async def import_visual(
         if subtitle_bytes is not None:
             (raw / 'input.srt').write_bytes(subtitle_bytes)
             if not video:
-                # Upload carried an SRT but no local video yet (URL path); still stamp origin.
+                # Upload carried an SRT but no local video yet (URL / async Twitch path); still stamp origin.
                 from backend.services.studio import pipeline_resume
                 pipeline_resume.record_srt_origin(store.directory(pid) / 'metadata', 'attached')
         if video:
@@ -330,12 +421,16 @@ async def import_visual(
                         target.write(chunk)
             project.video_path = str(path)
             db.commit()
+            source_saved = True
             if subtitle_bytes is not None:
                 # P1 #6: user-attached SRT must survive 「从头重做」.
                 from backend.services.studio import pipeline_resume
                 pipeline_resume.record_srt_origin(
                     store.directory(pid) / 'metadata', 'attached', video=path,
                 )
+        elif twitch_video_id:
+            db.commit()
+            source_saved = True
         snapshot = None
         if features and len(features) <= 4000:
             try:
@@ -346,8 +441,14 @@ async def import_visual(
                 snapshot = parsed
         run_id = call(jobs.inspect_project, pid, prefs, url, browser, features=snapshot)
     except Exception:
-        project.status = 'failed'
-        db.commit()
+        if channel_replay_id and not source_saved:
+            # The archive remains selectable if staging fails before a usable source exists.
+            db.rollback()
+            import shutil
+            shutil.rmtree(store.directory(pid), ignore_errors=True)
+        else:
+            project.status = 'failed'
+            db.commit()
         raise
     finally:
         if staged is not None:
@@ -404,7 +505,9 @@ def workspace(project_id: str, db: Session = Depends(get_db)):
     from backend.services.studio import pipeline_resume, publishing
     data = attempts.public_workspace(call(store.recover, project_id))
     resume_point = pipeline_resume.resume_point_for_project(project_id)
-    return {**data, 'resume_point': resume_point, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [publishing.public_job(project_id, j) for j in data['jobs']]}
+    config = project.processing_config or {}
+    origin = 'obs' if config.get('import_source') == 'obs' else 'sample' if config.get('example') else 'user'
+    return {**data, 'resume_point': resume_point, 'material_origin': origin, 'import_source': config.get('import_source'), 'example_version': config.get('example_version'), 'jobs': [publishing.public_job(project_id, j) for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
 def source_preview_status(project_id: str, db: Session = Depends(get_db)):

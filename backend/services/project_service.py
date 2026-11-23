@@ -52,6 +52,12 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
     
     def create_project(self, project_data: ProjectCreate) -> Project:
         """Create a new project with business logic."""
+        project = self.create(**self.project_fields(project_data))
+        _remember_input_origin(project)
+        return project
+
+    @staticmethod
+    def project_fields(project_data: ProjectCreate) -> dict:
         # Convert Pydantic schema to dict for repository
         project_dict = project_data.model_dump()
         
@@ -66,9 +72,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             "project_metadata": _input_metadata(project_dict.get("source_url"))
         }
         
-        project = self.create(**orm_data)
-        _remember_input_origin(project)
-        return project
+        return orm_data
     
     def update_project(self, project_id: str, project_data: ProjectUpdate) -> Optional[Project]:
         """Update a project with business logic."""
@@ -382,6 +386,14 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
                     self.db.query(Collection).filter(Collection.project_id == project_id).delete()
                     logger.info(f"删除项目 {project_id} 的 {collection_count} 个合集")
                 
+                # Erase cached transcripts/model replies together with the project.
+                from backend.services.obs.billing import is_obs
+                if is_obs(project_id) or (project.processing_config or {}).get('import_source') == 'obs':
+                    from backend.services.obs.models import ObsCall, ObsCapture, ObsReplayFile
+                    capture_ids = self.db.query(ObsCapture.id).filter_by(project_id=project_id)
+                    self.db.query(ObsReplayFile).filter(ObsReplayFile.capture_id.in_(capture_ids)).delete(synchronize_session=False)
+                    self.db.query(ObsCall).filter_by(project_id=project_id).delete()
+                    self.db.query(ObsCapture).filter_by(project_id=project_id).update({'path': '', 'status': 'deleted'})
                 # 4. 删除项目记录
                 self.db.query(Project).filter(Project.id == project_id).delete()
                 logger.info(f"删除项目 {project_id} 记录")

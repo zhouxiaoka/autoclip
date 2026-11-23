@@ -116,7 +116,7 @@ test('#481 import expands the browser picker and keeps the chosen browser on sub
         Dialog: ({ open, children }) => open ? h('div', { role: 'dialog' }, children) : null,
         StatusDot: () => null,
       },
-      './PlatformPicker': { default: () => null },
+      './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: () => null },
       './api': {
         studioApi: { inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true }),
         readiness: async () => ready, readinessProbe: async () => ready, import: async body => { calls.push(body); return { project_id: 'p' } } },
@@ -193,7 +193,7 @@ test('#481 a normal import keeps the browser picker inside the closed preference
         Dialog: ({ open, children }) => open ? h('div', { role: 'dialog' }, children) : null,
         StatusDot: () => null,
       },
-      './PlatformPicker': { default: () => null },
+      './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: () => null },
       './api': { studioApi: { inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true, has_audio: true }), readiness: async () => ready, readinessProbe: async () => ready, import: async () => ({ project_id: 'p' }) }, errorText: String, errorCode: () => undefined },
       '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackImportPreviewShown() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
       '../../analytics/workflow': { telemetryId: () => 't-cookie' },

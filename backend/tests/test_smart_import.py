@@ -361,6 +361,9 @@ def test_one_import_endpoint_routes_and_keeps_srt(client,source,monkeypatch,goal
     def provider(content, **kwargs):
         if 'content_type' in content[0]['text']: return recommendation(goal)
         if 'hooks' in content[0]['text']: return {'hooks':[{'title':'Variant','hook':'Try this!'}]}
+        if '"reviews"' in content[0]['text']:
+            return {'reviews':[{'id':'e1','outcome':'play','subject':'Piece lands','detail':'',
+                                'proof':'Piece on board','frame':2}]}
         return {'events':[{'id':'e1','label':'Visible event','start':0,'end':1,'evidence':'Fixture'}]}
     monkeypatch.setattr(intelligence,'vision_call',provider)
     content_calls=[]
@@ -388,6 +391,7 @@ def test_one_import_endpoint_routes_and_keeps_srt(client,source,monkeypatch,goal
     assert bool(content_calls)==(goal=='content')
     assert len(state['drafts'])==(0 if goal=='content' else 1)
     if goal!='content': assert state['drafts'][0]['subtitles'] is True
+    if goal=='highlight': assert state['drafts'][0]['title']=='Piece lands'
     from backend.core.database import SessionLocal
     from backend.models import Project
     with SessionLocal() as db:
@@ -490,7 +494,7 @@ def test_multiple_choices_share_visual_analysis_and_require_confirmation(client,
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     calls=[]
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:{**recommendation(),'suggested_goals':['highlight','promo']})
-    monkeypatch.setattr(jobs,'analyze',lambda *a: calls.append('analysis') or ([Scene(id='e1',start=0,end=1)],{}))
+    monkeypatch.setattr(jobs,'analyze',lambda *a, gameplay: calls.append('game-analysis' if gameplay else 'analysis') or ([Scene(id='e1',start=0,end=1)],{}))
     def drafts(events,prefs,*args,**kwargs):
         calls.append(prefs.goal)
         from backend.services.studio.models import Draft
@@ -505,7 +509,7 @@ def test_multiple_choices_share_visual_analysis_and_require_confirmation(client,
     assert client.post('/studio/'+pid+'/start',json={**body,'plan_id':'stale'}).status_code==409
     assert calls==[]
     assert client.post('/studio/'+pid+'/start',json=body).status_code==200
-    assert calls==['analysis','highlight','promo']
+    assert calls==['game-analysis','highlight','promo']
     assert client.post('/studio/'+pid+'/start',json=body).status_code==409
     assert len(client.get('/studio/'+pid).json()['drafts'])==2
 
@@ -516,7 +520,7 @@ def test_unchecked_goal_is_never_produced(client,source,monkeypatch):
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     calls=[]
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:{**recommendation(),'suggested_goals':['highlight','promo']})
-    monkeypatch.setattr(jobs,'analyze',lambda *a: ([Scene(id='e1',start=0,end=1)],{}))
+    monkeypatch.setattr(jobs,'analyze',lambda *a, gameplay: ([Scene(id='e1',start=0,end=1)],{}))
     monkeypatch.setattr(jobs,'make_drafts',lambda events,prefs,*args,**kwargs:calls.append(prefs.goal) or [])
     response=client.post('/studio/import',files={'video':('input.mp4',source.read_bytes(),'video/mp4')})
     pid=response.json()['project_id'];state=client.get('/studio/'+pid).json()
@@ -599,7 +603,8 @@ def test_shared_visual_failure_is_not_retried_for_second_goal(client,source,monk
     monkeypatch.setattr(jobs, 'capture_studio_exception', lambda error, phase, **kwargs: reports.append((error, phase)))
     failure=intelligence.VisionRequestError('rate_limited','请稍后重试',elapsed_seconds=2,http_status=429)
     failure.phase='scan'
-    def analyze(*args):
+    def analyze(*args, gameplay):
+        assert gameplay
         calls.append('scan')
         raise failure
     monkeypatch.setattr(jobs,'analyze',analyze)
@@ -629,7 +634,7 @@ def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,s
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:recommendation())
     calls=[]
-    monkeypatch.setattr(jobs,'analyze',lambda *a:calls.append('scan') or ([Scene(id='e1',start=0,end=1)],{'duration':1}))
+    monkeypatch.setattr(jobs,'analyze',lambda *a, gameplay:calls.append('game-scan' if gameplay else 'scan') or ([Scene(id='e1',start=0,end=1)],{'duration':1}))
     def drafts(events,prefs,*a,**kw):
         calls.append(prefs.goal)
         if prefs.goal=='promo':
@@ -642,7 +647,7 @@ def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,s
     pid=response.json()['project_id'];plan=client.get('/studio/'+pid).json()['plan']
     assert client.post('/studio/'+pid+'/start',json={'plan_id':plan['id'],'goals':['promo','highlight']}).status_code==200
     result=client.get('/studio/'+pid).json()
-    assert calls==['scan','promo','highlight']
+    assert calls==['game-scan','promo','highlight']
     assert result['analysis']['outcome']=='partial'
     assert result['analysis']['succeeded_goals']==['highlight']
     assert result['analysis']['failed_goals']==['promo']
@@ -1057,6 +1062,25 @@ def test_rejected_reservation_survives_a_denied_exact_rollback(client, source, m
         assert store.read(pid)['analysis']['status'] == 'awaiting_confirmation'
     finally:
         blocked['active'] = False
+
+
+@pytest.mark.parametrize('replay_source', ['youtube_file', 'twitch_file', 'kick_file', 'discord_file', 'other_file'])
+def test_exported_replay_keeps_source_and_existing_game_project(client, source, monkeypatch, replay_source):
+    from backend.core import database
+    from backend.models.project import Project
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    response = client.post('/studio/import', data={'replay_source': replay_source, 'platforms': 'original'},
+                           files={'video': ('replay.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200, response.text
+    pid = response.json()['project_id']
+    state = client.get('/studio/' + pid).json()
+    assert state['plan']['content_type'] == 'gameplay'
+    assert state['plan']['preferences']['goal'] == 'highlight'
+    with database.session_scope() as db:
+        assert db.get(Project, pid).processing_config['import_source'] == replay_source
+    invalid = client.post('/studio/import', data={'replay_source': replay_source, 'url': 'https://youtu.be/example'})
+    assert invalid.status_code == 422
 
 
 def test_editing_plan_preserves_template_unless_the_field_is_supplied(client, monkeypatch):

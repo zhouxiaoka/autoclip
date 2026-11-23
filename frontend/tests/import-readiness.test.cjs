@@ -88,6 +88,7 @@ function render(options = {}) {
     [options.source || 'link', () => {}],
     [options.url === undefined ? 'https://youtube.com/watch?v=video' : options.url, () => {}],
     [null, () => {}],
+    [options.remote, () => {}],
     [options.subtitle || null, () => {}],
     [{ goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' }, () => {}],
     ['', () => {}],
@@ -115,7 +116,7 @@ function render(options = {}) {
     'react-router-dom': { useNavigate: () => destination => navigations.push(destination) },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'fragment' },
     '../../ui': { Btn: 'button', Segmented: 'segmented', Dialog: 'dialog', StatusDot: 'status' },
-    './PlatformPicker': { default: 'platform-picker' },
+    './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: 'platform-picker' },
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './api': {
       studioApi: {
@@ -384,6 +385,31 @@ test('R22 #212: a whisper failure offers transcription settings (install entry),
   for (const code of ['source_unreadable', 'source_too_short', 'source_no_audio', 'source_not_found']) {
     assert.deepEqual({ ...readiness.failureSettings(code) }, { label: '换一个视频', to: '/' })
   }
+})
+
+test('a selected Twitch archive submits its identifiers without a file picker or playback URL', async () => {
+  const view = render({ source: 'file', url: '', remote: { kind: 'twitch', id: 'selected-archive', title: 'Final round', direct_video_id: '123' } })
+  await button(view.tree, 'replays.generate').props.onClick()
+  assert.equal(view.calls.length, 1)
+  const [form] = view.calls
+  assert.equal(form.get('twitch_video_id'), '123')
+  assert.equal(form.get('channel_replay_id'), 'selected-archive')
+  assert.equal(form.get('auto_start'), 'true')
+  assert.equal(form.get('video'), undefined)
+  assert.equal(form.get('url'), undefined)
+})
+
+test('a selected OBS replay submits obs_capture_id with the home-selected platforms', async () => {
+  const view = render({ source: 'file', url: '', remote: { kind: 'obs', id: 'obs-cap-1', title: 'OBS · Stream', seconds: 300 } })
+  await button(view.tree, 'replays.generate').props.onClick()
+  assert.equal(view.calls.length, 1)
+  const [form] = view.calls
+  assert.equal(form.get('obs_capture_id'), 'obs-cap-1')
+  assert.equal(form.get('replay_source'), 'obs')
+  assert.equal(form.get('name'), 'OBS · Stream')
+  assert.equal(form.get('auto_start'), 'true')
+  assert.equal(form.get('video'), undefined)
+  assert.equal(form.get('url'), undefined)
 })
 
 test('a matching platform subtitle probe starts import without local ASR under bundled defaults', async () => {
