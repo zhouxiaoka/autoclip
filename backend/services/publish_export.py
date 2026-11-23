@@ -403,8 +403,9 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
 
 def _probe(path: Path) -> Dict[str, Any]:
     try:
-        cmd = [get_ffprobe_path(), "-v", "error", "-select_streams", "v:0",
-               "-show_entries", "stream=width,height,avg_frame_rate,codec_name:format=duration", "-of", "json", str(path)]
+        cmd = [get_ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+               "stream=width,height,avg_frame_rate,codec_name:stream_side_data=rotation:format=duration",
+               "-of", "json", str(path)]
         raw = subprocess.check_output(cmd, text=True, encoding="utf-8", errors="ignore", timeout=20)
         data = json.loads(raw)
         stream = (data.get("streams") or [{}])[0]
@@ -413,6 +414,7 @@ def _probe(path: Path) -> Dict[str, Any]:
         return {
             "width": stream.get("width"),
             "height": stream.get("height"),
+            "rotation": next((side["rotation"] for side in stream.get("side_data_list", []) if "rotation" in side), 0),
             "fps": round(fps, 3), "video_codec": stream.get("codec_name"),
             "duration": round(float((data.get("format") or {}).get("duration") or 0), 2),
         }
