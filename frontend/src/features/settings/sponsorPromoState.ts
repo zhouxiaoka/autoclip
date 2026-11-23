@@ -31,6 +31,8 @@ export const TRUSTED_REGISTER_HOSTS: Record<string, string> = {
   api88: '88api.ai',
   infistar: 'www.infistar.cc',
   cometapi: 'www.cometapi.com',
+  novita: 'novita.ai',
+  poyo: 'poyo.ai',
 }
 const TRUSTED_PROMO_IDS = new Set(Object.keys(TRUSTED_REGISTER_HOSTS))
 /** Chooser contents before any signed view is accepted. */

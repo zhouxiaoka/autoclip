@@ -331,6 +331,8 @@ class ApiKeys(BaseModel):
     api88: str = Field(default="", description="88API API密钥")
     apimart: str = Field(default="", description="APIMart API密钥")
     cometapi: str = Field(default="", description="CometAPI API密钥")
+    novita: str = Field(default="", description="Novita AI API密钥")
+    poyo: str = Field(default="", description="PoYo AI API密钥")
     seed: str = Field(default="", description="火山方舟 Seed / 豆包 API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
@@ -588,6 +590,8 @@ async def get_settings():
                     api88="",
                     apimart="",
                     cometapi="",
+                    novita="",
+                    poyo="",
                     seed="",
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
@@ -1026,6 +1030,8 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
         "api88": keys.api88,
         "apimart": keys.apimart,
         "cometapi": keys.cometapi,
+        "novita": keys.novita,
+        "poyo": keys.poyo,
         "seed": keys.seed,
     }.get((provider or "").strip().lower(), "") or ""
 

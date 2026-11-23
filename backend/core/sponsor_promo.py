@@ -32,7 +32,7 @@ SPONSOR_KEYS = frozenset({
 BUNDLED_CHOICES = ("apimart", "other")
 BUNDLED_DEFAULT = "apimart"
 # Status notices may name a built-in provider that is no longer promoted.
-NOTICE_PROVIDER_IDS = frozenset({"api88", "infistar", "apimart", "cometapi"})
+NOTICE_PROVIDER_IDS = frozenset({"api88", "infistar", "apimart", "cometapi", "novita", "poyo"})
 _MAX_NOTICE = 240
 _CLOCK_SKEW = timedelta(minutes=5)
 
@@ -80,6 +80,8 @@ _TRUSTED_REGISTER_HOSTS = {
     "api88": "88api.ai",
     "infistar": "www.infistar.cc",
     "cometapi": "www.cometapi.com",
+    "novita": "novita.ai",
+    "poyo": "poyo.ai",
 }
 
 
