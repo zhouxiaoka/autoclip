@@ -308,3 +308,35 @@ test('endpoint drafts stay out of every purpose and default until address and va
     }
   }
 })
+
+test('unsavedConnectionIds flags added and modified connections until saved', () => {
+  const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': { t: text => text } })
+  const saved = {
+    ...blank(),
+    saved: true,
+    connections: [{
+      id: 'gw-1', name: 'Gateway', provider: 'compatible',
+      base_url: 'https://gateway.example/v1', api_key: '', has_key: true,
+      image_api: 'auto', image_base_url: '', base_url_source: 'user',
+    }],
+  }
+  assert.equal(view.unsavedConnectionIds(saved, saved).size, 0)
+  assert.equal(view.unsavedConnectionIds(null, saved).size, 0)
+
+  const edited = logic.editConnection(saved, 'gw-1', { base_url: 'https://gateway.example/final/v1' })
+  assert.deepEqual([...view.unsavedConnectionIds(edited, saved)], ['gw-1'])
+
+  const withAdded = {
+    ...saved,
+    connections: [
+      ...saved.connections,
+      {
+        id: 'gw-2', name: 'New Gateway', provider: 'compatible',
+        base_url: 'https://new.example/v1', api_key: '', has_key: false,
+        image_api: 'auto', image_base_url: '', base_url_source: 'user',
+      },
+    ],
+  }
+  assert.deepEqual([...view.unsavedConnectionIds(withAdded, saved)], ['gw-2'])
+  assert.equal(view.unsavedConnectionIds(withAdded, withAdded).size, 0)
+})

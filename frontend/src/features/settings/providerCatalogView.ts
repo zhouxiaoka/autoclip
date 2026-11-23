@@ -246,3 +246,17 @@ export function isUnmatchedCompatible(connection: Connection): boolean {
 export function unmatchedCompatibleConnections(settings: ModelSettings): Connection[] {
   return settings.connections.filter(isUnmatchedCompatible)
 }
+
+export function unsavedConnectionIds(
+  current: ModelSettings | null | undefined,
+  saved: ModelSettings | null | undefined,
+): Set<string> {
+  const ids = new Set<string>()
+  if (!current) return ids
+  const savedById = new Map((saved?.connections || []).map(connection => [connection.id, connection]))
+  for (const connection of current.connections) {
+    const prev = savedById.get(connection.id)
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(connection)) ids.add(connection.id)
+  }
+  return ids
+}
