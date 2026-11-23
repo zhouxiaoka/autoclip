@@ -1,0 +1,29 @@
+{
+  "tag": "v1.5.9",
+  "commit": "b72ee39f10e14a48c8ddabe2d1d27b28237c6e9b",
+  "build_run_id": 45082453303,
+  "internal_acceptance_run_id": 45048413475,
+  "regressions": [
+    {
+      "id": "rc159-pr653-card-stability-and-reveal",
+      "verified_on": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    {
+      "id": "rc159-pr654-remake-content-draft-and-cover-optout",
+      "verified_on": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    {
+      "id": "rc159-pr656-ai-cover-confirmed-title-and-once-optin",
+      "verified_on": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    }
+  ]
+}
