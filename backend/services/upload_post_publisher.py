@@ -49,6 +49,7 @@ PLATFORMS: list[str] = [
 ]
 _RESERVED_FORM_FIELDS = {"user", "platform[]", "platform", "video", "async_upload", "request_id", "external_id"}
 FINAL_STATUSES = {"completed", "failed", "not_found"}
+STATUS_REQUEST_TIMEOUT = 30.0
 _ACCOUNT_NAME_FIELDS = ("display_name", "username", "handle")
 
 
@@ -512,14 +513,14 @@ def _parse_results(rows: Any) -> list[dict[str, Any]]:
 
 def get_status(request_id: str | None = None, job_id: str | None = None,
                config: UploadPostConfig | None = None, session: requests.Session | None = None,
-               project_id: str | None = None) -> dict[str, Any]:
+               project_id: str | None = None, *, timeout_sec: float = STATUS_REQUEST_TIMEOUT) -> dict[str, Any]:
     """GET /api/uploadposts/status。终态是 completed / failed / not_found。"""
     if not request_id and not job_id:
         raise ValueError("request_id 或 job_id 必填一个")
     cfg = _require(config)
     params = {"request_id": request_id} if request_id else {"job_id": job_id}
     resp = (session or requests.Session()).get(
-        f"{cfg.base_url}/api/uploadposts/status", params=params, headers=_headers(cfg), timeout=30,
+        f"{cfg.base_url}/api/uploadposts/status", params=params, headers=_headers(cfg), timeout=timeout_sec,
     )
     if resp.status_code == 404:
         return {
@@ -558,14 +559,25 @@ def wait_for_status(request_id: str, timeout_sec: float = 600, poll_sec: float =
                     on_update=None) -> dict[str, Any]:
     """文档建议 processing 阶段大约 10 秒查一次，终态就停。"""
     deadline = time.monotonic() + timeout_sec
-    last: dict[str, Any] = {}
+    last = None
     while True:
-        last = get_status(request_id, config=config, project_id=project_id)
+        remaining = deadline - time.monotonic()
+        if last is not None and remaining <= 0:
+            return last
+        # A zero wait budget still allows a single status lookup.
+        request_timeout = min(STATUS_REQUEST_TIMEOUT, remaining) if remaining > 0 else STATUS_REQUEST_TIMEOUT
+        try:
+            last = get_status(request_id, config=config, project_id=project_id, timeout_sec=request_timeout)
+        except requests.Timeout as error:
+            if last is not None and request_timeout < STATUS_REQUEST_TIMEOUT:
+                return last
+            raise UploadPostError("查询发布状态超时") from error
         if on_update:
             on_update(last)
-        if last.get("final") or time.monotonic() >= deadline:
+        remaining = deadline - time.monotonic()
+        if last.get("final") or remaining <= 0:
             return last
-        time.sleep(poll_sec)
+        time.sleep(min(poll_sec, remaining))
 
 
 _jobs: dict[str, dict[str, Any]] = {}
