@@ -50,6 +50,25 @@ def test_display_text_drops_speaker_marks_and_standalone_fillers():
     assert '>>' not in cl.display_text('>> hello')
 
 
+def test_arabic_vowel_marks_do_not_add_to_caption_width():
+    assert cl.width('مَرْحَبًا') == pytest.approx(cl.width('مرحبا'))
+    assert cl.width('\u06e5') > 0  # small waw is a letter, not a combining mark
+
+
+def test_arabic_caption_punctuation_and_roles():
+    assert cl.display_text('مرحبًا ، كيف حالك ؟') == 'مرحبًا، كيف حالك؟'
+    assert cl.strip_speaker_prefix('المحاور: أهلاً بكم') == 'أهلاً بكم'
+
+
+def test_arabic_caption_keeps_closing_punctuation_with_its_clause():
+    text = 'مرحبًا بكم، نبدأ الآن؛ هل أنتم مستعدون؟'
+    for lines in (cl.lines_for(text, 8), cl.page_lines(text, 8)):
+        assert len(lines) > 1
+        assert ''.join(lines).replace(' ', '') == text.replace(' ', '')
+        assert all(line[:1] not in '،؛؟' for line in lines)
+        assert all(cl.width(line) <= 8 + 1e-6 for line in lines)
+
+
 def test_chinese_lines_do_not_open_on_closing_punctuation():
     text = '先说结论，然后再把原因讲完，最后给出一个做法。'
     lines = cl.lines_for(text, 8)
