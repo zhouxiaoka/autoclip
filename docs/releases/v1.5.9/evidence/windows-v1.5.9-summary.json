@@ -1,0 +1,59 @@
+{
+  "tag": "v1.5.9",
+  "platform": "windows-x64",
+  "commit": "b72ee39f10e14a48c8ddabe2d1d27b28237c6e9b",
+  "build_run_id": 45082453303,
+  "package": {
+    "name": "AutoClip.Desktop_1.5.9_x64-setup.exe",
+    "sha256": "1ddf92b6a97e5555099dd1facf94bd256404c02634ed1b21886f6ce6d8b4939c",
+    "bytes": 207854044
+  },
+  "installed_binary_sha256": "a960f463d2a65cfb3f57de2e57dd54af624c93c7c9c4e1d33a278b7c139aafed",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:01:30Z",
+      "summary": "Final tag portable Python booted cleanly against isolated empty AUTOCLIP_APP_DIR; health=200, projects=0, autoclip.db initialized; CI smoke-windows-x64 passed."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:00:30Z",
+      "summary": "Silent /S upgrade of final tag installer exited 0 with binary sha256 changed to a960f463...; existing settings, DB, and projects retained; CI smoke-windows-x64 verified upgrade over v1.5.8."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:01:30Z",
+      "summary": "Existing DashScope roles persisted across upgrade; isolated loopback probe verified 401 invalid_key -> 429 rate_limited -> 200 ok."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:02:40Z",
+      "summary": "Real 45s spoken MP4 + SRT completed in 68s; ffprobe verified 1080x1920 h264+aac 46.89s MP4 (11,668,990 bytes)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:03:55Z",
+      "summary": "Real 45s spoken MP4 without SRT transcribed via DashScope Cloud ASR and rendered 1080x1920 h264+aac 46.89s MP4 (11,776,848 bytes) in 76s."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:04:25Z",
+      "summary": "Primary OutputVariantCard Cover regeneration with allow_reference_once=True on Windows portable Python (no numpy) completed with cover=ai status=completed via qwen-image-2.1-pro."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:01:30Z",
+      "summary": "Isolated loopback probe verified HTTP 401 (invalid_key), HTTP 429 (rate_limited), and HTTP 200 recovery."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:03:55Z",
+      "summary": "Both final tag MP4 outputs verified via bundled ffprobe as 1080x1920 h264+aac 46.89s."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:01:30Z",
+      "summary": "Isolated clean install persisted crash_reports=false and analytics=false cleanly."
+    }
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "tag": "v1.5.9",
+  "commit": "b72ee39f10e14a48c8ddabe2d1d27b28237c6e9b",
+  "release_type": "routine",
+  "build_run_id": 45082453303,
+  "assets": {
+    "AutoClip.Desktop_1.5.9_aarch64.dmg": "28da506858833394404e9e0bf21a503ed8154d10492d6abfe22c92f767d48207",
+    "AutoClip.Desktop_1.5.9_x64-setup.exe": "1ddf92b6a97e5555099dd1facf94bd256404c02634ed1b21886f6ce6d8b4939c",
+    "AutoClip.Desktop_1.5.9_x64-setup.exe.sig": "f4c97a592e902e8214f8c88cb6def4dddb56736182c7ebd10ec8ab5f9cf901a8",
+    "AutoClip.Desktop_1.5.9_aarch64.app.tar.gz": "72c76199f8ff035192225978a0acf3ede981819068e5eb85b172db92b0ef583f",
+    "AutoClip.Desktop_1.5.9_aarch64.app.tar.gz.sig": "fd317f1581d90982357c46d8fcdd023e7dbce78dc7b94d913ea87dd88a03b747",
+    "autoclip-1.5.9-cli-mcp.zip": "6e88bf609dec663f4ee45862d161e0747b6448fdcbf846921ed621fbaa4eb830",
+    "autoclip_mcp-1.5.9-py3-none-any.whl": "12eb65f24160d9a94223ef4772fb183f9f379613e44a8ef8e333ef5dd45a444c",
+    "latest.json": "153826b75d515883ecda6de19d94589826ce23f8bf5dec9d103d775008aac0ad",
+    "python-release-sha256.txt": "4108967e2e67e43e8de2ede38d266585c2060dbb71c9f373c9addfa4495f0cfe",
+    "build-provenance.json": "8e58590c57c2107c689e73f7db1bcf547a21804f8637515f8f9f5088b3a25193"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server 2025 Datacenter x64",
+      "machine": "Cloud x64 VM (2 vCPU / 8 GB RAM, active RDP session 2); not a physical Windows 11 desktop",
+      "runtime": "Packaged portable Python 3.13 + bundled FFmpeg/FFprobe + bundled Playwright Node (yt-dlp EJS); numpy/cv2 optional",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:01:30Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:00:30Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:01:30Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:02:40Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:03:55Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Windows QA cloud VM datacenter IP encounters Bilibili HTTP 412 anti-bot (source_blocked recovery verified live on b72ee39f) and YouTube 504 timeout without international egress; real YouTube link_import passed on final v1.5.9 macOS arm64 DMG and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:04:25Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:01:30Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:03:55Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:01:30Z",
+          "evidence": "evidence/windows-v1.5.9-summary.json"
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS arm64 (Apple Silicon)",
+      "machine": "Apple Silicon Mac; native arm64 final tag DMG bundle; isolated QA app copy and isolated clean-install data dir",
+      "runtime": "Packaged portable Python 3.13 + bundled FFmpeg/FFprobe + VideoToolbox h264_videotoolbox",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-22T23:58:10Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-22T23:56:20Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-22T23:58:10Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-22T23:59:10Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-22T23:59:50Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:00:50Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:01:30Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-22T23:58:10Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-23T00:00:50Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-22T23:58:10Z",
+          "evidence": "evidence/macos-v1.5.9-summary.json"
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "rc159-pr653-card-stability-and-reveal",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-23T00:01:30Z",
+      "evidence": "evidence/regressions-v1.5.9.json"
+    },
+    {
+      "id": "rc159-pr654-remake-content-draft-and-cover-optout",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-23T00:01:30Z",
+      "evidence": "evidence/regressions-v1.5.9.json"
+    },
+    {
+      "id": "rc159-pr656-ai-cover-confirmed-title-and-once-optin",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-23T00:04:25Z",
+      "evidence": "evidence/regressions-v1.5.9.json"
+    }
+  ],
+  "observation": {
+    "status": "waived",
+    "waiver_reason": "Owner explicitly waived the 24-hour Pre-release wait on 2026-11-23 after 19/20 final-package dual-platform cases and Internal Acceptance (45048413475) passed, so new incoming users immediately receive v1.5.9 stability fixes instead of v1.5.8. Post-promotion monitoring via PostHog dashboard 2394984 and Sentry with Promote/Halt rollback readiness."
+  },
+  "blockers": [],
+  "owner_waiver": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-23T00:12:18Z",
+    "reason": "Owner decision on 2026-11-23: final v1.5.9 tag packages passed 19/20 dual-platform cases (10/10 macOS arm64 + 9/10 Windows x64) and Internal Acceptance 45048413475; waive 24h Pre-release observation window and Windows cloud-VM datacenter link_import to ship v1.5.9 stability fixes immediately to incoming users."
+  },
+  "approval": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-23T00:12:23Z"
+  }
+}

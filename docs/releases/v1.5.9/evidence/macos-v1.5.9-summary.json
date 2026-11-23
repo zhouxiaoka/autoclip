@@ -1,0 +1,64 @@
+{
+  "tag": "v1.5.9",
+  "platform": "macos-arm64",
+  "commit": "b72ee39f10e14a48c8ddabe2d1d27b28237c6e9b",
+  "build_run_id": 45082453303,
+  "package": {
+    "name": "AutoClip.Desktop_1.5.9_aarch64.dmg",
+    "sha256": "28da506858833394404e9e0bf21a503ed8154d10492d6abfe22c92f767d48207",
+    "bytes": 424360948
+  },
+  "installed_binary_sha256": "1175abe5ce8d64e3569116c137fe48d4fe378b4c3c8974eb6c833bb3e790f434",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-22T23:58:10Z",
+      "summary": "Final tag DMG portable Python booted cleanly against isolated empty AUTOCLIP_APP_DIR; health=200 version=1.5.9, projects=0, autoclip.db initialized."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-22T23:56:20Z",
+      "summary": "Final tag DMG replaced prior internal build copy (binary sha256 updated to 1175abe5...); existing settings, DB, and projects loaded intact in native desktop window."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-22T23:58:10Z",
+      "summary": "Existing DashScope roles persisted across upgrade; isolated loopback probe verified 401 invalid_key -> 429 rate_limited -> 200 ok."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-22T23:59:10Z",
+      "summary": "Real local 20s MP4 + SRT completed in 36s; rendered 21.82s MP4 (3,779,425 bytes)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-22T23:59:50Z",
+      "summary": "Real local 20s MP4 without SRT transcribed via DashScope Cloud ASR and rendered 21.82s MP4 (3,682,763 bytes) in 36s."
+    },
+    "link_import": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:00:50Z",
+      "summary": "Real public YouTube link (Me at the zoo, 19s) downloaded via bundled yt-dlp, transcribed, and rendered 19.59s MP4 (3,798,974 bytes) in 45s."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:01:30Z",
+      "summary": "Primary OutputVariantCard Cover regeneration with allow_reference_once=True invoked qwen4-max vision + qwen-image-2.1-pro (reference=True) and verified fidelity guard (subject_changed rejected cleanly preserving existing cover); prior attempt on identical commit b72ee39f passed on attempt 1."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-22T23:58:10Z",
+      "summary": "Isolated loopback mock verified HTTP 401 (invalid_key), HTTP 429 (rate_limited), and recovery to HTTP 200 (ok)."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-23T00:00:50Z",
+      "summary": "All three rendered MP4 outputs verified via ffprobe (h264 + aac valid streams and durations)."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-22T23:58:10Z",
+      "summary": "Isolated clean install persisted crash_reports=false and analytics=false cleanly."
+    }
+  }
+}
