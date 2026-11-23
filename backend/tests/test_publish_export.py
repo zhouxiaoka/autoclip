@@ -3,6 +3,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -39,10 +40,14 @@ def test_list_presets_has_vertical_and_horizontal():
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="本机没有 ffmpeg")
-def test_export_original_reencodes_and_is_idempotent(data_dir, tmp_path):
+@pytest.mark.parametrize('temp_name', ['export temp', "Ana's [editing], café"])
+def test_export_original_reencodes_and_is_idempotent(data_dir, tmp_path, monkeypatch, temp_name):
     from backend.core.path_utils import get_project_directory
     from backend.services.publish_export import ExportRequest, export_clip
 
+    temp_root = tmp_path / temp_name
+    temp_root.mkdir()
+    monkeypatch.setattr(tempfile, 'tempdir', str(temp_root))
     pid, cid = "exp1", "1"
     pdir = get_project_directory(pid)
     raw = pdir / "raw"

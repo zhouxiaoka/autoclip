@@ -428,7 +428,7 @@ def scene_video_graph(draft: Draft, scene: Scene, index: int, ass_path: Path, w:
     rows = timeline(draft.scenes)
     total = rows[-1][2] + scene_duration(draft.scenes[-1])
     offset, length = rows[index][2], scene_duration(scene)
-    ass = f"ass='{_escape_filter_path(ass_path)}':fontsdir='{_escape_filter_path(FONT_DIR)}'"
+    ass = f"ass={_escape_filter_path(ass_path)}:fontsdir={_escape_filter_path(FONT_DIR)}"
     look = colours(draft.packaging.palette if draft.packaging else None)
     BG, ACCENT_HEX = look['bg'], look['accent_hex']  # noqa: N806
     if draft.layout == 'window':

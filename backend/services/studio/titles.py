@@ -78,6 +78,6 @@ def template_filters(hook, style, w, h, folder, fallback, last, duration):
         color = '0xffec47' if style == 'impact' else 'white'
         stroke = max(1, round(size * .055)) if style == 'impact' else 0
         shadow = max(1, round(size * .045)) if style == 'impact' else 0
-        parts.append(f"[{last}]drawtext=fontfile='{_escape_filter_path(font)}':textfile='{_escape_filter_path(path)}':expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y+index*gap}:borderw={stroke}:bordercolor=0x10141c:shadowy={shadow}:shadowcolor=0x10141c:enable='{enable}'[{output}]")
+        parts.append(f"[{last}]drawtext=fontfile={_escape_filter_path(font)}:textfile={_escape_filter_path(path)}:expansion=none:fontsize={size}:fontcolor={color}:x={x}:y={y+index*gap}:borderw={stroke}:bordercolor=0x10141c:shadowy={shadow}:shadowcolor=0x10141c:enable='{enable}'[{output}]")
         last = output
     return parts, last
