@@ -108,3 +108,37 @@ def test_studio_1080p60_reencodes_final_file_without_double_text(data_dir, tmp_p
     output=export.export_clip(export.ExportRequest('spec','studio-1','1080p60'))
     assert (output['width'],output['height'],output['fps']) == (1920,1080,60)
     assert '不重复烧录' in output['warnings'][0]
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="本机没有 ffmpeg")
+def test_export_finalizes_atomically_on_project_volume(data_dir, tmp_path, monkeypatch):
+    import errno
+
+    from backend.services import output_branding
+    from backend.services import publish_export as export
+
+    video = tmp_path / "source.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=320x180:duration=1", str(video)],
+        check=True,
+    )
+    monkeypatch.setattr(export, "find_source_video", lambda _: video)
+    monkeypatch.setattr(export, "load_clip_meta", lambda *_: {
+        "id": "1", "start_time": "00:00:00,000", "end_time": "00:00:01,000",
+    })
+    replace = output_branding.os.replace
+
+    def replace_on_project_volume(source, destination):
+        source, destination = Path(source), Path(destination)
+        if source.name == "content.mp4" and not source.is_relative_to(destination.parent):
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        return replace(source, destination)
+
+    monkeypatch.setattr(output_branding.os, "replace", replace_on_project_volume)
+    request = export.ExportRequest("external-volume", "1", preset="original", subtitles=False, title_card=False)
+    result = export.export_clip(request)
+    output = Path(result["path"])
+
+    assert result["ok"] and output.is_file() and output.stat().st_size > 0
+    assert not list(output.parent.glob(".ac-export-*"))
+    assert export.export_clip(request)["cached"]
