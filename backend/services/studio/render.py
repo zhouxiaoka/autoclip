@@ -70,7 +70,7 @@ def _parse_translated_cues(translated, count):
     if not isinstance(translated, dict):
         return None, {}, 0
     title = translated.get('title')
-    title = title if isinstance(title, str) and len(title) <= 500 else None
+    title = title if isinstance(title, str) and title.strip() and len(title) <= 500 else None
     raw = translated.get('cues')
     if not isinstance(raw, list):
         raw = translated.get('subtitles')
@@ -89,7 +89,7 @@ def _parse_translated_cues(translated, count):
         if not isinstance(text, str):
             continue
         returned += 1
-        if 1 <= number <= count and number not in aligned:
+        if text.strip() and 1 <= number <= count and number not in aligned:
             aligned[number] = text
     return title, aligned, returned
 
