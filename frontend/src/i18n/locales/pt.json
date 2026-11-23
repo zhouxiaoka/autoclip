@@ -2309,5 +2309,7 @@
   "模型上下文长度不足以处理试跑样本，请改用更大上下文的型号或调小分块大小。": "A janela de contexto do modelo é insuficiente para a amostra de teste. Use um modelo com contexto maior ou reduza o tamanho dos blocos.",
   "试跑请求被服务商拒绝（HTTP {{status}}），请检查模型权限、额度或接口兼容性。": "O provedor recusou a solicitação de teste (HTTP {{status}}). Verifique permissão do modelo, cota ou compatibilidade do endpoint.",
   "试跑请求失败，请检查模型权限、额度或接口兼容性。": "A solicitação de teste falhou. Verifique permissão do modelo, cota ou compatibilidade do endpoint.",
-  "模型已回复，但未按要求输出有效 JSON，建议换指令遵循更稳定的型号。": "O modelo respondeu, mas não retornou um JSON válido conforme solicitado. Tente um modelo com melhor aderência a instruções."
+  "模型已回复，但未按要求输出有效 JSON，建议换指令遵循更稳定的型号。": "O modelo respondeu, mas não retornou um JSON válido conforme solicitado. Tente um modelo com melhor aderência a instruções.",
+  "CometAPI 聚合网关。一个 Key 调用多款主流模型，接口地址已预设。": "Gateway CometAPI. Uma chave para os principais modelos, com URL base predefinida.",
+  "CometAPI": "CometAPI"
 }

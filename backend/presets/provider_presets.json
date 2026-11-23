@@ -10,6 +10,9 @@
     "api.88api.ai": "api88",
     "apimart.ai": "apimart",
     "api.apimart.ai": "apimart",
+    "cometapi.com": "cometapi",
+    "api.cometapi.com": "cometapi",
+    "www.cometapi.com": "cometapi",
     "deepseek-ai": "deepseek",
     "moonshot": "kimi",
     "moonshotai-cn": "kimi",
@@ -196,6 +199,50 @@
       },
       "auth": "api_key",
       "billing_probe": "new_api"
+    },
+    "cometapi": {
+      "display_name": "CometAPI",
+      "ui_name": "CometAPI",
+      "short_name": "CometAPI",
+      "catalog_label": "CometAPI",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.cometapi.com/v1",
+      "accepted_hosts": [
+        "api.cometapi.com"
+      ],
+      "capabilities": [
+        "language",
+        "image",
+        "video"
+      ],
+      "docs_url": "https://api.cometapi.com/",
+      "referral": "https://www.cometapi.com/?ref=kris",
+      "locked": true,
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "cometapi_api_key",
+      "placeholder": "sk-…",
+      "hint": "CometAPI 聚合网关。一个 Key 调用多款主流模型，接口地址已预设。",
+      "cloud_hint": "CometAPI 聚合网关。一个 Key 调用多款主流模型，接口地址已预设。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "deepseek-chat",
+          "gpt-4o-mini",
+          "gemini-2.5-flash"
+        ],
+        "vision": [
+          "gpt-4o-mini",
+          "gemini-2.5-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
     },
     "deepseek": {
       "display_name": "DeepSeek",
@@ -1224,6 +1271,7 @@
       "bailian.console.aliyun.com",
       "chat.deepseek.com",
       "chatgpt.com",
+      "cometapi.com",
       "console.cloud.google.com",
       "console.volcengine.com",
       "console.x.ai",
@@ -1237,6 +1285,7 @@
       "www.88api.ai",
       "www.aliyun.com",
       "www.apimart.ai",
+      "www.cometapi.com",
       "www.deepseek.com",
       "www.infistar.ai",
       "www.infistar.cc",

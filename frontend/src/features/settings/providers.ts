@@ -3,10 +3,10 @@ import { compareRecommended, pickerBucket, qualityFor, type LatencyTier, type Su
 import { getCatalog, getProvider } from './providerPresets'
 import { isTrustedSponsorId, promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
 
-export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
+export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'cometapi' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
 type CloudPreset = { baseUrl: string; defaultModel: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
-export type SponsorId = 'infistar' | 'api88' | 'apimart'
+export type SponsorId = 'infistar' | 'api88' | 'apimart' | 'cometapi'
 type Sponsor = { id: SponsorId; registerUrl: string; guideUrl: string; offer: string; description: string; topupUrl?: string }
 type ProviderGroup = 'sponsor' | 'cloud' | 'compatible' | 'local'
 const PROVIDER_GROUPS: Array<{ key: ProviderGroup; label: () => string }> = [
@@ -29,7 +29,7 @@ function measuredFields(id: string): { success_tier?: SuccessTier; latency_tier?
 }
 
 const UI_KEYS: ProviderKey[] = [
-  'dashscope', 'openai', 'compatible', 'api88', 'infistar', 'apimart',
+  'dashscope', 'openai', 'compatible', 'api88', 'infistar', 'apimart', 'cometapi',
   'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok',
   'ollama', 'lmstudio',
 ]

@@ -296,7 +296,7 @@ def list_providers() -> Dict[str, Any]:
 
     return {
         "current": get_llm_manager().get_current_provider_info(),
-        "cloud": ["dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart"],
+        "cloud": ["dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88", "apimart", "cometapi"],
         "local_presets": presets_as_dicts(),
     }
 

@@ -50,4 +50,20 @@ test('Bailian shows the author referral beside Get API key, and the console link
   assert.ok(keyLink)
   keyLink.props.onClick({ preventDefault() {} })
   assert.equal(links.at(-1), 'https://bailian.console.aliyun.com/')
+
+  const comet = providers.PROVIDERS.cometapi
+  assert.equal(comet.referralUrl, 'https://www.cometapi.com/?ref=kris')
+  assert.equal(comet.cloud.baseUrl, 'https://api.cometapi.com/v1')
+  assert.equal(comet.sponsor, undefined)
+  const cometNodes = flatten(Fields({
+    connection: { provider: 'cometapi', api_key: '', base_url: 'https://api.cometapi.com/v1' },
+    placement: 'settings_model',
+    onChoose() {},
+    onEdit() {},
+  }))
+  const cometRef = cometNodes.find(node => node?.props?.['data-author-referral'] === '1')
+  assert.equal(cometRef.props.href, 'https://www.cometapi.com/?ref=kris')
+  cometRef.props.onClick({ preventDefault() {} })
+  assert.equal(links.at(-1), 'https://www.cometapi.com/?ref=kris')
+  assert.deepEqual(tracked.at(-1), { sponsor: 'cometapi', target: 'referral', placement: 'settings_model' })
 })
