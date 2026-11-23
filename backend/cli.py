@@ -451,7 +451,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
     if args.status:
         try:
-            st = up.wait_for_status(args.status, config=cfg, project_id=args.project_id,
+            st = up.wait_for_status(args.status, timeout_sec=args.timeout, config=cfg, project_id=args.project_id,
                                     on_update=None if args.json else _print_publish_status) if args.wait \
                 else up.get_status(args.status, config=cfg, project_id=args.project_id)
         except up.UploadPostError as e:
