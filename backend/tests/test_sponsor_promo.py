@@ -98,11 +98,13 @@ def _client(tmp_path, private, public, http, clock=None, busy=None, **config):
     )
 
 
-def test_packaged_config_does_not_fetch_and_catalog_stays_local(profiles):
+def test_packaged_config_uses_valid_https_worker_and_catalog_stays_local(profiles):
     packaged = load_packaged_config()
-    assert packaged.enabled is False
-    assert packaged.url == ""
-    assert packaged.public_key == ""
+    assert packaged.enabled is True
+    assert packaged.url == "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json"
+    assert len(base64.b64decode(packaged.public_key, validate=True)) == 32
+    assert "PRIVATE" not in packaged.public_key
+    assert packaged.min_sequence >= 1
     source = Path("backend/core/provider_presets.py").read_text(encoding="utf-8")
     assert "out of scope" in source
     assert "sponsor_promo" not in source
@@ -643,11 +645,18 @@ def test_endpoint_follow_up_sees_the_delayed_accept(monkeypatch, tmp_path, profi
     assert followed.json()["pending"] is False
 
 
-def test_endpoint_returns_bundle_without_saving_settings(monkeypatch, profiles):
+def test_endpoint_returns_bundle_without_saving_settings(monkeypatch, tmp_path, profiles):
     def refuse(*_args, **_kwargs):
         raise AssertionError("settings must not be saved")
 
     monkeypatch.setattr("backend.services.ai_model_settings.save", refuse)
+    offline = SponsorPromoClient(
+        PromoConfig(enabled=False, url="", public_key=""),
+        data_dir=tmp_path,
+        app_version="1.5.9",
+        http_get=lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not fetch")),
+    )
+    monkeypatch.setattr("backend.core.sponsor_promo_client.get_client", lambda: offline)
     app = FastAPI()
     app.include_router(router)
     response = TestClient(app).get("/settings/sponsor-promo")
