@@ -120,6 +120,16 @@ def test_subtitle_translation_fewer_cues_keeps_the_source_line(monkeypatch, capl
     assert warnings == ['部分字幕未能翻译，已保留原文']
 
 
+def test_blank_translation_keeps_the_opening_title_and_source_line(monkeypatch, caplog):
+    hook, entries, calls, _logged, warnings = _translate(monkeypatch, [
+        {'title': ' ', 'cues': [{'n': 1, 'text': '\n '}, {'n': 2, 'text': '世界'}]},
+    ], caplog)
+
+    assert (hook, [entry['text'] for entry in entries]) == ('Opening', ['hello', '世界'])
+    assert len(calls) == 2
+    assert warnings == ['部分字幕未能翻译，已保留原文']
+
+
 def test_subtitle_translation_more_cues_ignores_the_extra(monkeypatch, caplog):
     hook, entries, calls, logged, warnings = _translate(monkeypatch, [
         {'title': '标题', 'cues': [{'n': 1, 'text': '你好'}, {'n': 2, 'text': '世界'}, {'n': 9, 'text': '多余'}]},
