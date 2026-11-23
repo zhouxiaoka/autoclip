@@ -211,7 +211,7 @@ Corte y render se realizan en tu ordenador. El análisis cloud envía subtítulo
 3. **Enlace y plataforma.** Empieza con una entrevista o pódcast con subtítulos y elige diseño vertical. Sin subtítulos, prepara Whisper / SenseVoice o configura transcripción cloud en Ajustes.
 4. **Revisa y descarga.** Comprueba subtítulos, encuadre y contenido, y guarda el paquete o conecta una cuenta para publicar. Genera alternativas si necesitas más clips.
 
-Intel Mac / Linux pueden usar Docker o CLI. Consulta [instalación](docs/USER_INSTALLATION_GUIDE.en.md) y [última Release](https://github.com/zhouxiaoka/autoclip/releases/latest) para requisitos, primer inicio y alcance de validación.
+Intel Mac / Linux pueden usar Docker o CLI. Los instaladores de escritorio aún no están firmados ([#119](https://github.com/zhouxiaoka/autoclip/issues/119)), por lo que Windows SmartScreen o el antivirus pueden mostrar avisos; cada paquete se compila públicamente en GitHub Actions (`Desktop Build`) e incluye `build-provenance.json` para verificar el SHA-256 (también puedes usar Docker, CLI o el código fuente). Consulta [instalación](docs/USER_INSTALLATION_GUIDE.en.md) y [última Release](https://github.com/zhouxiaoka/autoclip/releases/latest) para requisitos, primer inicio y alcance de validación.
 
 [Guía de instalación](docs/USER_INSTALLATION_GUIDE.en.md) · [Problemas](docs/FAQ.en.md)
 

@@ -211,7 +211,7 @@ Corte e render ficam no computador. Análise cloud envia legendas e texto releva
 3. **Link e plataforma.** Comece com entrevista ou podcast legendado e escolha layout vertical. Sem legendas, prepare Whisper / SenseVoice ou configure transcrição cloud nas configurações.
 4. **Revise e salve.** Confira legendas, quadro e conteúdo, depois baixe o kit ou conecte uma conta para postar. Gere alternativas quando precisar de mais clipes.
 
-Intel Mac / Linux podem usar Docker ou CLI. Veja o [guia de instalação](docs/USER_INSTALLATION_GUIDE.en.md) e a [Release mais recente](https://github.com/zhouxiaoka/autoclip/releases/latest) para requisitos, primeira abertura e escopo de validação.
+Intel Mac / Linux podem usar Docker ou CLI. Os instaladores de desktop ainda não têm assinatura digital ([#119](https://github.com/zhouxiaoka/autoclip/issues/119)), então o Windows SmartScreen ou antivírus podem exibir alertas; cada pacote é compilado publicamente no GitHub Actions (`Desktop Build`) e traz `build-provenance.json` para verificar o SHA-256 (ou use Docker, CLI ou código-fonte). Veja o [guia de instalação](docs/USER_INSTALLATION_GUIDE.en.md) e a [Release mais recente](https://github.com/zhouxiaoka/autoclip/releases/latest) para requisitos, primeira abertura e escopo de validação.
 
 [Guia de instalação](docs/USER_INSTALLATION_GUIDE.en.md) · [Problemas](docs/FAQ.en.md)
 

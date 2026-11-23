@@ -213,7 +213,7 @@
 3. **先看示例，再贴自己的视频**：首页还没有项目时，点「用示例项目看看效果」，不需要 API Key，示例在安装包内。之后用自己的访谈或播客，可选择竖版版式。没有字幕、本地 Whisper 装不上或太慢时，打开「设置 → 默认模型 → 语音转字幕」，改用百炼云端转写（`qwen-audio-3.1-asr-flash`，大约 0.1 元/小时音频，具体以阿里云账单为准）。音频会上传到云端。导入被拦住时，点「改用云端转写」。若安装本地转写，第一次要下载约 220 MB，国内网络约 15 分钟。
 4. **检查并下载**：预览自动成片，检查字幕、取景与内容完整性，再下载发布包或连接账号投稿；需要更多片段时生成备选。
 
-Intel Mac 目前没有桌面安装包，与 Linux 一样使用 Docker 或 CLI。安装要求见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
+Intel Mac 目前没有桌面安装包，与 Linux 一样使用 Docker 或 CLI。桌面安装包目前未购置代码签名 / Apple 公证（计划见 [#119](https://github.com/zhouxiaoka/autoclip/issues/119)），新版本可能触发 SmartScreen 或杀软误报；所有安装包均由公开 GitHub Actions `Desktop Build` 构建，可在 Release 附件 `build-provenance.json` 核对 SHA-256，或改用 Docker / 源码运行。安装要求见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
 
 [完整安装与首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到问题？](docs/FAQ.md)
 

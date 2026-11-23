@@ -24,6 +24,15 @@
 
 运行 `x64-setup.exe` 并按向导安装。安装包按用户安装，无需常规使用管理员权限；缺少 WebView2 时，安装器可能需要联网下载。若 SmartScreen 拦截，点「更多信息 → 仍要运行」。先确认安装包来自本仓库的 Releases。
 
+### 未签名提示与 SHA-256 校验
+
+桌面安装包目前尚未购置 Windows 代码签名证书与 Apple 公证（计划见 [#119](https://github.com/zhouxiaoka/autoclip/issues/119)），且内置了便携 Python 与 FFmpeg，因此新版本可能触发 Windows SmartScreen、杀毒软件启发式误报或 macOS Gatekeeper 拦截。所有正式安装包均由公开 GitHub Actions（`Desktop Build`）从对应 tag 自动构建，可在对应 Release 的附件 `build-provenance.json` 中核对源码 commit 与安装包 SHA-256：
+
+- Windows PowerShell：`Get-FileHash AutoClip.Desktop_<version>_x64-setup.exe -Algorithm SHA256`
+- macOS 终端：`shasum -a 256 AutoClip.Desktop_<version>_aarch64.dmg`
+
+如不希望运行未签名安装包，可改用 Docker（`DOCKER.md`）、CLI/MCP（`uvx autoclip-mcp`）或从源码启动。
+
 ## 第一次使用
 
 1. **先配置模型。** 打开“设置”，选择 Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM、Grok 或本地模型。云端服务填写自己的 API Key 和模型名，点击测试连接，再保存；兼容接口可配置 Base URL。本地模型先在 Ollama / LM Studio 启动服务并加载模型。默认路线是字幕分析。游戏视觉分析自 **v1.4.0** 起可选：需要多模态模型，并显式启用付费视觉初筛。配好模型不等于已经允许每次视觉调用。

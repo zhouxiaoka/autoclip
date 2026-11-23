@@ -211,7 +211,7 @@
 3. **リンクと投稿先を選ぶ。** 字幕付きの対談やポッドキャストで試し、縦型レイアウトを選択。字幕がなければ設定で Whisper / SenseVoice を準備、またはクラウド文字起こしを設定。
 4. **確認して保存。** 字幕・構図・内容の完全性を確認し、投稿パックを保存または接続済みアカウントへ投稿。必要に応じて追加候補を生成。
 
-Intel Mac / Linux は Docker または CLI を利用できます。必要環境・初回起動・検証範囲は [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) と [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest) を参照。
+Intel Mac / Linux は Docker または CLI を利用できます。デスクトップインストーラーは現在未署名のため（[#119](https://github.com/zhouxiaoka/autoclip/issues/119)）、Windows SmartScreen やセキュリティソフトが警告を出す場合があります。公開 GitHub Actions（`Desktop Build`）でビルドされており、Release 添付の `build-provenance.json` で SHA-256 を検証できます（Docker / CLI / ソース実行も可）。必要環境・初回起動・検証範囲は [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) と [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest) を参照。
 
 [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) · [トラブルシュート](docs/FAQ.en.md)
 
