@@ -29,10 +29,10 @@ function flatten(node) {
 }
 const connection = extra => ({ id: 'endpoint', name: 'Endpoint', provider: 'compatible', base_url: 'https://fixture-gateway.invalid/v1', image_api: 'auto', image_base_url: '', ...extra })
 const settings = { version: 1, saved: true, connections: [], analysis: null, vision: null, cover: null, cover_enabled: false }
-function renderDetail(preset, connections = []) {
+function renderDetail(preset, connections = [], storePatch = {}) {
   const edits = [], ensured = []
   const before = JSON.stringify(connections)
-  const tree = Detail({ preset, onBack() {}, m: { settings: { ...settings, connections }, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, testing: false, editConnection: (...args) => edits.push(args), ensureCatalogProvider: (...args) => ensured.push(args) } })
+  const tree = Detail({ preset, onBack() {}, m: { settings: { ...settings, connections }, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, testing: false, editConnection: (...args) => edits.push(args), ensureCatalogProvider: (...args) => ensured.push(args), ...storePatch } })
   assert.equal(JSON.stringify(connections), before)
   assert.deepEqual(edits, [])
   assert.deepEqual(ensured, [])
@@ -168,4 +168,13 @@ test('only the selected compatible account can unlock Header-only catalog tests'
     const button = flatten(tree).find(n => n.type === 'button' && n.props.children === label)
     assert.equal(button.props.disabled, true, label)
   }
+})
+
+test('editor child identity stays stable for Header edits but resets when an explicit reload changes its endpoint', () => {
+  const preset = catalog.catalogPreset('openrouter')
+  const original = connection({ id: 'same-account', catalog_provider_id: 'openrouter', base_url: preset.base_url })
+  const editorKey = (row, loadSession = 0) => flatten(renderDetail(preset, [row], { loadSession }).tree).find(n => n.type === optionMock.default).key
+  assert.equal(editorKey({ ...original, _http_headers_text: '{"X-Workspace":"fixture"}' }), editorKey(original))
+  assert.notEqual(editorKey({ ...original, base_url: 'https://reloaded-fixture.invalid/v1' }), editorKey(original))
+  assert.notEqual(editorKey(original, 1), editorKey(original, 0))
 })

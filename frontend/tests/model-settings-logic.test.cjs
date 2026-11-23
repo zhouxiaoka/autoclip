@@ -436,7 +436,7 @@ test('a failed test belongs to its account, exact model and purpose', () => {
 })
 
 test('pending-save merge preserves local changes, opaque returned credentials and remote account changes', () => {
-  const sent = { ...fresh(), revision: 1, connections: [conn('a', 'compatible', { base_url: 'https://fixture.invalid/v1', api_key: 'fixture-submitted' }), conn('removed', 'compatible')] }
+  const sent = { ...fresh(), revision: 1, connections: [conn('a', 'compatible', { base_url: 'https://fixture.invalid/v1', api_key: 'fixture-submitted', has_key: true }), conn('removed', 'compatible')] }
   const pending = { ...sent, connections: [{ ...sent.connections[0], _http_headers_text: '{"X-Workspace":"fixture-late"}' }, sent.connections[1]], allow_send_frame: true }
   const returned = { ...sent, revision: 2, saved: true, chunk_size: 8000, connections: [conn('a', 'compatible', { base_url: 'https://fixture.invalid/v1', api_key: null, has_key: true }), conn('remote-added', 'compatible')] }
   const merged = logic.mergeSavedSettings(sent, pending, returned)
@@ -449,4 +449,56 @@ test('pending-save merge preserves local changes, opaque returned credentials an
   assert.equal(merged.connections[0].has_key, true)
   assert.deepEqual(plain(merged.connections.map(c => c.id)), ['a', 'remote-added'])
   assert.equal(sent.connections[0].api_key, 'fixture-submitted')
+})
+
+test('pending request-input changes invalidate old returned validation as one coupled state', () => {
+  for (const validation_status of ['failed', 'ok']) {
+    const row = conn('a', 'compatible', { base_url: 'https://fixture.invalid/v1', validation_status: 'unchecked', validation_error_type: '', failed_model_checks: [] })
+    const sent = { ...fresh(), connections: [row] }
+    const returned = { ...sent, connections: [{ ...row, validation_status, validation_error_type: 'invalid_key', failed_model_checks: [{ purpose: 'analysis', model: 'old-model' }] }] }
+    for (const patch of [
+      { _http_headers_text: '{"X-Workspace":"fixture-new"}' }, { http_headers: { 'X-Workspace': 'fixture-new' } },
+      { api_key: 'fixture-new' }, { base_url: 'https://different-fixture.invalid/v1' },
+      { reasoning_effort: 'low' }, { extra_body: { fixture: true } }, { _extra_body_text: '{"fixture":true}' },
+    ]) {
+      const pending = { ...sent, connections: [{ ...row, ...patch }] }
+      const merged = logic.mergeSavedSettings(sent, pending, returned).connections[0]
+      assert.equal(merged.validation_status, 'unchecked', JSON.stringify(patch))
+      assert.equal(merged.validation_error_type, '')
+      assert.deepEqual(plain(merged.failed_model_checks), [])
+    }
+    assert.equal(logic.mergeSavedSettings(sent, sent, returned).connections[0].validation_status, validation_status)
+  }
+})
+
+test('server endpoint drift cannot combine its new scope with a pending old-scope Header', () => {
+  const wire = loadTs('requestOptions.ts')
+  const row = conn('a', 'compatible', { base_url: 'https://original-fixture.invalid/v1', validation_status: 'unchecked' })
+  const sent = { ...fresh(), connections: [row] }
+  const pending = { ...sent, connections: [{ ...row, _http_headers_text: '{"X-Workspace":"fixture-original-only"}' }] }
+  for (const patch of [{ base_url: 'https://different-fixture.invalid/v1' }, { provider: 'openai' }, { image_base_url: 'https://different-fixture.invalid/images' }]) {
+    const returned = { ...sent, revision: 4, chunk_size: 9000, connections: [{ ...row, ...patch }] }
+    const merged = logic.mergeSavedSettings(sent, pending, returned)
+    assert.equal(merged.connections[0].base_url, row.base_url)
+    assert.equal(merged.connections[0].provider, row.provider)
+    assert.equal(merged.connections[0].image_base_url, row.image_base_url)
+    assert.equal(merged.connections[0]._request_scope_conflict, true)
+    assert.equal(merged.connections[0]._http_headers_text, pending.connections[0]._http_headers_text)
+    assert.equal(merged.revision, 4)
+    assert.equal(merged.chunk_size, 9000)
+    assert.throws(() => wire.wireRequestOptions(merged.connections[0]))
+  }
+})
+
+test('observable authentication drift also holds a pending old-account Header', () => {
+  for (const patch of [{ has_key: false }, { api_key_masked: 'def…456' }, { has_http_headers: true }]) {
+    const row = conn('a', 'compatible', { base_url: 'https://fixture.invalid/v1', api_key: null, has_key: true, api_key_masked: 'abc…123', has_http_headers: false })
+    const sent = { ...fresh(), connections: [row] }
+    const pending = { ...sent, connections: [{ ...row, _http_headers_text: '{"X-Workspace":"fixture-original-only"}' }] }
+    const returned = { ...sent, connections: [{ ...row, ...patch }] }
+    const merged = logic.mergeSavedSettings(sent, pending, returned)
+    assert.equal(merged.connections[0]._request_scope_conflict, true)
+    assert.equal(merged.connections[0].api_key_masked, row.api_key_masked)
+    assert.equal(merged.connections[0]._http_headers_text, pending.connections[0]._http_headers_text)
+  }
 })

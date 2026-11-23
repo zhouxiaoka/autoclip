@@ -167,3 +167,10 @@ test('flat header parser preserves escaped strings and duplicates before validat
   }
   assert.equal(options.requestOptionsIssue({ _http_headers_text: '{"X":"fake \\\"X\\\": still a value"}' }), null)
 })
+
+test('a local scope-conflict marker blocks serialization and can never become wire data', () => {
+  const held = { http_headers: { 'X-Workspace': 'fixture-original-only' }, _request_scope_conflict: true }
+  assert.throws(() => options.wireRequestOptions(held))
+  assert.equal(options.hasRequestHeaderAuth(held), false)
+  assert.equal('_request_scope_conflict' in options.wireRequestOptions({ ...held, _request_scope_conflict: false }), false)
+})

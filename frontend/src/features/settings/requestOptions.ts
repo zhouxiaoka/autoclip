@@ -7,6 +7,8 @@ export interface CustomRequestDraft {
   /** Unsaved editor text. Never sent to the backend or stored. */
   _http_headers_text?: string
   _extra_body_text?: string
+  /** Local concurrency hold. Never sent or persisted; explicit reload/removal resolves it. */
+  _request_scope_conflict?: boolean
 }
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$/
@@ -100,9 +102,10 @@ export function requestOptionsIssue(value: CustomRequestDraft): 'headers' | 'bod
   return null
 }
 
-export function wireRequestOptions<T extends CustomRequestDraft>(value: T): Omit<T, '_http_headers_text' | '_extra_body_text' | 'has_http_headers'> {
+export function wireRequestOptions<T extends CustomRequestDraft>(value: T): Omit<T, '_http_headers_text' | '_extra_body_text' | 'has_http_headers' | '_request_scope_conflict'> {
+  if (value._request_scope_conflict) throw new Error('Request scope changed; reload before sending credentials')
   if (requestOptionsIssue(value)) throw new Error('Invalid custom request options')
-  const { _http_headers_text, _extra_body_text, has_http_headers: _has, ...rest } = value
+  const { _http_headers_text, _extra_body_text, has_http_headers: _has, _request_scope_conflict: _scope, ...rest } = value
   const { headers, body } = parsed(value)
   return {
     ...rest,
@@ -113,7 +116,7 @@ export function wireRequestOptions<T extends CustomRequestDraft>(value: T): Omit
 
 /** Only this connection's validated local or opaque saved Header can satisfy keyless auth. */
 export function hasRequestHeaderAuth(value: CustomRequestDraft): boolean {
-  if (requestOptionsIssue(value)) return false
+  if (value._request_scope_conflict || requestOptionsIssue(value)) return false
   const headers = wireRequestOptions(value).http_headers
   return headers == null ? !!value.has_http_headers : Object.keys(headers).length > 0
 }

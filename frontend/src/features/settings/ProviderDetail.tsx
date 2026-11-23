@@ -126,7 +126,7 @@ export default function ProviderDetail({
   const testing = m.testing
   const listing = connection && busy[connection.id]
   const status = connection?.validation_status
-  const testDisabled = !connection || testing || (
+  const testDisabled = !connection || connection._request_scope_conflict || testing || (
     preset.auth === 'api_key' && !(connection.api_key || '').trim() && !connection.has_key
       && !(compatible(connection) && hasRequestHeaderAuth(connection))
   ) || !connection.base_url.trim()
@@ -332,7 +332,7 @@ export default function ProviderDetail({
                 ? `new:${preset.id}` : `saved:${row.id}`
             } data-request-connection-id={row.id}>
               {(advancedConnections.length > 1 || row.id !== connection?.id) && <p className="ac-note">{row.name}</p>}
-              <CustomRequestOptions value={row} onEdit={patch => {
+              <CustomRequestOptions key={JSON.stringify([m.loadSession, row.provider, row.catalog_provider_id, row.base_url, row.image_base_url, row.image_api])} value={row} onEdit={patch => {
                 const saved = savedAdvanced.find(item => item === row)
                 if (saved) m.editConnection(saved, patch)
                 else {

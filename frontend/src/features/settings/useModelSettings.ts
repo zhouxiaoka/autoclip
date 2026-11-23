@@ -1,4 +1,4 @@
-import { requestOptionsIssue } from './requestOptions'
+import { hasRequestHeaderAuth, requestOptionsIssue } from './requestOptions'
 import { useEffect, useRef, useState } from 'react'
 import { codeFromRequestError, codeFromResult, safeHttpStatus } from '../../analytics/connectionTestCode'
 import { message } from 'antd'
@@ -102,6 +102,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   settingsRef.current = settings
   const tested = useRef(new Map<string, string>())
   const savedRef = useRef<ModelSettings | null>(null)
+  const loadSession = useRef(0)
   // Signature of the last loaded or saved document. The post-load rediscovery is not an edit.
   const loadedSignature = useRef<string | null>(null)
   const summary = (value: ModelSettings) => ({
@@ -128,7 +129,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     ({ placement, provider: telemetryProvider(connection.provider), trigger })
 
   const discover = async (connection: Connection, refresh = false, trigger: 'load' | 'edit' | 'provider_change' | 'manual' = 'manual') => {
-    if (connection.provider === 'compatible' && !connection.base_url) return
+    if (connection._request_scope_conflict || (connection.provider === 'compatible' && !connection.base_url)) return
     const reported = discoveryProperties(connection, trigger)
     const finish: (outcome: 'completed' | 'failed' | 'blocked', extra?: Record<string, unknown>, error?: unknown) => void =
       shouldReportModelDiscovery(trigger, connectionSignature(settingsRef.current), loadedSignature.current)
@@ -162,6 +163,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       // Remounts and repeat reads of the same document are not another load.
       if (claimModelSettingsLoad(placement, value)) beginExperience('model_settings_load', { placement })('completed')
       loadedSignature.current = connectionSignature(value)
+      loadSession.current++
       tested.current.clear()
       savedRef.current = value
       setDirty(false); setConflicted(false)
@@ -401,6 +403,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   ): Promise<ValidationResult> => {
     const payload = { ...connection, api_key: connection.api_key?.trim() ?? connection.api_key }
     tested.current.delete(connection.id)
+    if (connection._request_scope_conflict) throw new Error('Request scope changed; reload before testing')
     try {
       const result = await modelSettingsApi.test(payload, model, vision, role, probeKind, { signal })
       if (passed(result) && !signal?.aborted) {
@@ -432,6 +435,10 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
     if (!source) return { ok: false }
     const current = patch ? { ...source, ...patch } : source
     const savedEditVersion = editVersion.current
+    if (current.connections.some(row => row._request_scope_conflict)) {
+      setError(t('设置已在另一处修改，请重新载入后再保存。'))
+      return { ok: false }
+    }
     if (!checked && (patch || base)) setSettings(current)
     const currentLists = checked ? { ...lists, [checked.connectionId]: checked.list } : lists
     const finish = beginExperience('provider_configuration_save', summary(current))
@@ -528,7 +535,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
 
   // Discover, check access, then persist the complete document in one save.
   const configureProvider = async (connection: Connection, base = settings): Promise<{ ok: boolean; error?: string }> => {
-    if (!base || matchingRef.current || saving) return { ok: false }
+    if (!base || matchingRef.current || saving || connection._request_scope_conflict) return { ok: false }
     matchingRef.current = true
     setMatching(true)
     setError('')
@@ -676,7 +683,7 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       ? assignAnalysis(settings, existing)
       : ensured.settings
     let connection = ensured.connection
-    if (!connection) return
+    if (!connection || connection._request_scope_conflict) return
     if (!existing) {
       const patch: Partial<Connection> = { ...(draft || {}) }
       delete patch.id
@@ -696,7 +703,8 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
       replace(next)
       return
     }
-    if (!(connection.api_key || '').trim() && !connection.has_key && preset.auth === 'api_key') {
+    if (!(connection.api_key || '').trim() && !connection.has_key && preset.auth === 'api_key'
+        && !((connection.provider === 'compatible' || logic.presetKey(connection) === 'compatible') && hasRequestHeaderAuth(connection))) {
       const text = t('请先填写 API 密钥。')
       setError(text)
       message.error(text)
@@ -881,8 +889,9 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   }, [settings])
 
   const main = settings ? logic.mainConnection(settings) : undefined
+  const scopeHeld = !!settings?.connections.some(row => row._request_scope_conflict)
   return {
-    settings, lists, busy, listErrors, dirty, dirtyRef, conflicted, saving: saving || matching, testing, error, configureProvider, testWarning, setError, main, keyHints,
+    settings, lists, busy, listErrors, loadSession: loadSession.current, dirty, dirtyRef, conflicted: conflicted || scopeHeld, saving: saving || matching, testing, error: scopeHeld ? t('设置已在另一处修改，请重新载入后再保存。') : error, configureProvider, testWarning, setError, main, keyHints,
     load, discover, fetchModels, update, editConnection, declareModel, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, clearConnectionKey, removeConnection, save, test, cancelTrial,

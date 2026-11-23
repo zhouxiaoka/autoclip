@@ -1,3 +1,4 @@
+import { hasRequestHeaderAuth } from './requestOptions'
 /**
  * Pure state transitions for the AI model settings document.
  * No React, no i18n: the hook and the tests both call these.
@@ -365,7 +366,28 @@ export function mergeSavedSettings(sent: ModelSettings, pending: ModelSettings, 
   merged.connections = pending.connections.flatMap(row => {
     const before = sentRows.get(row.id), returned = savedRows.get(row.id)
     if (before && !returned && JSON.stringify(before) === JSON.stringify(row)) return []
-    return [before && returned ? retainPendingFields(before, row, returned) : row]
+    const merged = before && returned ? retainPendingFields(before, row, returned) : row
+    const requestFields: Array<keyof Connection> = ['provider', 'catalog_provider_id', 'base_url', 'image_base_url', 'image_api',
+      'api_key', 'http_headers', '_http_headers_text', 'reasoning_effort', 'extra_body', '_extra_body_text']
+    const changedRequest = before && requestFields.some(key => JSON.stringify(before[key]) !== JSON.stringify(row[key]))
+    if (!changedRequest) return [merged]
+    const identityFields: Array<keyof Connection> = ['provider', 'catalog_provider_id', 'base_url', 'image_base_url', 'image_api']
+    const expectedKey = before.api_key == null ? !!before.has_key : !!before.api_key
+    const authMoved = returned && ((typeof returned.has_key === 'boolean' && returned.has_key !== expectedKey)
+      || (typeof returned.has_http_headers === 'boolean' && returned.has_http_headers !== hasRequestHeaderAuth(before))
+      || (before.api_key == null && typeof before.api_key_masked === 'string' && typeof returned.api_key_masked === 'string'
+        && before.api_key_masked !== returned.api_key_masked))
+    const scopeMoved = returned && (authMoved || identityFields.some(key => JSON.stringify(before[key]) !== JSON.stringify(returned[key])))
+    // Keep credentials and request defaults bound to their local endpoint, never a different returned scope.
+    const boundFields: Array<keyof Connection> = [...requestFields, 'has_key', 'api_key_masked', 'has_http_headers', 'base_url_source', 'preset_version']
+    const bound = Object.fromEntries(boundFields.map(key => [key, row[key]]))
+    // A normal same-scope save should clear unchanged typed keys to the returned opaque view.
+    if (returned && !scopeMoved && JSON.stringify(before.api_key) === JSON.stringify(row.api_key)) {
+      bound.api_key = returned.api_key; bound.has_key = returned.has_key; bound.api_key_masked = returned.api_key_masked
+    }
+    // Validation and per-model failures belong to the request inputs that were actually tested.
+    return [{ ...merged, ...bound, ...(scopeMoved ? { _request_scope_conflict: true } : {}),
+      validation_status: 'unchecked' as const, validation_error_type: '', failed_model_checks: [] }]
   })
   // A server-side account added to an unedited field is not a local deletion.
   for (const row of saved.connections) {
