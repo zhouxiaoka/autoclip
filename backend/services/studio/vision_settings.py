@@ -114,6 +114,7 @@ def effective():
         binding = settings.vision or settings.analysis
         from backend.services.studio.failure_identity import settings_identity
         return {**(endpoint or {'base_url': '', 'api_key': '', 'model': ''}),
+                'provider': ai.connection_for(settings, binding).provider if binding else '',
                 # the identity of THIS connection, frozen with the endpoint it resolves to.
                 'identity': settings_identity(settings, 'vision'),
                 'model_source': binding.model_source if binding else None,
@@ -213,7 +214,7 @@ def test(body):
     config = _resolve(body)
     identity = _tested_identity.get()  # else the sent config's identity
     if identity:
-        config = {**config, 'identity': dict(identity)}
+        config = {**config, 'provider': identity.get('provider', ''), 'identity': dict(identity)}
     def chunk(kind, data):
         return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
     image = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 32, 32, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress((b'\0' + b'\xff\0\0' * 32) * 32)) + chunk(b'IEND', b'')

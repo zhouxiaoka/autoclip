@@ -40,6 +40,7 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # Well-known key shapes
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}"), REDACTED),
     (re.compile(r"\bAIza[0-9A-Za-z_\-]{10,}"), REDACTED),
+    (re.compile(r"\bAQ\.[0-9A-Za-z_.\-]+"), REDACTED),
     (re.compile(r"\b(?:xai|gsk|fal|r8)_[A-Za-z0-9]{16,}"), REDACTED),
 )
 

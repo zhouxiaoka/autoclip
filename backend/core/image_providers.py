@@ -23,6 +23,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import requests
 
+from backend.core import gemini_transport
 from backend.core.llm_providers import is_local_url, normalize_base_url
 from backend.core.llm_telemetry import sanitize_model
 
@@ -552,13 +553,14 @@ def _wait_dashscope(data, http, root, api_key, *, cancel, poll_interval):
 
 
 def generate_gemini(*, api_key, base_url, request, session=None):
-    root = (normalize_base_url(base_url) or 'https://generativelanguage.googleapis.com/v1beta').removesuffix('/openai')
+    root = gemini_transport.native_root(base_url or 'https://generativelanguage.googleapis.com/v1beta')
     http = _session_for(root, session)
     parts = [{'text': request.prompt}]
     if request.reference:
         parts.insert(0, {'inlineData': {'mimeType': 'image/jpeg', 'data': base64.b64encode(request.reference).decode('ascii')}})
     response = http.post(f'{root}/models/{quote(request.model, safe="")}:generateContent',
-        headers={'x-goog-api-key': api_key, 'Content-Type': 'application/json'},
+        headers=gemini_transport.native_headers(api_key),
+        auth=gemini_transport.native_auth,
         json={'contents': [{'role': 'user', 'parts': parts}], 'generationConfig': {
             'responseModalities': ['TEXT', 'IMAGE'], 'imageConfig': {'aspectRatio': '9:16' if request.height > request.width else '16:9'}}}, timeout=120)
     data = _raise_for_status(response, edit=bool(request.reference))
@@ -842,6 +844,11 @@ def read_image_text(
                 json=_dashscope_ocr_body(current, root, data_uri, instruction),
                 timeout=60,
             )
+        elif gemini_transport.is_official_gemini(kind, base_url):
+            url, headers, body = gemini_transport.request(base_url, api_key,
+                _compatible_ocr_body(current, base_url, data_uri, instruction))
+            client = _session_for(base_url, session)
+            resp = client.post(url, headers=headers, json=body, timeout=60, auth=gemini_transport.native_auth)
         else:
             seedream = is_seedream(provider=kind, model=model, base_url=base_url)
             root = seedream_root(base_url) if seedream or kind == "seedream" else openai_root(base_url)
@@ -868,7 +875,26 @@ def read_image_text(
                 current = alt
                 continue
         break
+    native = gemini_transport.is_official_gemini(kind, base_url)
+    if native and resp.status_code >= 400:
+        from backend.core.llm_retry import studio_code_for
+        from backend.core.upstream_errors import classify_upstream_error
+        try:
+            error_body = resp.json()
+        except ValueError:
+            error_body = resp.text
+        info = classify_upstream_error(resp.status_code, error_body)
+        transport = ProviderTransportError('HTTPStatus', http_status=resp.status_code)
+        transport.upstream_error_type = info.error_type.value
+        transport.error_code = studio_code_for(info.error_type, resp.status_code)
+        raise _cover_failure(info.hint_key, transport) from None
     data = _raise_for_status(resp)
+    if native:
+        try:
+            data = gemini_transport.completion(data)
+        except (ValueError, KeyError, TypeError):
+            raise _cover_failure('封面服务返回格式无效，请检查模型设置后重试',
+                                 ModelResponseInvalid('GeminiCompletion')) from None
     # Remember only an id that answered, so the next cover does not repeat the 404.
     if saved and current != saved:
         remember_model(catalog, models_base, api_key, saved, current, purpose="ocr")

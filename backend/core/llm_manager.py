@@ -354,6 +354,9 @@ class LLMManager:
             else:
                 api_key = self._get_api_key_for_provider(provider_type)
             provider_kwargs = self._get_provider_kwargs(provider_type)
+            from backend.core.gemini_transport import is_official_gemini
+            if is_official_gemini(self.settings.get('connection_provider'), provider_kwargs.get('base_url', '')):
+                provider_type = ProviderType.GEMINI
 
             # 自建 OpenAI 兼容服务（Ollama / vLLM 等）常常不需要 key，有 base_url 就够
             if api_key or (provider_type == ProviderType.OPENAI and provider_kwargs.get("base_url")):
@@ -427,7 +430,8 @@ class LLMManager:
             return None
         if not model:
             return None
-        return {"base_url": base, "api_key": key or "", "model": model}
+        return {"base_url": base, "api_key": key or "", "model": model,
+                "provider": s.get('connection_provider') or provider}
     
     def _get_api_key_for_provider(self, provider_type: ProviderType) -> Optional[str]:
         """获取指定提供商的API密钥"""
