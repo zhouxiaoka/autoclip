@@ -12,14 +12,19 @@ import re
 from itertools import pairwise
 
 CJK = re.compile(r'[　-〿㐀-鿿＀-￯]')
-CLAUSE = re.compile(r'[^，。！？!?；;、,：:]+[，。！？!?；;、,：:]*')
+ARABIC_DIACRITICS = re.compile(r'[\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7-\u06E8\u06EA-\u06ED]')
+CLAUSE = re.compile(r'[^，。！？!?；;、,：:،؛؟۔]+[，。！？!?；;、,：:،؛؟۔]*')
 AFTER = set('的了着过地得们吗呢吧啊')
 BEFORE = set('和与及在把被就而但又还也都让对从向为')
 # 避头尾: a line does not open on a closer, or end on an opener.
-NO_LINE_START = frozenset('，。！？、；：,.!?;:」』）)]}〉》】')
-NO_LINE_END = frozenset('「『（([〈《【')
-# English breaks avoid leaving a function word alone at the end of a line.
-_FUNCTION = frozenset({'a', 'an', 'the', 'of', 'to', 'and', 'or', 'in', 'on', 'for', 'at', 'by', 'as', 'from'})
+NO_LINE_START = frozenset('，。！？、；：,.!?;:،؛؟۔」』）)]}〉》】»')
+NO_LINE_END = frozenset('「『（([〈《【«')
+# English & Arabic breaks avoid leaving a function word alone at the end of a line.
+_FUNCTION = frozenset({
+    'a', 'an', 'the', 'of', 'to', 'and', 'or', 'in', 'on', 'for', 'at', 'by', 'as', 'from',
+    'في', 'من', 'على', 'إلى', 'الى', 'عن', 'مع', 'أو', 'او', 'ثم', 'أن', 'ان', 'إن',
+    'لا', 'ما', 'كل', 'هل', 'بل', 'قد', 'لم', 'لن', 'بين', 'حتى', 'منذ', 'لدى',
+})
 _SPEAKER_MARK = re.compile(r'^(?:>>\s*)+')
 _FILLER = re.compile(r'(?i)(?<![A-Za-z])(?:uh+|um+|erm)(?![A-Za-z])')
 
@@ -29,14 +34,14 @@ def display_text(text: str) -> str:
     cleaned = _SPEAKER_MARK.sub('', text or '')
     cleaned = _FILLER.sub(' ', cleaned)
     cleaned = re.sub(r'[ \t]+', ' ', cleaned)
-    cleaned = re.sub(r'\s+([，。！？、；：,.!?;:])', r'\1', cleaned)
-    return cleaned.strip(' ,')
+    cleaned = re.sub(r'\s+([，。！？、；：,.!?;:،؛؟۔])', r'\1', cleaned)
+    return cleaned.strip(' ,،')
 
 
-# Role labels burned in front of a Chinese line. Guest names are stripped only when they
+# Role labels burned in front of a Chinese/English/Arabic line. Guest names are stripped only when they
 # match the cue's own speaker, so a sentence that merely mentions someone stays intact.
 _ROLE_PREFIX = re.compile(
-    r'^(?:(?:主持人|嘉宾|采访者|记者|host|interviewer|guest)\s*[:：]\s*)+',
+    r'^(?:(?:主持人|嘉宾|采访者|记者|host|interviewer|guest|المضيف|الضيف|المحاور|المذيع|المتحدث)\s*[:：]\s*)+',
     re.IGNORECASE,
 )
 
@@ -58,13 +63,15 @@ def _word_before(text: str, index: int) -> str:
     while end > 0 and text[end - 1] == ' ':
         end -= 1
     start = end
-    while start > 0 and text[start - 1].isascii() and (text[start - 1].isalnum() or text[start - 1] == "'"):
+    while start > 0 and not CJK.match(text[start - 1]) and (
+        text[start - 1].isalnum() or text[start - 1] == "'" or bool(ARABIC_DIACRITICS.match(text[start - 1]))
+    ):
         start -= 1
-    return text[start:end].lower()
+    return ARABIC_DIACRITICS.sub('', text[start:end]).lower()
 
 
 def width(text: str) -> float:
-    return sum(1 if CJK.match(ch) else 0.55 for ch in text)
+    return sum(0.0 if ARABIC_DIACRITICS.match(ch) else (1 if CJK.match(ch) else 0.55) for ch in text)
 
 
 def _cut(text: str, limit: float) -> int:
@@ -250,13 +257,13 @@ def _kinsoku(lines: list[str], line_limit: float) -> list[str]:
 
 
 def _avoid_orphan(lines: list[str], line_limit: float) -> list[str]:
-    """A one-word English tail joins a word from the line above when both still fit."""
+    """A one-word English/Arabic tail joins a word from the line above when both still fit."""
     if len(lines) < 2:
         return lines
     out = list(lines)
     last_words = out[-1].split()
     prev_words = out[-2].split()
-    if len(last_words) != 1 or not last_words[0].isascii() or len(prev_words) < 2:
+    if len(last_words) != 1 or CJK.match(last_words[0][:1] or '') or len(prev_words) < 2:
         return out
     new_prev = ' '.join(prev_words[:-1])
     new_last = f'{prev_words[-1]} {out[-1].strip()}'.strip()
