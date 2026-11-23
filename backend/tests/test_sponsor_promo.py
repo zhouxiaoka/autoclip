@@ -719,3 +719,90 @@ def test_sign_script_refuses_a_private_key_inside_the_repo(tmp_path):
     spec.loader.exec_module(tool)
     with pytest.raises(SystemExit, match="inside the repository"):
         tool._generate(Path("backend/presets/not-a-production-key.pem"))
+
+
+def test_locale_routing_disjoint_defaults_and_localized_register_urls(monkeypatch, tmp_path, profiles):
+    private, public = _keys()
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    payload = _payload(sequence=15, sponsors=[
+        {
+            "id": "apimart",
+            "order": 1,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": ["zh"],
+            "register_urls": {"zh": "https://go.apimart.ai/cn-autoclip"},
+        },
+        {
+            "id": "api88",
+            "order": 2,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": overseas,
+            "register_urls": {
+                "en": "https://88api.ai/sign-up?aff=global",
+                "ja": "https://88api.ai/sign-up?aff=jp",
+            },
+        },
+    ])
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, payload))
+    assert client.refresh_sync() == "ok"
+
+    zh_view = client.view(locale="zh-CN")
+    assert zh_view["choices"] == ["apimart", "other"]
+    assert zh_view["default"] == "apimart"
+    assert zh_view["register_urls"] == {"apimart": "https://go.apimart.ai/cn-autoclip"}
+    assert zh_view["by_locale"]["en"]["choices"] == ["api88", "other"]
+    assert zh_view["by_locale"]["en"]["default"] == "api88"
+    assert zh_view["by_locale"]["en"]["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=global"}
+    assert zh_view["by_locale"]["ja"]["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=jp"}
+    assert zh_view["by_locale"]["ko"]["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=global"}
+
+    en_view = client.view(locale="en-US")
+    assert en_view["choices"] == ["api88", "other"]
+    assert en_view["default"] == "api88"
+    assert en_view["register_urls"] == {"api88": "https://88api.ai/sign-up?aff=global"}
+
+    monkeypatch.setattr("backend.core.sponsor_promo_client.get_client", lambda: client)
+    app = FastAPI()
+    app.include_router(router)
+    api = TestClient(app)
+    res_zh = api.get("/settings/sponsor-promo", params={"locale": "zh"}).json()
+    res_en = api.get("/settings/sponsor-promo", params={"locale": "en"}).json()
+    assert res_zh["default"] == "apimart"
+    assert res_zh["choices"] == ["apimart", "other"]
+    assert res_en["default"] == "api88"
+    assert res_en["choices"] == ["api88", "other"]
+
+    # zh-only sponsor leaves overseas cleanly on "other"
+    zh_only = _payload(sequence=16, sponsors=[
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
+    ])
+    client_zh_only = _client(tmp_path / "zh_only", private, public, lambda url, timeout, max_bytes: _envelope(private, zh_only))
+    assert client_zh_only.refresh_sync() == "ok"
+    assert client_zh_only.view(locale="en")["choices"] == ["other"]
+    assert client_zh_only.view(locale="en")["default"] == "other"
+    assert client_zh_only.view(locale="zh")["choices"] == ["apimart", "other"]
+
+
+@pytest.mark.parametrize("bad_sponsors", [
+    [
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh", "en"]},
+        {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["en"]},
+    ],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": []}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["zh", "zh"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["de"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {"en": "https://evil.example/steal"}}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {}}],
+])
+def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tmp_path, profiles, bad_sponsors):
+    private, public = _keys()
+    client = _client(
+        tmp_path,
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, _payload(sequence=20, sponsors=bad_sponsors)),
+    )
+    assert client.refresh_sync() == "sponsors"
+    assert client.view()["source"] == "bundled"

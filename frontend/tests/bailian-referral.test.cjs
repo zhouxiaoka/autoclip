@@ -12,6 +12,7 @@ function flatten(node) {
 
 test('Bailian shows the author referral beside Get API key, and the console link stays primary', () => {
   const links = []
+  const tracked = []
   const providers = loadTs('providers.ts', { '../../i18n': { t: text => text } })
   const access = loadTs('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers })
   const Fields = loadTs('ProviderFields.tsx', {
@@ -20,7 +21,7 @@ test('Bailian shows the author referral beside Get API key, and the console link
     '../../i18n': { t: text => text },
     '../../ui': { Btn: 'button', Row: 'row' },
     '../../utils/externalLinks': { openExternalLink: url => links.push(url) },
-    '../../analytics/events': { trackSponsorLinkOpened: () => {} },
+    '../../analytics/events': { trackSponsorLinkOpened: event => tracked.push(JSON.parse(JSON.stringify(event))) },
     './providers': providers,
     './modelSettingsLogic': { presetKey: connection => connection.provider },
     './providerAccess': access,
@@ -44,6 +45,7 @@ test('Bailian shows the author referral beside Get API key, and the console link
   assert.equal(referral.props.href, preset.referralUrl)
   referral.props.onClick({ preventDefault() {} })
   assert.equal(links.at(-1), preset.referralUrl)
+  assert.deepEqual(tracked.at(-1), { sponsor: 'dashscope', target: 'referral', placement: 'settings_model' })
   const keyLink = nodes.find(node => node?.props?.href === preset.keyUrl)
   assert.ok(keyLink)
   keyLink.props.onClick({ preventDefault() {} })

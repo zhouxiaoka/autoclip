@@ -120,7 +120,7 @@ class SponsorPromoClient:
         from backend.core.project_cancellation import add_idle_listener
         add_idle_listener(self.note_generation_idle)
 
-    def view(self, *, trigger: str = "") -> dict:
+    def view(self, *, trigger: str = "", locale: Optional[str] = None) -> dict:
         if trigger:
             if self._busy():
                 self._deferred = trigger
@@ -128,14 +128,14 @@ class SponsorPromoClient:
                 self.schedule(self._deferred or trigger)
                 self._deferred = ""
         state, health = self._read_security()
-        shown = self._shown(state, health)
+        shown = self._shown(state, health, locale=locale)
         shown["revision"] = self._revision
         shown["instance"] = self._instance
         shown["pending"] = self._inflight or bool(self._deferred)
         shown["enabled"] = self.config.enabled
         return shown
 
-    def wait_for_change(self, revision: int, timeout: float) -> dict:
+    def wait_for_change(self, revision: int, timeout: float, *, locale: Optional[str] = None) -> dict:
         """One bounded read of the accepted state. Not a polling loop."""
         limit = max(0.0, min(float(timeout or 0), 3.0))
         event = threading.Event()
@@ -146,12 +146,12 @@ class SponsorPromoClient:
                 changed = False
                 self._waiters.append(event)
         if changed:
-            return self.view()
+            return self.view(locale=locale)
         event.wait(limit)
         with self._lock:
             if event in self._waiters:
                 self._waiters.remove(event)
-        return self.view()
+        return self.view(locale=locale)
 
     def note_generation_idle(self) -> None:
         trigger = ""
@@ -284,7 +284,7 @@ class SponsorPromoClient:
         getter = self._http_get or _bounded_get
         return getter(self.config.url, timeout=self.config.timeout_seconds, max_bytes=self.config.max_bytes)
 
-    def _shown(self, state: Optional[dict], health: str) -> dict:
+    def _shown(self, state: Optional[dict], health: str, *, locale: Optional[str] = None) -> dict:
         if health == "security_state" or not state or not isinstance(state.get("accepted"), dict):
             shown = bundled_view()
             if health == "security_state":
@@ -313,7 +313,7 @@ class SponsorPromoClient:
         )
         if not decision.ok or decision.payload is None:
             return bundled_view()
-        shown = promotion_view(decision.payload, enabled=True, source="cache")
+        shown = promotion_view(decision.payload, enabled=True, source="cache", locale=locale)
         return shown
 
     def _read_security(self) -> tuple[Optional[dict], str]:

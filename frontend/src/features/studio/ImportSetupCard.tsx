@@ -9,8 +9,15 @@ import { t } from '../../i18n'
 import { Btn, Icon } from '../../ui'
 import { openExternalLink } from '../../utils/externalLinks'
 import { useQuickConnect } from '../settings/useQuickConnect'
-import { PROVIDERS, recommendedSetupProviders, type ProviderKey, type SponsorId } from '../settings/providers'
-import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl, promotionSetupChoice } from '../settings/sponsorPromoState'
+import { PROVIDERS, recommendedSetupProviders, type ProviderKey } from '../settings/providers'
+import {
+  NEUTRAL_PROVIDER_COPY,
+  isTrustedSponsorId,
+  promotionAllowsUpsell,
+  promotionRecommends,
+  promotionRegisterUrl,
+  promotionSetupChoice,
+} from '../settings/sponsorPromoState'
 import { useSponsorPromo } from '../settings/sponsorPromoWatch'
 
 const STEPS = ['provider', 'key', 'connect'] as const
@@ -36,7 +43,8 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
   exampleBusy?: boolean
   keptMaterial?: boolean
 }) {
-  useTranslation()
+  const translation = useTranslation() as { i18n?: { language?: string } } | void
+  const language = translation && translation.i18n ? translation.i18n.language : undefined
   const promo = useSponsorPromo()
   const navigate = useNavigate()
   const connect = useQuickConnect('import_card')
@@ -49,7 +57,7 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
   useEffect(() => {
     if (lockedProvider.current || touched.current || step !== 'provider') return
     setProvider(selectableProvider(promotionSetupChoice(recommendedSetupProviders())))
-  }, [promo, step])
+  }, [promo, step, language])
   const [apiKey, setApiKey] = useState('')
   const presentation = useRef('')
   useEffect(() => {
@@ -102,8 +110,8 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
     const result = await connect.connect()
     if (result.ok && !result.validationFailed) done('connect')
   }
-  const promoId = (id: string | null | undefined): SponsorId | null =>
-    id === 'apimart' || id === 'api88' || id === 'infistar' ? id : null
+  const promoId = (id: string | null | undefined): string | null =>
+    isTrustedSponsorId(id) ? id! : null
   const keyHref = () => {
     const sponsor = promoId(identity)
     if (!sponsor) return null

@@ -118,3 +118,47 @@ test('startup, settings open and the idle interval are wired, and the notice doe
     notices: { api88: { en: 'Stopped', ja: '停止', zh: '暂停' } },
   }), 'en')[0].text, 'Stopped')
 })
+
+test('by_locale slices are validated against trusted hosts and out_of_service rules', () => {
+  const applied = promo.applySponsorPromo({
+    choices: ['apimart', 'api88', 'other'],
+    default: 'apimart',
+    statuses: { apimart: 'healthy', api88: 'healthy' },
+    register_urls: { apimart: 'https://go.apimart.ai/cn', api88: 'https://88api.ai/sign-up?aff=global' },
+    by_locale: {
+      zh: { choices: ['apimart', 'other'], default: 'apimart', register_urls: { apimart: 'https://go.apimart.ai/cn' } },
+      en: { choices: ['api88', 'other'], default: 'api88', register_urls: { api88: 'https://88api.ai/sign-up?aff=global' } },
+      ja: { choices: ['other'], default: 'other', register_urls: {} },
+    },
+  })
+  assert.equal(JSON.stringify(applied.byLocale.zh.choices), JSON.stringify(['apimart', 'other']))
+  assert.equal(applied.byLocale.zh.registerUrls.apimart, 'https://go.apimart.ai/cn')
+  assert.equal(JSON.stringify(applied.byLocale.en.choices), JSON.stringify(['api88', 'other']))
+  assert.equal(applied.byLocale.en.defaultChoice, 'api88')
+  assert.equal(JSON.stringify(applied.byLocale.ja.choices), JSON.stringify(['other']))
+
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    by_locale: {
+      en: { choices: ['apimart', 'other'], default: 'apimart', register_urls: { apimart: 'https://evil.example/steal' } },
+    },
+  }), null)
+
+  assert.equal(promo.applySponsorPromo({
+    choices: ['other'],
+    default: 'other',
+    statuses: { apimart: 'out_of_service' },
+    by_locale: {
+      zh: { choices: ['apimart', 'other'], default: 'apimart', register_urls: {} },
+    },
+  }), null)
+
+  assert.equal(promo.applySponsorPromo({
+    choices: ['other'],
+    default: 'other',
+    by_locale: {
+      de: { choices: ['other'], default: 'other', register_urls: {} },
+    },
+  }), null)
+})

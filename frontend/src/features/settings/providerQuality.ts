@@ -3,7 +3,7 @@
  * No network request. Providers missing from the file have no tier.
  */
 import raw from '@provider-quality'
-import { promotionCurrentlyPromoted } from './sponsorPromoState'
+import { isTrustedSponsorId, promotionCurrentlyPromoted } from './sponsorPromoState'
 
 export type SuccessTier = 'high' | 'mid' | 'low'
 export type LatencyTier = 'under_5m' | 'mid_5_20m' | 'over_20m'
@@ -105,7 +105,7 @@ export function displayCatalogGroup(preset: {
   sponsor?: unknown
   success_tier?: SuccessTier
 }): CatalogGroup {
-  if (preset.id === 'api88' || preset.id === 'infistar') {
+  if (isTrustedSponsorId(preset.id)) {
     if (promotionCurrentlyPromoted(preset.id)) return 'recommended'
     if (preset.group === 'local' || preset.group === 'more') return preset.group
     return 'popular'

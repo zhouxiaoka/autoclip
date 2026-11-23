@@ -1,7 +1,7 @@
 import { t } from '../../i18n'
 import { compareRecommended, pickerBucket, qualityFor, type LatencyTier, type SuccessTier } from './providerQuality'
 import { getCatalog, getProvider } from './providerPresets'
-import { promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
+import { isTrustedSponsorId, promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
 
 export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
@@ -115,7 +115,7 @@ function visibleBucket(key: ProviderKey): ProviderGroup {
   const bucket = pickerBucket(PROVIDERS[key].group, PROVIDERS[key].success_tier)
   if (bucket === 'sponsor' && !promotionEligible(key)) return 'cloud'
   // No accepted promotion: a measured tier must not lift these into the chooser.
-  if ((key === 'api88' || key === 'infistar') && !promotionCurrentlyPromoted(key)) return 'cloud'
+  if (isTrustedSponsorId(key) && !promotionCurrentlyPromoted(key)) return 'cloud'
   return bucket
 }
 
