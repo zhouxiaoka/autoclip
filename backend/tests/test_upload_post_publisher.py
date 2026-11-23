@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import requests
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -505,30 +506,41 @@ def test_publish_wait_keeps_last_processing_status_when_final_poll_times_out(dat
     assert timeouts == [4, 1]
 
 
-def test_cli_publish_wait_keeps_submitted_request_ids_after_poll_timeout(data_dir, capsys, monkeypatch):
-    import requests
-
+@pytest.mark.parametrize(
+    ("transport_error", "expected_error"),
+    [(requests.ReadTimeout, "查询发布状态超时"), (requests.ConnectionError, "ConnectionError")],
+)
+def test_cli_publish_wait_keeps_receipts_after_poll_error(data_dir, capsys, monkeypatch, transport_error, expected_error):
     from backend.cli import main
     from backend.services import upload_post_publisher as up
+
+    up.save_config(api_key="mock-key-1234567890", user="u")
+    polled = []
+    transport_detail = "transport reset by mock peer at a private endpoint"
 
     def publish_clip(req, **kwargs):
         return {"ok": True, "clip_id": req.clip_id, "request_id": f"req-{req.clip_id}", "status": "submitted"}
 
-    def get_status(request_id, **kwargs):
+    def get(_session, _url, *, params, **kwargs):
+        request_id = params["request_id"]
+        polled.append(request_id)
         if request_id == "req-1":
-            raise requests.ReadTimeout
-        return {"status": "completed", "final": True, "results": []}
+            raise transport_error(transport_detail)
+        return _Resp(payload={"status": "completed", "results": []})
 
     monkeypatch.setattr(up, "publish_clip", publish_clip)
-    monkeypatch.setattr(up, "get_status", get_status)
+    monkeypatch.setattr(requests.Session, "get", get)
 
     assert main(["publish", "p1", "--clip", "1", "--clip", "2", "--platform", "tiktok",
                  "--wait", "--timeout", "2", "--json"]) == 1
-    output = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
     first, second = output["published"]
+    assert polled == ["req-1", "req-2"]
     assert output["ok"] is False
     assert (first["request_id"], first["status"], first["ok"]) == ("req-1", "submitted", False)
-    assert first["error"]
+    assert expected_error in first["error"]
+    assert transport_detail not in captured.out and transport_detail not in captured.err
     assert (second["request_id"], second["status"], second["ok"]) == ("req-2", "completed", True)
 
 
