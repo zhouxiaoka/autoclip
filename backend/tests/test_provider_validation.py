@@ -1050,6 +1050,49 @@ def test_trial_run_context_error_fails_context(monkeypatch):
     assert result['trial_context_ok'] is False
     assert result['trial_json_ok'] is False
     assert result['trial_passed'] is False
+    assert result['trial_failure_reason'] == 'context_length'
+    assert result['trial_failure_status'] == 400
+
+
+def test_trial_run_reports_closed_set_failure_reasons(monkeypatch):
+    """#614 / Discussion #606: distinguish timeout, connection, http_error, invalid_json without raw provider prose."""
+    import httpx
+    from backend.services import provider_validation as pv
+
+    # 1) Timeout (e.g. local Ollama exceeding 90s)
+    def timeout_handler(method, url, headers, payload):
+        raise httpx.ReadTimeout('read timed out')
+    _patch_httpx(monkeypatch, timeout_handler)
+    res_timeout = pv.trial_run('http://localhost:11434/v1', '', 'qwen2.5:7b', sleep=lambda *_: None)
+    assert res_timeout['trial_passed'] is False
+    assert res_timeout['trial_failure_reason'] == 'timeout'
+    assert res_timeout['trial_failure_status'] is None
+
+    # 2) Connection drop
+    def conn_handler(method, url, headers, payload):
+        raise httpx.ConnectError('connection refused')
+    _patch_httpx(monkeypatch, conn_handler)
+    res_conn = pv.trial_run('http://localhost:11434/v1', '', 'qwen2.5:7b', sleep=lambda *_: None)
+    assert res_conn['trial_failure_reason'] == 'connection'
+    assert res_conn['trial_failure_status'] is None
+
+    # 3) HTTP 502 error
+    _patch_httpx(monkeypatch, lambda *a: _FakeResponse(502, {'error': {'message': 'secret upstream text'}}))
+    res_http = pv.trial_run('https://gw.example/v1', 'sk-x', 'm', sleep=lambda *_: None)
+    assert res_http['trial_failure_reason'] == 'http_error'
+    assert res_http['trial_failure_status'] == 502
+
+    # 4) Valid HTTP 200 but non-JSON reply
+    _patch_httpx(monkeypatch, lambda *a: _FakeResponse(200, {'choices': [{'message': {'content': 'plain text'}}]}))
+    res_json = pv.trial_run('https://gw.example/v1', 'sk-x', 'm', sleep=lambda *_: None)
+    assert res_json['trial_failure_reason'] == 'invalid_json'
+    assert res_json['trial_failure_status'] is None
+
+    # 5) Pure 429 rate-limit leaves trial_failure_reason empty (rate line already explains it)
+    _patch_httpx(monkeypatch, lambda *a: _FakeResponse(429, {'error': {'message': 'too many requests'}}))
+    res_429 = pv.trial_run('https://gw.example/v1', 'sk-x', 'm', sleep=lambda *_: None)
+    assert res_429['trial_rate_limited'] is True
+    assert res_429['trial_failure_reason'] == ''
 
 
 def test_validate_connection_with_probe_quick_skips_trial(monkeypatch):

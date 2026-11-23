@@ -110,6 +110,8 @@ class ValidationResult:
     trial_estimate_requests: Optional[int] = None
     trial_estimate_minutes: Optional[float] = None
     trial_passed: Optional[bool] = None
+    trial_failure_reason: str = ''
+    trial_failure_status: Optional[int] = None
     # Capability miss that is not an UpstreamErrorType (vision_unsupported / image_model_in_analysis).
     # Carried as error_code while error_type stays 'unknown' so sanitize + known_validation_type keep it.
     capability_error_code: str = ''
@@ -151,6 +153,8 @@ class ValidationResult:
             'trial_estimate_requests': self.trial_estimate_requests,
             'trial_estimate_minutes': self.trial_estimate_minutes,
             'trial_passed': self.trial_passed,
+            'trial_failure_reason': self.trial_failure_reason,
+            'trial_failure_status': safe_http_status(self.trial_failure_status),
         }
 
 
@@ -756,10 +760,12 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
                 response = client.post(url, json=payload, headers=headers)
     except httpx.TimeoutException:
         return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
-                'rate_limited': False, 'context_error': False, 'json_ok': False, 'status': None}
+                'rate_limited': False, 'context_error': False, 'json_ok': False,
+                'status': None, 'failure_reason': 'timeout'}
     except httpx.RequestError:
         return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
-                'rate_limited': False, 'context_error': False, 'json_ok': False, 'status': None}
+                'rate_limited': False, 'context_error': False, 'json_ok': False,
+                'status': None, 'failure_reason': 'connection'}
     ms = int((time.monotonic() - started) * 1000)
     status = response.status_code
     text = response.text or ''
@@ -769,8 +775,10 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
         if native:
             info = classify_upstream_error(status, text)
             rate_limited = info.error_type == UpstreamErrorType.RATE_LIMITED
+        reason = 'context_length' if context_error else ('' if rate_limited else 'http_error')
         return {'ms': ms, 'ok_http': False, 'rate_limited': rate_limited,
-                'context_error': context_error, 'json_ok': False, 'status': status}
+                'context_error': context_error, 'json_ok': False, 'status': status,
+                'failure_reason': reason}
     content = ''
     try:
         parsed = response.json()
@@ -781,13 +789,15 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
             content = _completion_text(choices[0].get('message'))
     except Exception:  # noqa: BLE001
         content = '' if native else text
+    json_ok = _parse_trial_json(content)
     return {
         'ms': ms,
         'ok_http': True,
         'rate_limited': rate_limited,
         'context_error': context_error,
-        'json_ok': _parse_trial_json(content),
+        'json_ok': json_ok,
         'status': status,
+        'failure_reason': '' if json_ok else 'invalid_json',
     }
 
 
@@ -833,6 +843,20 @@ def trial_run(
         trial_passed = False
     if not context_ok or not json_ok:
         trial_passed = False
+    failure_reason = ''
+    failure_status: Optional[int] = None
+    if not trial_passed:
+        reasons = [str(a.get('failure_reason') or '') for a in attempts]
+        for candidate in ('context_length', 'timeout', 'connection', 'http_error', 'invalid_json'):
+            if candidate in reasons:
+                failure_reason = candidate
+                break
+        if failure_reason in ('http_error', 'context_length'):
+            for a in attempts:
+                st = a.get('status')
+                if a.get('failure_reason') == failure_reason and isinstance(st, int) and 400 <= st <= 599:
+                    failure_status = st
+                    break
     return {
         'probe_kind': 'trial',
         'trial_context_ok': context_ok,
@@ -842,6 +866,8 @@ def trial_run(
         'trial_estimate_requests': n,
         'trial_estimate_minutes': minutes,
         'trial_passed': trial_passed,
+        'trial_failure_reason': failure_reason,
+        'trial_failure_status': failure_status,
         'attempts': attempts,
     }
 
@@ -879,5 +905,7 @@ def validate_connection_with_probe(
     result.trial_estimate_requests = trial['trial_estimate_requests']
     result.trial_estimate_minutes = trial['trial_estimate_minutes']
     result.trial_passed = trial['trial_passed']
+    result.trial_failure_reason = str(trial.get('trial_failure_reason') or '')
+    result.trial_failure_status = trial.get('trial_failure_status')
     # Trial failures do not flip ok/result — save stays allowed (yellow badge only).
     return result
