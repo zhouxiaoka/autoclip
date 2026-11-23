@@ -14,12 +14,13 @@ from backend.utils.ffmpeg_utils import get_ffmpeg_path
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='source-preview')
 _lock = threading.RLock()
 _states = {}
+_PREVIEW_FORMAT = 'square-pixel-v1'
 
 
 def _paths(project_id):
     source = jobs.source(project_id)
     stat = source.stat()
-    identity = f'{source.resolve()}:{stat.st_size}:{stat.st_mtime_ns}'
+    identity = f'{_PREVIEW_FORMAT}:{source.resolve()}:{stat.st_size}:{stat.st_mtime_ns}'
     token = hashlib.sha256(identity.encode()).hexdigest()[:24]
     output = store.directory(project_id) / 'output' / 'preview' / f'{token}.mp4'
     return source, output, token
@@ -73,7 +74,9 @@ def _convert(project_id: str, source: Path, output: Path, token: str):
             cmd, priority = render_limits.low_priority([
                 get_ffmpeg_path(), '-nostdin', '-v', 'error', *render_limits.input_args(), '-i', str(source),
                 '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
-                '-vf', "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1",
+                # Fit display dimensions before setting square pixels. H.264 yuv420p needs even sizes.
+                '-vf', "scale=w='max(2,trunc(min(min(iw*sar,1280),720*dar)/2)*2)'"
+                       ":h='max(2,trunc(min(min(ih,720),1280/dar)/2)*2)',setsar=1",
                 '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '25', '-pix_fmt', 'yuv420p',
                 *render_limits.output_args(), '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
                 '-y', str(temporary),

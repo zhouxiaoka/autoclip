@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import pytest
@@ -45,6 +46,36 @@ def test_explicit_preview_transcodes_avi_preserves_source_and_serves_ranges(clie
     assert client.post('/studio/p1/source-preview').json()['status'] == 'completed'
     avi.write_bytes(original + b'changed')
     assert client.get('/studio/p1/source-preview').json()['status'] == 'idle'
+
+
+@pytest.mark.parametrize('has_old_preview', [False, True])
+def test_compatible_preview_preserves_anamorphic_display_ratio(client, source, has_old_preview):
+    wide_source = source.with_suffix('.mpg')
+    subprocess.run([get_ffmpeg_path(), '-v', 'error', '-f', 'lavfi', '-i',
+                    'testsrc2=size=720x480:rate=30:duration=0.5', '-vf', 'setsar=32/27',
+                    '-c:v', 'mpeg2video', '-y', str(wide_source)], check=True, capture_output=True)
+    source.unlink()
+
+    stat = wide_source.stat()
+    old_identity = f'{wide_source.resolve()}:{stat.st_size}:{stat.st_mtime_ns}'
+    old_version = hashlib.sha256(old_identity.encode()).hexdigest()[:24]
+    if has_old_preview:
+        old_preview = wide_source.parent.parent / 'output' / 'preview' / f'{old_version}.mp4'
+        old_preview.parent.mkdir(parents=True)
+        subprocess.run([get_ffmpeg_path(), '-v', 'error', '-i', str(wide_source), '-vf', 'setsar=1',
+                        '-c:v', 'libx264', '-y', str(old_preview)], check=True, capture_output=True)
+
+    response = client.post('/studio/p1/source-preview')
+    assert response.status_code == 200, response.text
+    assert response.json()['status'] == 'completed', response.text
+    output = preview.ready_file('p1')
+    streams = json.loads(subprocess.check_output([get_ffprobe_path(), '-v', 'error',
+                        '-show_streams', '-of', 'json', str(output)]))['streams']
+    video = streams[0]
+    assert video['codec_name'] == 'h264'
+    assert video['sample_aspect_ratio'] == '1:1'
+    assert video['width'] / video['height'] == pytest.approx(16 / 9, abs=.005)
+    assert response.json()['version'] != old_version
 
 
 def test_timeout_is_retryable_and_partial_file_is_removed(source, monkeypatch):
