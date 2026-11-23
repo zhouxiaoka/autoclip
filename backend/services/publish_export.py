@@ -339,10 +339,11 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
     font = resolve_cjk_font()
     if req.title_card and not studio and not font:
         warnings.append("没找到中文字体，已跳过标题卡")
-    # Keep the rendered file on the destination filesystem for atomic finalization.
+    # Stage the render on the destination volume and keep cleanup best-effort.
+    # A temporary file lock must not change the outcome of an already-finished export.
     with (
-        tempfile.TemporaryDirectory(prefix="ac-export-") as scratch,
-        tempfile.TemporaryDirectory(prefix=".ac-export-", dir=out_dir) as staged,
+        tempfile.TemporaryDirectory(prefix="ac-export-", ignore_cleanup_errors=True) as scratch,
+        tempfile.TemporaryDirectory(prefix=".ac-export-", dir=out_dir, ignore_cleanup_errors=True) as staged,
     ):
         tmpdir = Path(scratch)
         srt_file = None
