@@ -1,7 +1,7 @@
 import { t } from '../../i18n'
 import { useTranslation } from 'react-i18next'
 import type { TrialResultLike } from './trialRunResult'
-import { showTrialFailedBadge, trialEstimateParts, trialLines } from './trialRunResult'
+import { showTrialFailedBadge, trialEstimateParts, trialFailureDetail, trialLines } from './trialRunResult'
 
 /** Three-line trial result + estimate. Yellow badge when any check failed. */
 export function TrialRunPanel({
@@ -14,6 +14,7 @@ export function TrialRunPanel({
   useTranslation()
   const lines = trialLines(result)
   const estimate = trialEstimateParts(result)
+  const failureDetail = trialFailureDetail(result)
   const badge = showTrialFailedBadge({ trial_status: trialStatus })
     || (result?.probe_kind === 'trial' && result.trial_passed === false)
   if (!lines.length && !badge) return null
@@ -40,6 +41,13 @@ export function TrialRunPanel({
             </li>
           ))}
         </ul>
+      )}
+      {failureDetail && (
+        <p className="ac-note ac-note--warn" data-testid="trial-failure-reason">
+          {failureDetail.status !== undefined
+            ? t(failureDetail.key, { status: failureDetail.status })
+            : t(failureDetail.key)}
+        </p>
       )}
       {estimate && (
         <p className="ac-note" data-testid="trial-estimate">

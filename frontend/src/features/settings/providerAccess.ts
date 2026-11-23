@@ -43,6 +43,8 @@ export interface ValidationResult {
   trial_estimate_requests?: number | null
   trial_estimate_minutes?: number | null
   trial_passed?: boolean | null
+  trial_failure_reason?: string | null
+  trial_failure_status?: number | null
 }
 
 const KEY_HINTS: Array<[RegExp, ProviderKey]> = [

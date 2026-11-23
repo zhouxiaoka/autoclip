@@ -11,6 +11,8 @@ export type TrialResultLike = {
   trial_estimate_requests?: number | null
   trial_estimate_minutes?: number | null
   trial_passed?: boolean | null
+  trial_failure_reason?: string | null
+  trial_failure_status?: number | null
 }
 
 export type TrialLineTone = 'ok' | 'warn' | 'fail'
@@ -75,4 +77,39 @@ export function showTrialFailedBadge(connection: {
 
 export function trialPassedOverall(result: TrialResultLike | null | undefined): boolean {
   return result?.probe_kind === 'trial' && result.trial_passed === true
+}
+
+export type TrialFailureDetail = {
+  key: string
+  status?: number
+}
+
+/** Closed-set explanation for why a trial run failed (never raw upstream text). */
+export function trialFailureDetail(result: TrialResultLike | null | undefined): TrialFailureDetail | null {
+  if (!result || result.probe_kind !== 'trial') return null
+  if (result.ok === false || result.success === false) return null
+  if (result.trial_passed === true) return null
+  const reason = (result.trial_failure_reason || '').trim()
+  const status = typeof result.trial_failure_status === 'number'
+    && Number.isInteger(result.trial_failure_status)
+    && result.trial_failure_status >= 400
+    && result.trial_failure_status <= 599
+    ? result.trial_failure_status
+    : undefined
+  switch (reason) {
+    case 'timeout':
+      return { key: '试跑请求超时（90 秒）。本地小算力模型可先保存后用短素材实测，或换更轻量的型号。' }
+    case 'connection':
+      return { key: '试跑时连接中断，请检查服务是否仍在运行或网络代理设置。' }
+    case 'context_length':
+      return { key: '模型上下文长度不足以处理试跑样本，请改用更大上下文的型号或调小分块大小。' }
+    case 'http_error':
+      return status !== undefined
+        ? { key: '试跑请求被服务商拒绝（HTTP {{status}}），请检查模型权限、额度或接口兼容性。', status }
+        : { key: '试跑请求失败，请检查模型权限、额度或接口兼容性。' }
+    case 'invalid_json':
+      return { key: '模型已回复，但未按要求输出有效 JSON，建议换指令遵循更稳定的型号。' }
+    default:
+      return null
+  }
 }
