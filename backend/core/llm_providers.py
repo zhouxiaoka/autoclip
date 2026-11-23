@@ -11,6 +11,7 @@ from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.core import gemini_transport
 from backend.core.llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
 from backend.core.failure_logging import failure_logger
 
@@ -741,58 +742,33 @@ class GeminiProvider(LLMProvider):
     
     def __init__(self, api_key: str, model_name: str = "gemini-3.8-flash", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
-        try:
-            # New unified Google GenAI SDK (replaces the deprecated
-            # google-generativeai package).
-            from google import genai
-            self.client = genai.Client(api_key=api_key)
-        except ImportError:
-            raise ImportError("请安装google-genai: pip install google-genai")
+        self.base_url = kwargs.get('base_url') or 'https://generativelanguage.googleapis.com/v1beta'
 
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用Gemini API"""
         try:
             full_input = self._build_full_input(prompt, input_data)
 
-            # Map a max-tokens hint onto the new SDK's config object if present.
-            config = None
-            max_tokens = kwargs.get("max_tokens") or kwargs.get("max_output_tokens")
-            if max_tokens:
-                from google.genai import types
-                config = types.GenerateContentConfig(max_output_tokens=max_tokens)
-
             model = self.request_model()
-            from backend.core.llm_degrade import consume_chunk_call
-            from backend.core.llm_stream import StreamRejected, collect_sdk, exception_rejects_stream
-            method = getattr(self.client.models, "generate_content_stream", None)
-            if method is not None:
-                try:
-                    collected = collect_sdk(method(model=model, contents=full_input, config=config))
-                    return LLMResponse(
-                        content=collected.content if collected.content is not None else "",
-                        model=model,
-                        finish_reason=collected.finish_reason,
-                    )
-                except StreamRejected as rejected:
-                    if not consume_chunk_call():
-                        raise rejected.error
-                    logger.info("上游不接受 stream，改回整包响应再试一次")
-                except Exception as error:  # noqa: BLE001 - only a stream refusal falls back
-                    if not exception_rejects_stream(error):
-                        raise
-                    if not consume_chunk_call():
-                        raise
-                    logger.info("上游不接受 stream，改回整包响应再试一次")
-            response = self.client.models.generate_content(
-                model=model,
-                contents=full_input,
-                config=config,
-            )
-
+            payload = {'model': model, 'messages': [{'role': 'user', 'content': full_input}], **kwargs}
+            url, headers, body = gemini_transport.request(self.base_url, self.api_key, payload)
+            import requests
+            from backend.core.job_budget import clip_job_read_timeout
+            from backend.core.llm_stream import budget_watch
+            timeout = clip_job_read_timeout(LLM_READ_TIMEOUT_SEC)
+            with requests.post(url, headers=headers, json=body,
+                               auth=gemini_transport.native_auth,
+                               timeout=(min(LLM_CONNECT_TIMEOUT_SEC, timeout), timeout), stream=True) as response:
+                with budget_watch(response):
+                    response_body = response.content
+                    response.raise_for_status()
+                    result = gemini_transport.completion(json.loads(response_body))
+            choice = result['choices'][0]
             return LLMResponse(
-                content=response.text,
+                content=choice['message']['content'],
                 model=model,
-                finish_reason=getattr(response, 'finish_reason', None)
+                usage=result['usage'],
+                finish_reason=choice['finish_reason'],
             )
 
         except Exception as e:

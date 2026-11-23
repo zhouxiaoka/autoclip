@@ -91,7 +91,7 @@ PROVIDER_VALIDATION_FIELDS: frozenset[str] = frozenset({
 MODEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-/:]{0,63}$")
 _HOST_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,251}[a-z0-9])?$")
 _LOCAL_HOSTS = frozenset({"localhost", "0.0.0.0", "host.docker.internal", "::1"})
-_SECRET_MARKERS = ("sk-", "aiza", "xai-", "api_key", "apikey", "authorization", "bearer ", "token=")
+_SECRET_MARKERS = ("sk-", "aiza", "aq.", "xai-", "api_key", "apikey", "authorization", "bearer ", "token=")
 _URL_IN_TEXT = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
 # Consume the complete quoted value (including spaces and escaped quotes), or
 # the whole header value including its Bearer scheme, before matching bare keys.
@@ -103,7 +103,7 @@ _CREDENTIAL_FIELD_IN_TEXT = re.compile(
     '''
 )
 _KEY_IN_TEXT = re.compile(
-    r'''(?i)(?:(?:sk-|AIza|xai-)[A-Za-z0-9_\-]+|bearer\s+[^\s,;}\]"']+)'''
+    r'''(?i)(?:(?:sk-|AIza|xai-)[A-Za-z0-9_\-]+|AQ\.[A-Za-z0-9_.\-]+|bearer\s+[^\s,;}\]"']+)'''
 )
 # Log-only diagnostics for errors outside the shared telemetry/retry enum.
 _LOG_ERROR_CODES = (

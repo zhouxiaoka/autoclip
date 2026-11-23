@@ -85,7 +85,7 @@ def test_compatible_url_gains_v1_and_drops_chat_completions():
     ('/v1', '/v1'),
 ])
 @pytest.mark.parametrize('provider', ['gemini', 'compatible'])
-def test_gemini_validation_requests_use_the_shared_chat_root(monkeypatch, path, expected, provider):
+def test_gemini_validation_keeps_saved_root_and_selects_transport(monkeypatch, path, expected, provider):
     root = 'https://generativelanguage.googleapis.com'
     calls = []
 
@@ -96,6 +96,10 @@ def test_gemini_validation_requests_use_the_shared_chat_root(monkeypatch, path, 
                 assert 'x-goog-api-key' in headers
                 return _FakeResponse(200, {'models': [{'name': 'models/gemini-test'}]})
             return _FakeResponse(200, {'data': [{'id': 'gemini-test'}]})
+        if provider == 'gemini':
+            assert headers['x-goog-api-key'] == 'test-only-key'
+            assert 'Authorization' not in headers
+            return _FakeResponse(200, {'candidates': [{'content': {'parts': [{'text': 'ok'}]}, 'finishReason': 'STOP'}]})
         return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
 
     _patch_httpx(monkeypatch, handler)
@@ -104,9 +108,10 @@ def test_gemini_validation_requests_use_the_shared_chat_root(monkeypatch, path, 
         base_url_source='user', preset_version=1, api_key='test-only-key',
     ), 'gemini-test')
     assert result.ok
-    # P4 lists Gemini models natively; the chat probe uses the shared OpenAI root.
     models_url = root + expected.removesuffix('/openai') + '/models' + f'?pageSize={GEMINI_PAGE_SIZE}' if provider == 'gemini' else root + expected + '/models'
-    assert calls == [models_url, root + expected + '/chat/completions']
+    chat_url = root + expected.removesuffix('/openai') + '/models/gemini-test:generateContent' if provider == 'gemini' else root + expected + '/chat/completions'
+    assert calls == [models_url, chat_url]
+    assert result.normalized_base_url == root + expected
     assert root + '/v1beta/chat/completions' not in calls
 
 
@@ -246,7 +251,7 @@ def test_success_probes_with_about_sixteen_tokens_and_returns_models(monkeypatch
 
 
 @pytest.mark.parametrize('provider', ['gemini', 'compatible'])
-def test_gemini_native_models_and_shared_openai_chat_root(monkeypatch, provider):
+def test_gemini_legacy_root_is_normalized_without_changing_native_transport(monkeypatch, provider):
     calls = []
     root = 'https://generativelanguage.googleapis.com/v1beta/openai'
 
@@ -257,6 +262,8 @@ def test_gemini_native_models_and_shared_openai_chat_root(monkeypatch, provider)
                 assert 'x-goog-api-key' in headers
                 return _FakeResponse(200, {'models': [{'name': 'models/gemini-test'}]})
             return _FakeResponse(200, {'data': [{'id': 'gemini-test'}]})
+        if provider == 'gemini':
+            return _FakeResponse(200, {'candidates': [{'content': {'parts': [{'text': 'ok'}]}, 'finishReason': 'STOP'}]})
         return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
 
     _patch_httpx(monkeypatch, handler)
@@ -268,7 +275,8 @@ def test_gemini_native_models_and_shared_openai_chat_root(monkeypatch, provider)
     assert result.ok is True
     assert result.normalized_base_url == root
     models_url = root.removesuffix('/openai') + f'/models?pageSize={GEMINI_PAGE_SIZE}' if provider == 'gemini' else root + '/models'
-    assert calls == [('GET', models_url), ('POST', root + '/chat/completions')]
+    chat_url = root.removesuffix('/openai') + '/models/gemini-test:generateContent' if provider == 'gemini' else root + '/chat/completions'
+    assert calls == [('GET', models_url), ('POST', chat_url)]
 
 
 def test_http_test_endpoint_returns_classified_payload(monkeypatch):

@@ -171,7 +171,7 @@ def verify_endpoint(cfg: "CoverConfig") -> dict[str, str]:
     except Exception:  # noqa: BLE001
         vision = {}
     if vision.get("base_url") and vision.get("model"):
-        return {"provider": "openai", "api_key": vision.get("api_key", ""), "base_url": vision["base_url"], "model": vision["model"]}
+        return {"provider": vision.get("provider", "openai"), "api_key": vision.get("api_key", ""), "base_url": vision["base_url"], "model": vision["model"]}
     if cfg.source == 'connections':
         raise ImageError('未选择可用于封面校对的多模态模型，跳过校对')
     chosen = default_ocr_model(cfg.provider, cfg.model, cfg.base_url, api_key=cfg.api_key)

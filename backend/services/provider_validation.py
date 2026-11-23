@@ -321,7 +321,7 @@ def _sse_completion_text(text: str) -> str:
     return ''.join(parts).strip()
 
 
-def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
+def _probe(base: str, api_key: str, model: str, provider: str = 'compatible') -> Optional[ClassifiedUpstreamError]:
     import httpx
     from backend.core.llm_providers import (
         asks_for_max_completion_tokens,
@@ -341,6 +341,10 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
     headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+    from backend.core import gemini_transport
+    native = gemini_transport.is_official_gemini(provider, base)
+    if native:
+        url, headers, payload = gemini_transport.request(base, api_key, payload)
     stream_retried = False
     try:
         with httpx.Client(timeout=PROBE_TIMEOUT, trust_env=not is_local_url(base)) as client:
@@ -394,6 +398,12 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
         return _with_detail(html, status, upstream_code=upstream)
     if response.status_code >= 400:
         return _with_detail(_classify(response.status_code, text[:4000]), status, upstream_code=upstream)
+    if native:
+        try:
+            gemini_transport.completion(response.json())
+        except (ValueError, KeyError, TypeError):
+            return _with_detail(_as_type(UpstreamErrorType.UNKNOWN), status)
+        return None
     if stream_retried:
         if _sse_completion_text(text):
             return None
@@ -560,7 +570,7 @@ def _validate_resolved(
     warning = ''
     if list_known and not fetched.truncated and advisory and selected not in models:
         warning = MODEL_NOT_LISTED_WARNING
-    probe_error = _probe(base, api_key, selected)
+    probe_error = _probe(base, api_key, selected, provider=resolved.provider)
     if probe_error:
         return _failed(probe_error, base, hint, models, **extras,
                        http_status=getattr(probe_error, 'http_status', None),
@@ -708,7 +718,7 @@ def _response_format_400(text: str) -> bool:
     return any(token in blob for token in ('response_format', 'json_object', 'structured output', 'structured_output'))
 
 
-def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
+def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: str = 'compatible') -> dict:
     """One chat completion for the trial. Returns timing + classification flags."""
     import time
     import httpx
@@ -730,6 +740,10 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
     payload['response_format'] = {'type': 'json_object'}
     url = base.rstrip('/') + '/chat/completions'
     headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+    from backend.core import gemini_transport
+    native = gemini_transport.is_official_gemini(provider, base)
+    if native:
+        url, headers, payload = gemini_transport.request(base, api_key, payload)
     started = time.monotonic()
     try:
         with httpx.Client(timeout=TRIAL_TIMEOUT, trust_env=not is_local_url(base)) as client:
@@ -752,16 +766,21 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str) -> dict:
     rate_limited = status == 429
     context_error = _is_context_error(status, text[:4000])
     if status >= 400:
+        if native:
+            info = classify_upstream_error(status, text)
+            rate_limited = info.error_type == UpstreamErrorType.RATE_LIMITED
         return {'ms': ms, 'ok_http': False, 'rate_limited': rate_limited,
                 'context_error': context_error, 'json_ok': False, 'status': status}
     content = ''
     try:
         parsed = response.json()
+        if native:
+            parsed = gemini_transport.completion(parsed)
         choices = parsed.get('choices') if isinstance(parsed, dict) else None
         if isinstance(choices, list) and choices and isinstance(choices[0], dict):
             content = _completion_text(choices[0].get('message'))
     except Exception:  # noqa: BLE001
-        content = text
+        content = '' if native else text
     return {
         'ms': ms,
         'ok_http': True,
@@ -779,6 +798,7 @@ def trial_run(
     *,
     language: str = 'zh',
     sleep=None,
+    provider: str = 'compatible',
 ) -> dict:
     """Send the sample SRT through the real outline prompt three times (1s apart).
 
@@ -795,7 +815,7 @@ def trial_run(
     full_input = f"{prompt}\n\n输入内容：\n{_json.dumps({'text': plain}, ensure_ascii=False)}"
     attempts: list[dict] = []
     for index in range(TRIAL_ATTEMPTS):
-        attempts.append(_trial_once(base, api_key, model, full_input))
+        attempts.append(_trial_once(base, api_key, model, full_input, provider=provider))
         if index + 1 < TRIAL_ATTEMPTS:
             sleeper(TRIAL_GAP_SEC)
     latencies = [a['ms'] for a in attempts]
@@ -850,7 +870,7 @@ def validate_connection_with_probe(
         return result
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']
-    trial = trial_run(base, resolved.api_key or '', model.strip(), language=language)
+    trial = trial_run(base, resolved.api_key or '', model.strip(), language=language, provider=resolved.provider)
     result.probe_kind = 'trial'
     result.trial_context_ok = trial['trial_context_ok']
     result.trial_rate_limited = trial['trial_rate_limited']

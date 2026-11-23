@@ -1,6 +1,7 @@
 """Bounded still-frame analysis through an OpenAI-compatible vision endpoint."""
 from backend.core.failure_codes import UserFacingError
 from backend.core.llm_stream import StreamError
+from backend.core import gemini_transport
 from backend.core.failure_attribution import ModelResponseInvalid  
 import base64
 import json
@@ -192,9 +193,13 @@ def vision_call(content, config=None, *, allow_event_list=False):
         return token_param_kwargs(name, base, payload)  # OpenAI o-series / gpt-5+ reject max_tokens (#333)
 
     body = build_body(model)
+    native = gemini_transport.is_official_gemini(config.get('provider', ''), base)
     headers = {**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}
 
     def request(payload):
+        if native:
+            url, native_headers, native_body = gemini_transport.request(base, key, payload)
+            return urllib.request.Request(url, data=json.dumps(native_body).encode(), headers=native_headers)
         return urllib.request.Request(base.rstrip('/') + '/chat/completions', data=json.dumps(payload).encode(), headers=headers)
 
     def load(payload):
@@ -205,7 +210,8 @@ def vision_call(content, config=None, *, allow_event_list=False):
         def once(body):
             timeout = clip_job_read_timeout(float(config.get('timeout', 180)))
             with urllib.request.urlopen(request(body), timeout=timeout) as response:
-                return read_completion_response(response)
+                result = read_completion_response(response)
+                return gemini_transport.completion(result) if native else result
 
         try:
             return once(payload)

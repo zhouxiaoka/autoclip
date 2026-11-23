@@ -50,7 +50,7 @@ def test_validation_probes_user_endpoint_and_gates_runtime(provider, succeeds, m
         requested.append((base, protocol))
         return ['model'], None, SimpleNamespace(recommended={}, truncated=False, message_key='')
     monkeypatch.setattr(validation, '_get_models', get_models)
-    monkeypatch.setattr(validation, '_probe', lambda *args: None if succeeds else validation._as_type(UpstreamErrorType.INVALID_KEY))
+    monkeypatch.setattr(validation, '_probe', lambda *args, **kwargs: None if succeeds else validation._as_type(UpstreamErrorType.INVALID_KEY))
     result = validation.validate_connection(connection, 'model')
     assert result.ok is succeeds
     assert requested == [('https://endpoint.example.test/v1', 'compatible')]
