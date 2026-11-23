@@ -116,7 +116,8 @@ def test_studio_1080p60_reencodes_final_file_without_double_text(data_dir, tmp_p
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="本机没有 ffmpeg")
-def test_export_finalizes_atomically_on_project_volume(data_dir, tmp_path, monkeypatch):
+@pytest.mark.parametrize("cleanup_denied", [False, True])
+def test_export_finalizes_atomically_on_project_volume(data_dir, tmp_path, monkeypatch, cleanup_denied):
     import errno
 
     from backend.services import output_branding
@@ -131,6 +132,17 @@ def test_export_finalizes_atomically_on_project_volume(data_dir, tmp_path, monke
     monkeypatch.setattr(export, "load_clip_meta", lambda *_: {
         "id": "1", "start_time": "00:00:00,000", "end_time": "00:00:01,000",
     })
+    if cleanup_denied:
+        temporary_directory = export.tempfile.TemporaryDirectory
+
+        class BusyTemporaryDirectory(temporary_directory):
+            @classmethod
+            def _rmtree(cls, path, ignore_errors=False, repeated=False):
+                if not ignore_errors:
+                    raise PermissionError(errno.EACCES, "temporary directory is busy", path)
+                return super()._rmtree(path, ignore_errors=ignore_errors, repeated=repeated)
+
+        monkeypatch.setattr(export.tempfile, "TemporaryDirectory", BusyTemporaryDirectory)
     replace = output_branding.os.replace
 
     def replace_on_project_volume(source, destination):
