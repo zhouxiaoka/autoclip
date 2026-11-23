@@ -1,6 +1,7 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path')
+const { loadTs } = require('./load-ts.cjs')
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8')
 const share=read('src/features/studio/outputShare.ts')
 const feedback=read('src/features/studio/OutputFeedback.tsx')
@@ -9,6 +10,43 @@ const kit=read('src/features/studio/PublishKit.tsx')
 const download=read('src/features/studio/StudioDownloadLink.tsx')
 const studio=read('src/analytics/studio.ts')
 const workflow=read('src/analytics/workflow.ts')
+
+function clipboardShare(mocks) {
+  return loadTs(path.join(__dirname, '../src/features/studio/outputShare.ts'), {
+    '../../i18n': { t: text => text },
+    ...mocks,
+  })
+}
+
+test('desktop publish copy uses the native clipboard without browser clipboard permission', async () => {
+  const writes = []
+  const { copyText } = clipboardShare({
+    '../../utils/desktopMode': { isDesktopMode: async () => true },
+    '@tauri-apps/plugin-clipboard-manager': { writeText: async text => { writes.push(text) } },
+    __globals: { navigator: {}, document: { createElement: () => { throw new Error('WebView cannot copy') } } },
+  })
+  const caption = 'New short\n\n#剪辑'
+  assert.equal(await copyText(caption), true)
+  assert.deepEqual(writes, [caption])
+  const permissions = JSON.parse(read('../src-tauri/capabilities/default.json')).permissions
+  assert.ok(permissions.includes('clipboard-manager:allow-write-text'))
+})
+
+test('web publishing reports failed copy and removes the fallback input', async () => {
+  const { Window } = await import('happy-dom')
+  const window = new Window()
+  try {
+    window.document.execCommand = () => { throw new Error('copy denied') }
+    const { copyText } = clipboardShare({
+      '../../utils/desktopMode': { isDesktopMode: async () => false },
+      __globals: { navigator: {}, document: window.document },
+    })
+    assert.equal(await copyText('short caption'), false)
+    assert.equal(window.document.querySelector('textarea'), null)
+  } finally {
+    window.close()
+  }
+})
 
 test('one copy action keeps platform post copy without adding a product credit',()=>{
  assert.match(share,/navigator\.clipboard\.writeText/)
