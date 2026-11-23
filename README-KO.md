@@ -211,7 +211,7 @@
 3. **링크와 플랫폼 선택.** 자막이 있는 인터뷰나 팟캐스트로 시작하고 세로 레이아웃을 고르세요. 자막이 없으면 설정에서 Whisper / SenseVoice를 준비하거나 클라우드 전사를 설정하세요.
 4. **확인 후 저장.** 자막·구도·내용의 완결성을 확인하고 게시 패키지를 저장하거나 계정을 연결해 게시하세요. 더 필요하면 대체 후보를 제작하세요.
 
-Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 요구 사항, 첫 실행 안내, 검증 범위는 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md)와 [최신 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)를 참고하세요.
+Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 데스크톱 설치 파일은 현재 미서명 상태여서([#119](https://github.com/zhouxiaoka/autoclip/issues/119)) Windows SmartScreen이나 백신 경고가 뜰 수 있습니다. 모든 패키지는 공개 GitHub Actions(`Desktop Build`)로 빌드되며 Release의 `build-provenance.json`에서 SHA-256을 검증할 수 있습니다(Docker / CLI / 소스 실행도 가능). 요구 사항, 첫 실행 안내, 검증 범위는 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md)와 [최신 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)를 참고하세요.
 
 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md) · [문제 해결](docs/FAQ.en.md)
 

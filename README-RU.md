@@ -211,7 +211,7 @@ Douyin / Xiaohongshu — интервью по умолчанию; TikTok / Reel
 3. **Ссылка и площадка.** Начните с интервью/подкаста с субтитрами и выберите вертикальный макет. Без субтитров подготовьте Whisper / SenseVoice или облачную транскрипцию в настройках.
 4. **Проверьте и сохраните.** Проверьте субтитры, кадр и полноту содержания, затем скачайте комплект или подключите аккаунт для публикации. При необходимости создавайте резервные клипы.
 
-Intel Mac / Linux могут использовать Docker или CLI. Требования, первый запуск и объём проверки — в [руководстве](docs/USER_INSTALLATION_GUIDE.en.md) и [актуальный Release](https://github.com/zhouxiaoka/autoclip/releases/latest).
+Intel Mac / Linux могут использовать Docker или CLI. Десктопные установщики пока без цифровой подписи ([#119](https://github.com/zhouxiaoka/autoclip/issues/119)), поэтому Windows SmartScreen и антивирусы могут показывать предупреждение; все сборки выполняются публично в GitHub Actions (`Desktop Build`), а точные SHA-256 указаны в файле `build-provenance.json` релиза (также доступны Docker, CLI и сборка из исходников). Требования, первый запуск и объём проверки — в [руководстве](docs/USER_INSTALLATION_GUIDE.en.md) и [актуальный Release](https://github.com/zhouxiaoka/autoclip/releases/latest).
 
 [Установка](docs/USER_INSTALLATION_GUIDE.en.md) · [Неполадки](docs/FAQ.en.md)
 

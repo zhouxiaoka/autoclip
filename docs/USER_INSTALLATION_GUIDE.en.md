@@ -24,6 +24,15 @@ Open the `.dmg`, drag AutoClip Desktop into Applications, and launch it from the
 
 Run `x64-setup.exe` and follow the installer. Installation is per user; routine use does not require administrator privileges. If WebView2 is missing, the installer may need internet access to download it. If SmartScreen appears, choose More info → Run anyway. Confirm the installer came from this repository’s Releases.
 
+### Unsigned installers & SHA-256 verification
+
+Desktop installers do not yet carry a Windows code-signing certificate or Apple notarization (tracked in [#119](https://github.com/zhouxiaoka/autoclip/issues/119)) and bundle portable Python + FFmpeg, so fresh releases can trigger Windows SmartScreen, antivirus false positives, or macOS Gatekeeper warnings. Every release installer is built publicly on GitHub Actions (`Desktop Build`) from the tagged source commit and ships with `build-provenance.json` listing the exact commit SHA and installer SHA-256 hashes:
+
+- Windows PowerShell: `Get-FileHash AutoClip.Desktop_<version>_x64-setup.exe -Algorithm SHA256`
+- macOS Terminal: `shasum -a 256 AutoClip.Desktop_<version>_aarch64.dmg`
+
+If you prefer not to run unsigned binaries, you can run AutoClip via Docker (`DOCKER.md`), CLI/MCP (`uvx autoclip-mcp`), or directly from source.
+
 ## First run
 
 1. **Configure a model.** Open Settings and choose Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok, or a local model. For cloud services, enter your own API key and model name, test the connection, and save. Compatible endpoints can set a Base URL. For Ollama / LM Studio, start the model service and load a model first. Subtitle analysis is the default. As of **v1.4.0**, game visual analysis is optional: it needs a multimodal model and an explicit enable of paid visual screening. Saving a model does not authorize every visual call.

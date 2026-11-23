@@ -211,7 +211,7 @@ Coupe et rendu restent sur votre ordinateur. L’analyse cloud envoie les sous-t
 3. **Lien et plateforme.** Essayez une interview ou un podcast sous-titré et choisissez le format vertical. Sinon, préparez Whisper / SenseVoice ou configurez la transcription cloud dans Réglages.
 4. **Vérifiez et enregistrez.** Contrôlez sous-titres, cadrage et contenu, puis téléchargez le kit ou liez un compte pour publier. Générez les alternatives au besoin.
 
-Intel Mac / Linux peuvent utiliser Docker ou CLI. Voir le [guide d’installation](docs/USER_INSTALLATION_GUIDE.en.md) et la [dernière Release](https://github.com/zhouxiaoka/autoclip/releases/latest) pour les prérequis, le premier lancement et le périmètre validé.
+Intel Mac / Linux peuvent utiliser Docker ou CLI. Les installateurs bureau ne sont pas encore signés ([#119](https://github.com/zhouxiaoka/autoclip/issues/119)), ce qui peut déclencher Windows SmartScreen ou un avertissement antivirus ; chaque paquet est compilé publiquement via GitHub Actions (`Desktop Build`) et inclut `build-provenance.json` pour vérifier le SHA-256 (Docker, CLI et exécution depuis les sources restent disponibles). Voir le [guide d’installation](docs/USER_INSTALLATION_GUIDE.en.md) et la [dernière Release](https://github.com/zhouxiaoka/autoclip/releases/latest) pour les prérequis, le premier lancement et le périmètre validé.
 
 [Guide d’installation](docs/USER_INSTALLATION_GUIDE.en.md) · [Dépannage](docs/FAQ.en.md)
 
