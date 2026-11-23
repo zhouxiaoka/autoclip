@@ -25,7 +25,7 @@ FROM events
 WHERE timestamp >= now() - INTERVAL 7 DAY
   AND properties.analytics_environment = 'validation'
   AND properties.app_version = 'VERSION_UNDER_TEST'
-  AND properties.material_origin = 'user'
+  AND properties.material_origin IN ('user', 'obs')
   AND event IN ('studio_generation_finished', 'studio_export_finished',
                 'studio_download_saved', 'studio_download_failed')
 GROUP BY event, outcome, error_code
