@@ -10,6 +10,7 @@ import json
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 
 TEMPLATES = ('editorial', 'street', 'classic')
 REASONS = ('seated_interview', 'street_quick', 'speech', 'default', 'timeout')
@@ -91,12 +92,13 @@ def probe_header(header: bytes, budget: float) -> dict:
     if not header:
         return signals_from_media(None, None, None)
     from backend.utils.ffmpeg_utils import get_ffprobe_path
-    with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp:
-        tmp.write(header[: 1024 * 1024])
-        tmp.flush()
+    with tempfile.TemporaryDirectory() as directory:
+        # ffprobe cannot reopen a delete-on-close NamedTemporaryFile on Windows.
+        sample = Path(directory) / 'sample.mp4'
+        sample.write_bytes(header[: 1024 * 1024])
         try:
             completed = subprocess.run(
-                [get_ffprobe_path(), '-v', 'error', '-show_entries', 'format=duration:stream=width,height,codec_type', '-of', 'json', tmp.name],
+                [get_ffprobe_path(), '-v', 'error', '-show_entries', 'format=duration:stream=width,height,codec_type', '-of', 'json', str(sample)],
                 capture_output=True, timeout=max(0.05, min(budget, BUDGET_SEC)), check=False,
             )
         except subprocess.TimeoutExpired as error:
