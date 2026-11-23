@@ -2394,5 +2394,14 @@
   "obs.review": "Open project",
   "obs.error": "Could not save settings. Check the port, system credential store and model settings.",
   "回看游戏高光": "Review gameplay highlights",
-  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Only short highlights were found. They are saved in the source clips below for further editing."
+  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Only short highlights were found. They are saved in the source clips below for further editing.",
+  "重做": "Redo",
+  "开始重做": "Start redo",
+  "用当前素材生成新版本，已有成片会保留。": "Generate a new version from this footage. Existing clips are kept.",
+  "选择目标平台": "Target platforms",
+  "可重新生成已有平台，或增选其他平台与原画幅。": "Regenerate existing platforms or add more platforms and original aspect.",
+  "更多选项（可选）": "More options (optional)",
+  "已生成": "Generated",
+  "自定义": "Custom",
+  "发布记录": "Publish log"
 }

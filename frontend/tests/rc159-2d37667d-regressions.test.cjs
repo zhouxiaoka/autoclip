@@ -140,7 +140,7 @@ test('submitting remake keeps existing OutputVariantCard intact instead of flipp
   assert.deepEqual(before.variantCards.map(c => c.variant.id), ['v1'])
   assert.deepEqual(before.draftCards.map(c => c.draft.id), [])
   assert.equal(before.sectionCount, 1)
-  assert.ok(before.buttons.some(b => b.children === '再做一版'), 'header remake button should use concise 再做一版')
+  assert.ok(before.buttons.some(b => b.children === '重做'), 'header remake button should use concise 重做')
   assert.ok(!before.buttons.some(b => b.children === '用同一素材再做一个'), 'header should not use verbose 用同一素材再做一个')
 
   // 2. Immediately after submitting remake (auto_start flips to false, no new draft yet):
@@ -156,7 +156,7 @@ test('submitting remake keeps existing OutputVariantCard intact instead of flipp
   assert.deepEqual(afterSubmit.variantCards.map(c => c.variant.id), ['v1'])
   assert.deepEqual(afterSubmit.draftCards.map(c => c.draft.id), [])
   assert.equal(afterSubmit.sectionCount, 1)
-  assert.ok(afterSubmit.buttons.some(b => b.children === '再做一版'), 'header button stays 再做一版 after submitting remake')
+  assert.ok(afterSubmit.buttons.some(b => b.children === '重做'), 'header button stays 重做 after submitting remake')
 
   // 3. After remake creates a new standalone draft d2:
   // Original v1 stays OutputVariantCard; new d2 appends as DraftResultCard (no duplicate d1).

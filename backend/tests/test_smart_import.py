@@ -1092,3 +1092,41 @@ def test_editing_plan_preserves_template_unless_the_field_is_supplied(client, mo
         state = store.read('p1')
         assert state['plan']['overrides'].get('html_template') == expected
         assert state['generation'].get('html_template') == expected
+
+
+def test_platform_redo_preserves_replay_source_and_runs_auto_start(client, source, monkeypatch):
+    from backend.services.studio import analysis_preferences as ap
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='subtitle', allow_visual_screening=False))
+    monkeypatch.setattr(planning, '_subtitle_blockers', lambda *_args, **_kwargs: (False, False))
+    srt = b'1\n00:00:00,000 --> 00:00:05,000\nhello stream\n'
+    imported = client.post('/studio/import', data={'replay_source': 'twitch_file', 'platforms': 'original'},
+                           files={'video': ('replay.mp4', source.read_bytes(), 'video/mp4'), 'subtitle': ('sub.srt', srt, 'text/plain')})
+    assert imported.status_code == 200, imported.text
+    pid = imported.json()['project_id']
+    captured = {}
+    monkeypatch.setattr(jobs, '_submit_production', lambda project_id, run_id, plan, attempt_id=None: captured.update(
+        project_id=project_id, plan=plan, state=store.read(project_id)
+    ))
+    redo = client.put(f'/studio/{pid}/plan', json={
+        'goal': 'auto', 'aspect': None, 'platforms': ['xiaohongshu', 'original'], 'auto_start': True,
+    })
+    assert redo.status_code == 200, redo.text
+    assert captured, store.read(pid)['analysis']
+    assert captured['project_id'] == pid
+    assert captured['plan']['overrides'].get('replay_source') == 'twitch_file'
+    assert captured['state']['generation']['auto_start'] is True
+    assert captured['state']['generation']['requested_platforms'] == ['xiaohongshu', 'original']
+
+
+def test_portrait_confirmed_draft_defaults_to_blur_instead_of_black_bars():
+    data = {'drafts': [], 'attempts': [], 'plan': {}}
+    drafts = [
+        {'id': 'd-fit', 'origin': 'legacy', 'aspect': 'portrait', 'layout': 'fit', 'scenes': [{'id': 's1', 'start': 0, 'end': 10}]},
+        {'id': 'd-orig', 'origin': 'legacy', 'aspect': 'original', 'layout': 'fit', 'scenes': [{'id': 's2', 'start': 0, 'end': 10}]},
+    ]
+    jobs._add_confirmed_drafts(data, drafts)
+    by_id = {d['id']: d for d in data['drafts']}
+    assert by_id['d-fit']['layout'] == 'blur'
+    assert by_id['d-orig']['layout'] == 'fit'

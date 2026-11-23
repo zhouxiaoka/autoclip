@@ -21,7 +21,10 @@ from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 
 def _voiced_frames(video, start, length):
-    import webrtcvad
+    try:
+        import webrtcvad
+    except ImportError:
+        return []
 
     try:
         audio = subprocess.check_output(

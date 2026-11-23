@@ -2713,8 +2713,9 @@ def _add_confirmed_drafts(data, drafts):
         layout = layouts.get(f"{row.get('origin')}:{row.get('aspect')}")
         if layout:
             row['layout'] = layout
-        elif _untracked_subtitle_crop(row):
-            # Timing from subtitles carries no evidence about where the speaker is on screen.
+        elif _untracked_subtitle_crop(row) or (row.get('aspect') == 'portrait' and row.get('layout') == 'fit'):
+            # Timing from subtitles carries no evidence about where the speaker is on screen,
+            # and portrait drafts should fill 9:16 with a blurred backdrop rather than black bars.
             row['layout'] = 'blur'
     attempts.own_drafts(data, rows)  # owned by this confirmation's attempt
     data['drafts'].extend(rows)

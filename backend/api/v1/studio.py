@@ -659,13 +659,17 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             video = jobs.source(project_id)
             call(preflight.check, preflight.ResolvedInputs(video, video.parent / 'input.srt', entry='studio', goal=body.goal))
         previous_config = dict(project.processing_config or {})
+        saved = previous_config.get('smart_import') or {}
+        retained = {}
         if 'html_template' not in body.model_fields_set:
             # Editing another preference must keep the previous template. Explicit null clears it.
-            saved = previous_config.get('smart_import') or {}
-            retained = {key: saved[key] for key in ('html_template', 'recommended_template')
-                        if key not in body.model_fields_set and saved.get(key)}
-            if retained:
-                body = ImportOptions.model_validate({**body.model_dump(), **retained})
+            for key in ('html_template', 'recommended_template'):
+                if key not in body.model_fields_set and saved.get(key):
+                    retained[key] = saved[key]
+        if 'replay_source' not in body.model_fields_set and saved.get('replay_source'):
+            retained['replay_source'] = saved['replay_source']
+        if retained:
+            body = ImportOptions.model_validate({**body.model_dump(), **retained})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
         try:
@@ -873,7 +877,12 @@ def create_draft(project_id: str, body: CreateDraft, db: Session = Depends(get_d
     scenes = [Scene(id=uuid.uuid4().hex, label=by_id[cid].title, start=by_id[cid].start_time, end=by_id[cid].end_time) for cid in body.clip_ids]
     project = project_or_404(project_id, db)
     prefs = (project.processing_config or {}).get('creative', {})
-    draft = Draft(id=uuid.uuid4().hex, title=body.title, scenes=scenes, origin='legacy', language=prefs.get('language', 'source'), aspect=prefs.get('aspect') or 'original')
+    aspect = prefs.get('aspect') or 'original'
+    draft = Draft(
+        id=uuid.uuid4().hex, title=body.title, scenes=scenes, origin='legacy',
+        language=prefs.get('language', 'source'), aspect=aspect,
+        layout='blur' if aspect == 'portrait' else 'fit',
+    )
     call(validate_draft, project_id, draft)
     store.directory(project_id).mkdir(parents=True, exist_ok=True)
     import hashlib

@@ -177,6 +177,7 @@ export interface SourceWindow { start: number; end: number }
 
 export interface ImportOptions {
   auto_start?: boolean
+  platforms?: string[]
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'

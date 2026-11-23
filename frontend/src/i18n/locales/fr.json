@@ -2394,5 +2394,14 @@
   "obs.review": "Ouvrir le projet",
   "obs.error": "Échec de l’enregistrement des réglages. Vérifiez le port, le trousseau système et les réglages du modèle.",
   "回看游戏高光": "Revoir les moments forts du jeu",
-  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Seuls de courts moments forts ont été trouvés. Ils sont enregistrés dans les extraits sources ci-dessous pour le montage."
+  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Seuls de courts moments forts ont été trouvés. Ils sont enregistrés dans les extraits sources ci-dessous pour le montage.",
+  "重做": "Refaire",
+  "开始重做": "Lancer",
+  "用当前素材生成新版本，已有成片会保留。": "Générez une nouvelle version à partir de cette vidéo. Les clips existants sont conservés.",
+  "选择目标平台": "Plateformes cibles",
+  "可重新生成已有平台，或增选其他平台与原画幅。": "Régénérez des plateformes existantes ou ajoutez d’autres plateformes et le format d’origine.",
+  "更多选项（可选）": "Plus d’options (facultatif)",
+  "已生成": "Généré",
+  "自定义": "Personnalisé",
+  "发布记录": "Historique de publication"
 }

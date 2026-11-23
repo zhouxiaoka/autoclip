@@ -2394,5 +2394,14 @@
   "obs.review": "Abrir proyecto",
   "obs.error": "No se pudo guardar. Comprueba el puerto, el almacén de credenciales y los ajustes del modelo.",
   "回看游戏高光": "Revisar los mejores momentos de la partida",
-  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Solo se encontraron momentos destacados breves. Están guardados en la lista de clips de origen de abajo para seguir editando."
+  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Solo se encontraron momentos destacados breves. Están guardados en la lista de clips de origen de abajo para seguir editando.",
+  "重做": "Rehacer",
+  "开始重做": "Iniciar",
+  "用当前素材生成新版本，已有成片会保留。": "Genera una nueva versión con este material. Los clips existentes se conservan.",
+  "选择目标平台": "Plataformas destino",
+  "可重新生成已有平台，或增选其他平台与原画幅。": "Regenera plataformas existentes o añade otras plataformas y formato original.",
+  "更多选项（可选）": "Más opciones (opcional)",
+  "已生成": "Generado",
+  "自定义": "Personalizado",
+  "发布记录": "Historial de publicación"
 }

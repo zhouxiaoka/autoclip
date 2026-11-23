@@ -2394,5 +2394,14 @@
   "obs.review": "Abrir projeto",
   "obs.error": "Não foi possível salvar. Verifique a porta, o cofre de credenciais do sistema e as configurações do modelo.",
   "回看游戏高光": "Rever os melhores momentos do jogo",
-  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Foram encontrados apenas destaques curtos. Eles estão salvos na lista de trechos de origem abaixo para continuar a edição."
+  "只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。": "Foram encontrados apenas destaques curtos. Eles estão salvos na lista de trechos de origem abaixo para continuar a edição.",
+  "重做": "Refazer",
+  "开始重做": "Iniciar",
+  "用当前素材生成新版本，已有成片会保留。": "Gere uma nova versão com este material. Os clipes existentes serão mantidos.",
+  "选择目标平台": "Plataformas de destino",
+  "可重新生成已有平台，或增选其他平台与原画幅。": "Regere plataformas existentes ou adicione outras plataformas e proporção original.",
+  "更多选项（可选）": "Mais opções (opcional)",
+  "已生成": "Gerado",
+  "自定义": "Personalizado",
+  "发布记录": "Histórico de publicação"
 }

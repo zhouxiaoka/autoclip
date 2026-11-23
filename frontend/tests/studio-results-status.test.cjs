@@ -567,7 +567,7 @@ test('manual results count drafts separately and keep source actions reachable, 
 test('a completed manual project offers another version on the results page', () => {
   const buttons = []
   render(false, 'production', 'completed', buttons, [], undefined, undefined, '', '', {drafts: [{id: 'existing'}]})
-  const remake = buttons.find(button => button.children === '再做一版')
+  const remake = buttons.find(button => button.children === '重做')
   assert.ok(remake)
   const before = navigations.length
   remake.onClick()
