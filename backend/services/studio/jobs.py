@@ -938,6 +938,19 @@ def _content_drafts(project_id, plan, video, platforms=()):
         min_sec, label = long_form_minimum(platforms)
         # Pass the minimum only when a long platform asked for it. A two-argument mock
         # still matches every short-platform import.
+        if not min_sec and prefs.goal == 'highlight' and (plan.get('local_evidence') or {}).get('commentary'):
+            from backend.services.studio.game_highlights import subtitle_drafts
+            from backend.services.studio.planning import VISUAL_MAX_SOURCE_SEC
+            selection = []
+            can_frame_review = (
+                (plan.get('analysis_preferences') or {}).get('analysis_mode') == 'auto'
+                and not plan.get('degrade_reason')
+                and (plan.get('source_duration') or 0) <= VISUAL_MAX_SOURCE_SEC
+            )
+            drafts = subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
+                                     auto_frame_review=can_frame_review,
+                                     selection_log=selection)
+            return (drafts, [], {'selection': selection}) if selection else drafts
         clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
         source_duration = float(intelligence._probe(video).get('duration') or 0)
         drafts = _drafts_from_content_clips(
@@ -957,7 +970,10 @@ def _content_drafts(project_id, plan, video, platforms=()):
     if not intelligence.ready():
         raise UserFacingError('请先在设置中配置视觉理解模型')
     try:
-        events, coverage = analyze(video, prefs)
+        if plan.get('content_type') == 'gameplay' and prefs.goal == 'highlight':
+            events, coverage = analyze(video, prefs, gameplay=True)
+        else:
+            events, coverage = analyze(video, prefs)
         drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
         window = (plan.get('overrides') or {}).get('source_window')
         if isinstance(window, dict) and window.get('end') is not None:
@@ -1245,6 +1261,11 @@ def _posts_for(project_id, items, cache):
         lines = [line['text'] for line in packaging.draft_lines(cache['entries'], value['scenes'])]
         title = ((value.get('packaging') or {}).get('title_lines') and ''.join(value['packaging']['title_lines'])) or value.get('title', '')
         posts = post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+        if (cache.get('gameplay') and 'original' in posts
+                and value.get('origin') in ('subtitle-highlight', 'visual-highlight')):
+            # The original-format publish card shares the reviewed clip title.
+            # Platform adaptations keep their own language and length contracts.
+            posts['original']['title'] = post_copy.fallback(value['title'], 'original')['title']
         with completed_lock:
             completed[key] = posts
 
@@ -1266,6 +1287,9 @@ def _posts_for(project_id, items, cache):
 
 def _design_covers(project_id, draft, job_id):
     """Design the cover of every variant this render belongs to; never fails the render."""
+    from backend.services.obs.billing import is_obs
+    if is_obs(project_id):
+        return
     from backend.services.studio import publish_kit
     state = store.read(project_id)
     targets = [item for item in state.get('output_variants', []) if item.get('render_job_id') == job_id]
@@ -1496,6 +1520,7 @@ def _packaging_inputs(project_id, cache):
         meta = state.get('source_meta') or {}
         cache['names'] = f"{meta.get('title', '')} {meta.get('channel', '')}"
         cache['burned_language'] = (state.get('generation') or {}).get('burned_caption_language')
+        cache['gameplay'] = (state.get('plan') or {}).get('content_type') == 'gameplay'
 
 
 def _prefetch_packaging(project_id, items, burned, cache):
@@ -1612,7 +1637,7 @@ def _auto_generate(project_id, plan):
     skipped = []
     try:
         video = source(project_id)
-        derived_drafts, variants, events = _initial_derive(project_id, plan, video, generation, platforms, branding, skipped)
+        derived_drafts, variants, events, coverage = _initial_derive(project_id, plan, video, generation, platforms, branding, skipped)
 
         def persist(data):
             if not _still_this_run(data, attempt_id, run_id):
@@ -1620,12 +1645,18 @@ def _auto_generate(project_id, plan):
             data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
             if events:
                 data['events'] = events
+            if coverage and 'selection' in coverage:
+                data['generation']['game_selection'] = coverage
+            if not variants:
+                return
             attempts.own_outputs(data, variants)  # produced by this run's attempt and its plan
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
             from backend.services.studio.failure_identity import carry_screening
             data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), **carry_screening(data.get('analysis'), data.get('generation')), **_carried_progress(data.get('analysis')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
+        if not variants:
+            raise UserFacingError('只找到适合作为素材的短高光，已保存在下方片段列表中，可继续剪辑。')
         _dispatch_pending_variants(project_id)
     except Exception as error:
         with suspend_clip_job_budget():
@@ -1666,6 +1697,15 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
         base_drafts, events, coverage = produced
     else:
         base_drafts, events, coverage = produced, [], None
+    if (plan.get('content_type') == 'gameplay' and (plan.get('preferences') or {}).get('goal') == 'highlight'
+            and base_drafts and all(d.get('origin') in ('visual-highlight', 'subtitle-highlight')
+                                    and len(d['scenes']) == 1 for d in base_drafts)):
+        from backend.services.studio.game_edits import assemble_game_edits
+        base_drafts, reviewed = assemble_game_edits(base_drafts, video, plan)
+        if not events:
+            events = reviewed
+        if not base_drafts:
+            return [], [], events, coverage
     if min_sec and duration is not None:
         base_drafts = _ensure_long_coverage(base_drafts, duration, min_sec)
     variants = []
@@ -1743,7 +1783,7 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
     _queue_best_first(variants)
     if not variants:
         raise UserFacingError(sentence('no_complete_version'))
-    return derived_drafts, variants, events
+    return derived_drafts, variants, events, coverage
 
 
 
@@ -2345,9 +2385,12 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'created_at': store.now(),
         }
         state.setdefault('output_variants', [])
+        if getattr(options, 'replay_source', None) == 'obs':
+            state['material_origin'] = 'obs'
         from backend.services.studio.failure_identity import SCREENING_KEY, frozen, phase_identity
         screening = phase_identity('screening')
-        state['analysis'] = {**screening, **({SCREENING_KEY: frozen(screening)} if screening else {}), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now(), **({'fresh': True} if (retry or {}).get('fresh') else {})}
+        preparing_media = bool(url or getattr(options, 'replay_source', None) in ('twitch_archive', 'obs'))
+        state['analysis'] = {**screening, **({SCREENING_KEY: frozen(screening)} if screening else {}), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if preparing_media else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now(), **({'fresh': True} if (retry or {}).get('fresh') else {})}
         state['generation'].update(store.attempt_identity(state['analysis']), **({SCREENING_KEY: frozen(screening)} if screening else {}))
         # #419: automatic output is one generation attempt from this run; a manual retry opens the production
         # attempt now (bound at confirmation) so its retry_of survives the screening step.
@@ -2395,6 +2438,90 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
         return state['analysis']['run_id']
 
 
+def _pending_twitch_replay(project_id):
+    """Return pending Twitch replay download config when raw media has not landed yet."""
+    try:
+        source(project_id)
+        return None
+    except FileNotFoundError:
+        pass
+    from backend.core.database import SessionLocal
+    from backend.models.project import Project
+    with SessionLocal() as db:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        cfg = (project.processing_config or {}) if project else {}
+        replay = cfg.get('twitch_replay')
+        return replay if isinstance(replay, dict) and replay.get('video_id') else None
+
+
+def _download_twitch_replay(project_id, twitch_replay, import_options=None):
+    """Download and verify a selected Twitch VOD asynchronously with live progress and cancellation."""
+    from backend.core import project_cancellation
+    from backend.core.database import SessionLocal
+    from backend.models.project import Project
+    from backend.services import twitch_replay_media
+    from backend.utils.thumbnail_generator import generate_project_thumbnail
+
+    folder = store.directory(project_id) / 'raw'
+    folder.mkdir(parents=True, exist_ok=True)
+    progress = download_progress_hook(project_id)
+    store.change(project_id, lambda data: data['analysis'].update(message='正在下载 Twitch 回放'))
+    try:
+        video = twitch_replay_media.download_for_project(
+            twitch_replay['video_id'],
+            twitch_replay.get('duration'),
+            folder,
+            progress_hook=progress,
+            checkpoint=lambda: project_cancellation.checkpoint(project_id),
+        )
+    except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
+        raise
+    except Exception:
+        raise UserFacingError('暂时无法下载所选 Twitch 回放。请稍后重试，或从 Twitch 后台下载录像后手动导入。') from None
+    _classify_landed_source(video, import_options)
+    with SessionLocal() as db:
+        p = db.query(Project).filter(Project.id == project_id).first()
+        if not p:
+            raise FileNotFoundError('项目已删除')
+        try:
+            thumbnail = generate_project_thumbnail(project_id, video)
+        except Exception:  # noqa: BLE001
+            logger.warning('Project thumbnail generation failed', exc_info=True)
+            thumbnail = None
+        p.video_path = str(video)
+        p.thumbnail = thumbnail
+        db.commit()
+
+
+def _pending_obs_replay(project_id):
+    """Return pending manual OBS replay config when raw media has not been staged yet."""
+    try:
+        source(project_id)
+        return None
+    except FileNotFoundError:
+        pass
+    from backend.core.database import SessionLocal
+    from backend.models.project import Project
+    with SessionLocal() as db:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        cfg = (project.processing_config or {}) if project else {}
+        replay = cfg.get('obs_manual_replay')
+        return replay if isinstance(replay, dict) and replay.get('capture_id') else None
+
+
+def _prepare_obs_replay(project_id, obs_replay):
+    """Stage, verify, and privacy-trim a manually selected OBS replay asynchronously."""
+    from backend.core import project_cancellation
+    from backend.services.obs import worker as obs_worker
+
+    store.change(project_id, lambda data: data['analysis'].update(message='正在准备 OBS 录像'))
+    obs_worker.prepare_manual_recording(
+        project_id,
+        obs_replay,
+        checkpoint=lambda: project_cancellation.checkpoint(project_id),
+    )
+
+
 @_tracked('screening')
 def _inspect(project_id, options, url, browser):
     started = monotonic()
@@ -2404,6 +2531,12 @@ def _inspect(project_id, options, url, browser):
         if url:
             with llm_usage.timed('download'):
                 download(project_id, url, browser, options)
+        elif (twitch_replay := _pending_twitch_replay(project_id)):
+            with llm_usage.timed('download'):
+                _download_twitch_replay(project_id, twitch_replay, options)
+        elif (obs_replay := _pending_obs_replay(project_id)):
+            with llm_usage.timed('download'):
+                _prepare_obs_replay(project_id, obs_replay)
         store.change(project_id, lambda data:(data['analysis'].pop('percent', None), data['analysis'].update(message='快速判断适合的制作类型')))
         plan = recommend(source(project_id), options)
         try:
@@ -2618,6 +2751,31 @@ def _produce_selected(project_id, plan, *, restore_source=None):
             try:
                 prefs = Preferences.model_validate(plan.get('goal_preferences', {}).get(goal) or {**plan['confirmed_preferences'], 'goal':goal})
                 stage('制作' + labels[goal])
+                if (goal == 'highlight' and plan.get('confirmed_analysis') == 'subtitle'
+                        and (plan.get('local_evidence') or {}).get('commentary')):
+                    from backend.services.studio.game_highlights import subtitle_drafts
+                    from backend.services.studio.planning import VISUAL_MAX_SOURCE_SEC
+                    can_frame_review = (
+                        (plan.get('analysis_preferences') or {}).get('analysis_mode') == 'auto'
+                        and not plan.get('degrade_reason')
+                        and (plan.get('source_duration') or 0) <= VISUAL_MAX_SOURCE_SEC
+                    )
+                    drafts = subtitle_drafts(video, prefs, plan['source_duration'], instruction, auto_frame_review=can_frame_review)
+                    reviewed_events = []
+                    if (plan.get('content_type') == 'gameplay' and drafts
+                            and all(d.get('origin') == 'subtitle-highlight' and len(d.get('scenes') or []) == 1 for d in drafts)):
+                        from backend.services.studio.game_edits import assemble_game_edits
+                        assembled, reviewed_events = assemble_game_edits(drafts, video, {**plan, 'preferences': prefs.model_dump()})
+                        if assembled:
+                            drafts = assembled
+                    def _store_commentary(data, drafts=drafts, reviewed_events=reviewed_events):
+                        if reviewed_events:
+                            data['events'] = reviewed_events
+                        _add_confirmed_drafts(data, drafts)
+                    store.change(project_id, _store_commentary)
+                    result_count += len(drafts)
+                    succeeded_goals.append(goal)
+                    continue
                 if goal == 'content' or plan.get('confirmed_analysis', 'subtitle') == 'subtitle':
                     if subtitle_error is not None:
                         raise subtitle_error
@@ -2662,7 +2820,10 @@ def _produce_selected(project_id, plan, *, restore_source=None):
                     raise visual_error
                 if events is None:
                     try:
-                        events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)
+                        if plan.get('content_type') == 'gameplay' and 'highlight' in plan['selected_goals']:
+                            events, coverage = analyze(video, prefs, stage, instruction, gameplay=True)
+                        else:
+                            events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)
                     except Exception as error:
                         # Both visual goals share one attempt, including its failure.
                         # A second paid scan requires a new explicit user confirmation.
@@ -2670,6 +2831,12 @@ def _produce_selected(project_id, plan, *, restore_source=None):
                         raise
                     store.change(project_id, lambda data:data.update(events=[e.model_dump() for e in events]))
                 drafts = make_drafts(events, prefs, instruction, source_duration=intelligence._probe(video).get('duration'))
+                if (goal == 'highlight' and plan.get('content_type') == 'gameplay' and drafts
+                        and all(d.get('origin') == 'visual-highlight' and len(d.get('scenes') or []) == 1 for d in drafts)):
+                    from backend.services.studio.game_edits import assemble_game_edits
+                    assembled, _ = assemble_game_edits(drafts, video, {**plan, 'preferences': prefs.model_dump()})
+                    if assembled:
+                        drafts = assembled
                 if (video.parent / 'input.srt').exists():
                     for draft in drafts:
                         draft['subtitles'] = True
