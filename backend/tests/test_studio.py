@@ -120,6 +120,35 @@ def test_render_two_scenes_reordered_muted_and_versioned(root,source):
     assert progress==[50,90]
     assert not list(out.parent.glob('*.part.mp4'))
 
+
+def test_render_original_aspect_keeps_rotated_phone_video_portrait(root, source):
+    from backend.services.studio.render import render_draft
+
+    rotated = source.with_name('phone.mp4')
+    result = subprocess.run([
+        'ffmpeg', '-v', 'error', '-display_rotation:v:0', '90',
+        '-i', str(source), '-c', 'copy', '-y', str(rotated),
+    ], capture_output=True)
+    if b'Unrecognized option' in result.stderr:
+        # FFmpeg before 6 can write a display matrix through the rotate tag.
+        subprocess.run([
+            'ffmpeg', '-v', 'error', '-i', str(source), '-c', 'copy',
+            '-metadata:s:v:0', 'rotate=90', '-y', str(rotated),
+        ], check=True)
+    else:
+        result.check_returncode()
+
+    probe = json.loads(subprocess.check_output([
+        'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream_side_data=rotation', '-of', 'json', str(rotated),
+    ]))
+    assert abs(probe['streams'][0]['side_data_list'][0]['rotation']) == 90
+
+    result = render_draft('p1', rotated, draft(original_audio=False), 'phone', lambda _: None)
+
+    assert (result['width'], result['height']) == (180, 320)
+
+
 def test_translation_is_applied_and_warning_for_missing_srt(root,source,monkeypatch):
     from backend.services.studio import render
     monkeypatch.setattr(render,'text_json',lambda *args: {'title':'A new opening','subtitles':[]})

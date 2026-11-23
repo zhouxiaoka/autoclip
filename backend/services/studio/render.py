@@ -216,7 +216,11 @@ def _decoded_video_seconds(path, fps, expected) -> float:
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
-    w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
+    source_w, source_h = info.get('width'), info.get('height')
+    # FFmpeg auto-rotates before applying the layout filter.
+    if info.get('rotation', 0) % 180 == 90:
+        source_w, source_h = source_h, source_w
+    w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (source_w, source_h))
     if not w or not h:
         raise UserFacingError('无法读取原视频尺寸')
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
