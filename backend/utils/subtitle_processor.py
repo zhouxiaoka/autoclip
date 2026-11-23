@@ -32,7 +32,7 @@ class SubtitleProcessor:
             return []
         
         try:
-            subs = pysrt.open(str(srt_path), encoding='utf-8')
+            subs = pysrt.open(str(srt_path))
             word_level_data = []
             from backend.utils.word_timing import load_word_timing
             aligned = load_word_timing(srt_path)

@@ -54,3 +54,12 @@ def test_curly_quotes_act_as_separators():
     """回归测试：弯单/双引号必须作为分隔符生效（旧实现中单引号会丢失）。"""
     assert _split("前“引用”后") == ["前", "引用", "后"]
     assert _split("前‘引用’后") == ["前", "引用", "后"]
+
+
+def test_word_editor_reads_utf16_subtitles(tmp_path):
+    srt = tmp_path / 'input.srt'
+    srt.write_text('1\n00:00:00,000 --> 00:00:03,250\n今日は good day\n', encoding='utf-16')
+
+    cue, = SubtitleProcessor().parse_srt_to_word_level(srt)
+    assert (cue['startTime'], cue['endTime'], cue['text']) == (0, 3.25, '今日は good day')
+    assert [word['text'] for word in cue['words']] == ['今日は', 'good', 'day']

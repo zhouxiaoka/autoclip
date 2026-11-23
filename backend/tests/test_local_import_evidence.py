@@ -13,8 +13,12 @@ def video(tmp_path,monkeypatch):
     return tmp_path/'video.mp4'
 
 
-def test_subtitle_evidence_recommends_without_claiming_content_type(video):
-    video.with_name('input.srt').write_text('1\n00:00:00,000 --> 00:00:04,000\nFirst\n\n2\n00:00:03,000 --> 00:00:07,000\nSecond\n\n3\n00:00:08,000 --> 00:00:10,000\nThird\n')
+@pytest.mark.parametrize('encoding', ['utf-8', 'utf-8-sig', 'utf-16', 'utf-32'])
+def test_subtitle_evidence_recommends_without_claiming_content_type(video, encoding):
+    video.with_name('input.srt').write_text(
+        '1\n00:00:00,000 --> 00:00:04,000\nFirst\n\n2\n00:00:03,000 --> 00:00:07,000\nSecond\n\n3\n00:00:08,000 --> 00:00:10,000\nThird\n',
+        encoding=encoding,
+    )
     result=planning.recommend(video,ImportOptions())
     assert result['suggested_goals']==['content','highlight']
     assert result['local_evidence']['covered_seconds']==9
