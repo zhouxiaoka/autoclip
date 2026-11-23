@@ -750,7 +750,15 @@ class GeminiProvider(LLMProvider):
             full_input = self._build_full_input(prompt, input_data)
 
             model = self.request_model()
-            payload = {'model': model, 'messages': [{'role': 'user', 'content': full_input}], **kwargs}
+            payload = {
+                'model': model,
+                'messages': [{'role': 'user', 'content': full_input}],
+                'temperature': kwargs.get('temperature'),
+                'top_p': kwargs.get('top_p'),
+                'max_tokens': kwargs.get('max_tokens'),
+                'max_completion_tokens': kwargs.get('max_completion_tokens'),
+                'response_format': kwargs.get('response_format'),
+            }
             url, headers, body = gemini_transport.request(self.base_url, self.api_key, payload)
             import requests
             from backend.core.job_budget import clip_job_read_timeout

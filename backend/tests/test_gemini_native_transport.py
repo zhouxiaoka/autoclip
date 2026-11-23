@@ -7,12 +7,18 @@ from urllib.parse import urlsplit, parse_qs
 import httpx
 import pytest
 import requests
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from backend.core import image_providers
+from backend.api.v1 import settings as settings_api
+from backend.core import image_providers, llm_retry
 from backend.core.llm_manager import LLMManager
-from backend.core.upstream_errors import classify_upstream_error
+from backend.core.llm_providers import GeminiProvider
+from backend.core.upstream_errors import classify_upstream_error, http_error_parts
+from backend.pipeline import concurrency
 from backend.services import ai_model_settings as ai, provider_validation as pv
 from backend.services.studio import intelligence, vision_settings
+from backend.services.studio.failure_identity import connection_identity
 
 BASE = 'https://generativelanguage.googleapis.com/v1beta/openai'
 KEY = 'AQ.test-key'
@@ -39,7 +45,7 @@ def wire(monkeypatch):
             chunk = {'choices': [{'delta': {'content': TEXT}, 'finish_reason': 'stop'}]}
             return httpx.Response(200, text=f'data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n',
                                   headers={'content-type': 'text/event-stream'})
-        return httpx.Response(state['status'], json=state['body'])
+        return httpx.Response(state['status'], json=state['body'], headers=state.get('headers'))
 
     monkeypatch.setattr(httpx.HTTPTransport, 'handle_request', lambda self, request: httpx_send(request))
     monkeypatch.setattr('backend.core.llm_providers.make_openai_http_client',
@@ -49,6 +55,7 @@ def wire(monkeypatch):
         record(request.url, request.headers, json.loads(request.body))
         response = requests.Response()
         response.status_code = state['status']
+        response.headers.update(state.get('headers', {}))
         response.raw = io.BytesIO(json.dumps(state['body']).encode())
         response.url = request.url
         response.request = request
@@ -139,12 +146,97 @@ def test_nonofficial_endpoint_keeps_bearer_chat(provider, base, wire):
 
 
 def test_settings_vision_uses_tested_connection_provider(wire, configured):
-    from backend.services.studio.failure_identity import connection_identity
     connection = configured.connections[0]
+    identity = connection_identity(connection, MODEL)
+    assert identity['provider'] == 'gemini'
     body = vision_settings.VisionSettingsInput(mode='custom', base_url=BASE, api_key=KEY, model=MODEL)
-    with vision_settings.testing_identity(connection_identity(connection, MODEL)):
+    with vision_settings.testing_identity(identity):
         assert vision_settings.test(body)['ok']
     assert_native(wire[0])
+
+
+@pytest.mark.parametrize('token_key', ['max_tokens', 'max_completion_tokens'])
+def test_native_manager_honors_json_mode_and_token_limit(token_key, wire, configured, tmp_path):
+    manager = LLMManager(tmp_path / 'settings.json')
+    assert manager.call_with_retry('sample', **{token_key: 123},
+                                   response_format={'type': 'json_object'}) == TEXT
+    assert_native(wire[0], json_mode=True)
+    assert wire[0][0][2]['generationConfig']['maxOutputTokens'] == 123
+
+
+def test_native_provider_ignores_unrelated_payload_options(wire):
+    provider = GeminiProvider(api_key=KEY, model_name=MODEL, base_url=BASE)
+    assert provider.call('sample', model='injected-model',
+                         messages=[{'role': 'user', 'content': 'injected-message'}],
+                         api_key='injected-key', headers={'Authorization': 'Bearer injected'},
+                         extra_body={'model': 'injected-model'}, stream=True,
+                         temperature=0.2, top_p=0.9, max_tokens=123).content == TEXT
+    assert_native(wire[0])
+    body = wire[0][0][2]
+    assert body == {
+        'contents': [{'role': 'user', 'parts': [{'text': 'sample'}]}],
+        'generationConfig': {'temperature': 0.2, 'topP': 0.9, 'maxOutputTokens': 123},
+    }
+
+
+@pytest.mark.parametrize('status', [200, 400])
+def test_legacy_gemini_test_api_uses_default_native_root(status, wire):
+    if status == 400:
+        wire[1].update(status=status, body={'error': {'status': 'INVALID_ARGUMENT',
+            'details': [{'reason': 'API_KEY_INVALID'}]}})
+    app = FastAPI()
+    app.include_router(settings_api.router)
+    with TestClient(app) as client:
+        response = client.post('/settings/test-api', json={
+            'provider': 'gemini', 'api_key': KEY, 'model': MODEL})
+    assert response.status_code == 200
+    assert response.json()['success'] == (status == 200)
+    assert KEY not in response.text
+    assert_native(wire[0])
+
+
+@pytest.mark.parametrize('provider', ['gemini', 'compatible'])
+@pytest.mark.parametrize('status,code,detail,expected,attempts', [
+    (400, 'INVALID_ARGUMENT', {'reason': 'API_KEY_INVALID'}, 'invalid_key', 1),
+    (429, 'RESOURCE_EXHAUSTED', {}, 'rate_limited', 3),
+    (429, 'RESOURCE_EXHAUSTED', {'violations': [{
+        'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}]}, 'insufficient_quota', 1),
+    (503, 'UNAVAILABLE', {}, 'upstream_unavailable', 3),
+])
+def test_manager_native_and_openai_retry_policy(provider, status, code, detail, expected, attempts,
+                                               wire, configured, tmp_path, monkeypatch):
+    calls, state = wire
+    body = {'error': {'code': status, 'status': code, 'message': 'fixture failure',
+                      'details': [detail] if detail else []}}
+    state.update(status=status, body=body, headers={'Retry-After': '7'})
+    if provider == 'compatible':
+        configured.connections[0] = configured.connections[0].model_copy(update={'provider': provider})
+    manager = LLMManager(tmp_path / 'settings.json')
+    if provider == 'compatible':
+        # Isolate the manager's retries from SDK-internal resends.
+        manager.current_provider.client = manager.current_provider.client.with_options(max_retries=0)
+    sleeps = []
+    monkeypatch.setattr('time.sleep', sleeps.append)
+    concurrency.reset_limiter()
+    try:
+        with pytest.raises(RuntimeError) as caught:
+            manager.call_with_retry('sample')
+    finally:
+        concurrency.reset_limiter()
+    actual_status, actual_body = http_error_parts(caught.value)
+    assert actual_status == status
+    assert actual_body.get('error', actual_body) == body['error']
+    info, retry_status, retry_after = llm_retry.classify_for_retry(caught.value)
+    assert info.error_type.value == expected
+    assert info.retryable == (attempts > 1)
+    assert retry_status == status and retry_after == 7
+    assert len(calls) == attempts
+    assert sleeps == [7.0] * (attempts - 1)
+    if provider == 'gemini':
+        assert_native(calls)
+    else:
+        assert all(url.path.endswith('/chat/completions') and
+                   headers['authorization'] == f'Bearer {KEY}' for url, headers, _ in calls)
 
 
 @pytest.mark.parametrize('route', ['text', 'vision', 'ocr'])

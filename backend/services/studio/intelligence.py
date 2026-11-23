@@ -1,4 +1,4 @@
-"""Bounded still-frame analysis through an OpenAI-compatible vision endpoint."""
+"""Bounded still-frame analysis through Gemini-native or OpenAI-compatible endpoints."""
 from backend.core.failure_codes import UserFacingError
 from backend.core.llm_stream import StreamError
 from backend.core import gemini_transport
