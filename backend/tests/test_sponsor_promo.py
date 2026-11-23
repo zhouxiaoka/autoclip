@@ -806,3 +806,32 @@ def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tm
     )
     assert client.refresh_sync() == "sponsors"
     assert client.view()["source"] == "bundled"
+
+
+def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_path, profiles):
+    assert sponsor_promo.builtin_sponsor_hosts()["cometapi"] == "www.cometapi.com"
+    private, public = _keys()
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    good = _payload(sequence=30, sponsors=[
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
+        {
+            "id": "cometapi",
+            "order": 2,
+            "status": "healthy",
+            "new_user_default": True,
+            "locales": overseas,
+            "register_url": "https://www.cometapi.com/?ref=kris",
+        },
+    ])
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, good))
+    assert client.refresh_sync() == "ok"
+    assert client.view(locale="en")["choices"] == ["cometapi", "other"]
+    assert client.view(locale="en")["default"] == "cometapi"
+    assert client.view(locale="en")["register_urls"] == {"cometapi": "https://www.cometapi.com/?ref=kris"}
+    assert client.view(locale="zh")["choices"] == ["apimart", "other"]
+
+    bad = _payload(sequence=31, sponsors=[
+        {"id": "cometapi", "order": 1, "status": "healthy", "register_url": "https://evil.example/?ref=kris"},
+    ])
+    bad_client = _client(tmp_path / "bad", private, public, lambda url, timeout, max_bytes: _envelope(private, bad))
+    assert bad_client.refresh_sync() == "sponsors"
