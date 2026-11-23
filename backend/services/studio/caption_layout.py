@@ -4,20 +4,24 @@ Rows are cut into clauses at punctuation, each clause gets its own line when it 
 are paired into screens; so line breaks land on punctuation whenever the text allows. A clause
 wider than one line is cut at a natural joint (after 的/了/着…, before 和/在/但…, or a space),
 never through the middle when a better joint exists. Screen time is shared by displayed width.
-Widths count a CJK character as 1 and Latin as 0.55.
+Widths count a full-width character (Han, kana) as 1 and Latin as 0.55.
 """
 from __future__ import annotations
 
 import re
 from itertools import pairwise
 
-CJK = re.compile(r'[　-〿㐀-鿿＀-￯]')
+# CJK punctuation, kana, Han and full-width forms: one full-width cell each, written without
+# spaces, so a line may break between any two of them and pieces join without a space.
+CJK = re.compile(r'[\u3000-\u30ff\u31f0-\u31ff\u3400-\u9fff\uff00-\uffef]')
 CLAUSE = re.compile(r'[^，。！？!?；;、,：:]+[，。！？!?；;、,：:]*')
 AFTER = set('的了着过地得们吗呢吧啊')
 BEFORE = set('和与及在把被就而但又还也都让对从向为')
 # 避头尾: a line does not open on a closer, or end on an opener.
 NO_LINE_START = frozenset('，。！？、；：,.!?;:」』）)]}〉》】')
 NO_LINE_END = frozenset('「『（([〈《【')
+# Japanese 行頭禁則: small kana, the long-vowel mark and iteration marks stay with the kana before them.
+_KANA_NO_LINE_START = frozenset('ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶーゝゞヽヾ々')
 # English breaks avoid leaving a function word alone at the end of a line.
 _FUNCTION = frozenset({'a', 'an', 'the', 'of', 'to', 'and', 'or', 'in', 'on', 'for', 'at', 'by', 'as', 'from'})
 _SPEAKER_MARK = re.compile(r'^(?:>>\s*)+')
@@ -75,7 +79,7 @@ def _cut(text: str, limit: float) -> int:
         if acc > limit:
             break
         nxt = text[i + 1]
-        if nxt in NO_LINE_START or ch in NO_LINE_END:
+        if nxt in NO_LINE_START or nxt in _KANA_NO_LINE_START or ch in NO_LINE_END:
             continue
         if ch == ' ':
             rank = 5 if _word_before(text, i) in _FUNCTION else 0
