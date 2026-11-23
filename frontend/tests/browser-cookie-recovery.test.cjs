@@ -9,7 +9,7 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const { loadTs } = require('./load-ts.cjs')
 
 const studio = path.resolve(__dirname, '../src/features/studio')
-const langs = ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']
+const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
 const catalogs = Object.fromEntries(langs.map(lang => [lang, require('../src/i18n/locales/' + lang + '.json')]))
 const recovery = loadTs(path.join(studio, 'browserCookieRecovery.ts'))
 

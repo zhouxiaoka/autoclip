@@ -158,7 +158,7 @@ test('by_locale slices are validated against trusted hosts and out_of_service ru
     choices: ['other'],
     default: 'other',
     by_locale: {
-      de: { choices: ['other'], default: 'other', register_urls: {} },
+      nl: { choices: ['other'], default: 'other', register_urls: {} },
     },
   }), null)
 })

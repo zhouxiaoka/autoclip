@@ -9,6 +9,7 @@ SURFACES = (
     'skills/autoclip/SKILL.md',
     'docs/CLI_AND_MCP.md',
     'README.md',
+    'README-ZH-TW.md',
     'README-EN.md',
     'README-JA.md',
     'README-KO.md',
@@ -16,7 +17,10 @@ SURFACES = (
     'README-PT.md',
     'README-RU.md',
     'README-FR.md',
+    'README-ID.md',
     'README-TR.md',
+    'README-VI.md',
+    'README-DE.md',
 )
 RELEASE_URL = re.compile(r'releases/(?:tag|download)/v\d+\.\d+\.\d+')
 WHEEL_PIN = re.compile(r'autoclip-\d+\.\d+\.\d+-')

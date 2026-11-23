@@ -504,7 +504,7 @@ def test_fetch_list_http_endpoint(isolated, monkeypatch):
 
 @pytest.mark.stdlib_only
 def test_fetch_list_copy_exists_in_all_locales():
-    langs = ("zh", "en", "ja", "ko", "es", "pt", "ru", "fr")
+    langs = ("zh", "zh-TW", "en", "ja", "ko", "es", "pt", "ru", "fr", "id", "tr", "vi", "de")
     keys = (
         FETCH_LIST_FAILED, FETCH_LIST_UPDATED, FETCH_LIST_NO_OVERLAP,
         FETCH_LIST_TRUNCATED, "settings.providers.fetch_list",

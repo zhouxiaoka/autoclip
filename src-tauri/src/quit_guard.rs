@@ -87,12 +87,17 @@ pub struct AppQuitMenuItem(pub MenuItem<tauri::Wry>);
 fn app_quit_label(language: &str) -> &'static str {
     match language {
         "zh" => "退出 AutoClip",
+        "zh-TW" => "結束 AutoClip",
         "ja" => "AutoClip を終了",
         "ko" => "AutoClip 종료",
         "es" => "Salir de AutoClip",
         "pt" => "Sair do AutoClip",
         "ru" => "Выйти из AutoClip",
         "fr" => "Quitter AutoClip",
+        "id" => "Keluar dari AutoClip",
+        "tr" => "AutoClip'ten Çık",
+        "vi" => "Thoát AutoClip",
+        "de" => "AutoClip beenden",
         _ => "Quit AutoClip",
     }
 }
