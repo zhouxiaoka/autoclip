@@ -572,6 +572,8 @@ def wait_for_status(request_id: str, timeout_sec: float = 600, poll_sec: float =
             if last is not None and request_timeout < STATUS_REQUEST_TIMEOUT:
                 return last
             raise UploadPostError("查询发布状态超时") from error
+        except requests.RequestException as error:
+            raise UploadPostError(f"查询发布状态失败（{type(error).__name__}）") from error
         if on_update:
             on_update(last)
         remaining = deadline - time.monotonic()
