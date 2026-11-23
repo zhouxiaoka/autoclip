@@ -215,7 +215,7 @@ def test_packaged_cjk_loads_bundled_font_in_real_ffmpeg(tmp_path):
                       cues=[{'start':0, 'end':1, 'text':'字幕应显示中文'}])
     ass = tmp_path / 'cjk.ass'
     ass.write_text(pr.scene_ass(value, [scene], 0), encoding='utf-8')
-    graph = f"ass='{_escape_filter_path(ass)}':fontsdir='{_escape_filter_path(pr.FONT_DIR)}'"
+    graph = f"ass={_escape_filter_path(ass)}:fontsdir={_escape_filter_path(pr.FONT_DIR)}"
     result = subprocess.run([ffmpeg, '-v', 'verbose', '-f', 'lavfi', '-i',
                              'color=black:s=1080x1920:d=1', '-vf', graph,
                              '-frames:v', '1', '-f', 'null', '-'],

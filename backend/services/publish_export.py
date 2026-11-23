@@ -134,7 +134,9 @@ def resolve_cjk_font() -> Optional[Path]:
 
 
 def _escape_filter_path(p: Path) -> str:
-    return str(p.resolve()).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+    # The filtergraph parser unquotes first, then the filter option parser handles colons and backslashes.
+    option = p.resolve().as_posix().replace("\\", r"\\").replace(":", r"\:").replace("'", r"\'")
+    return "'" + option.replace("'", r"'\''") + "'"
 
 
 def slice_srt(entries: Sequence[Dict[str, Any]], start: float, end: float, line_limit: Optional[float] = None) -> str:
@@ -263,13 +265,13 @@ def _build_filter(req: ExportRequest, spec: Dict[str, Any], srt_path: Optional[P
         from backend.services.studio.packaging_render import FONT_DIR
         nxt = "sub"
         parts.append(
-            f"[{last}]subtitles='{_escape_filter_path(srt_path)}':fontsdir='{_escape_filter_path(FONT_DIR)}':force_style='{style}'[{nxt}]"
+            f"[{last}]subtitles={_escape_filter_path(srt_path)}:fontsdir={_escape_filter_path(FONT_DIR)}:force_style='{style}'[{nxt}]"
         )
         last = nxt
     if title_path is not None and font is not None:
         nxt = "out"
         parts.append(
-            f"[{last}]drawtext=fontfile='{_escape_filter_path(font)}':textfile='{_escape_filter_path(title_path)}'"
+            f"[{last}]drawtext=fontfile={_escape_filter_path(font)}:textfile={_escape_filter_path(title_path)}"
             f":reload=0:x=(w-text_w)/2:y=h*0.08:fontsize=42:fontcolor=white:borderw=3:bordercolor=black"
             f":box=1:boxcolor=black@0.45:boxborderw=18:enable='lt(t\\,4)'[{nxt}]"
         )
