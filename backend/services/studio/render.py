@@ -13,7 +13,7 @@ from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
 from backend.services.studio import audio
 from backend.services.studio.store import directory
-from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS, STYLE_IDS
+from backend.services.studio.templates import registry as template_registry
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 from backend.core import project_cancellation
@@ -260,12 +260,14 @@ def _encode_draft(
     packaged = draft.packaging is not None
     overlay_path = None
     overlay_grade = ''
+    overlay_spec = None
     overlay_job = None
-    if html_template in HTML_TEMPLATE_IDS:
+    if template_registry.is_html_template(html_template):
         from backend.services.studio import packaging_html
         from backend.services.studio.templates.registry import TemplateRegistryError, get
         try:
-            overlay_grade = get(html_template).base.grade or ''
+            overlay_spec = get(html_template)
+            overlay_grade = overlay_spec.base.grade or ''
             overlay_packaging = draft.packaging
             if overlay_packaging is None:
                 # Standalone drafts already translated these rows for the editor's language.
@@ -288,7 +290,7 @@ def _encode_draft(
         overlay_path = overlay_job.path if overlay_job else None
     elif html_fallback == 'rank':
         from backend.services.studio.packaging_html import OverlayJob
-        requested = requested_template if requested_template in HTML_TEMPLATE_IDS else 'classic'
+        requested = requested_template if template_registry.is_html_template(requested_template) else 'classic'
         overlay_job = OverlayJob(None, 'classic', False, 'rank', 'none', 'skipped', requested_template=requested)
     out_dir = directory(project_id) / 'output' / 'studio'
     if not directory(project_id).is_dir():
@@ -322,12 +324,15 @@ def _encode_draft(
                         scene_overlay = overlay_path
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
-                            if html_template == 'street' and draft.layout == 'crop':
+                            use_step_window = bool(overlay_spec and overlay_spec.base.step_window)
+                            locked = overlay_spec.base.picture_layout if overlay_spec else 'auto'
+                            picture_draft = draft if locked == 'auto' or locked == draft.layout else draft.model_copy(update={'layout': locked})
+                            if use_step_window and picture_draft.layout == 'crop':
                                 picture, label = packaging_render.street_picture(
-                                    draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
+                                    picture_draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
                                 )
                             else:
-                                picture, label = packaging_render.picture_only(draft, scene, w, h)
+                                picture, label = packaging_render.picture_only(picture_draft, scene, w, h)
                             # Street and editorial paint captions in the template safe zone.
                             # The cover owns the title; this overlay does not burn a headline.
                             tail, label = packaging_html.composite_tail(
@@ -478,7 +483,7 @@ def _encode_draft(
             outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro, report=outro_report)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
-        if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in HTML_TEMPLATE_IDS:
+        if overlay_job is not None and overlay_job.downgraded and template_registry.is_html_template(getattr(overlay_job, 'requested_template', None)):
             from backend.services.packaging_runtime import downgrade_warning
             hint = downgrade_warning(overlay_job.downgrade_reason)
             if hint and hint not in warnings:
@@ -519,7 +524,7 @@ def _encode_draft(
             result['template'] = overlay_job.template
             result['requested_template'] = overlay_job.requested_template
         else:
-            requested = requested_template if requested_template in STYLE_IDS else 'classic'
+            requested = requested_template if template_registry.is_valid_style(requested_template) else 'classic'
             result['template'] = 'classic'
             result['requested_template'] = requested
         return result

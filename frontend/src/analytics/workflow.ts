@@ -120,11 +120,13 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     action: ['switch_model', 'install_transcription', 'change_material', 'example'],
     choice: ['background', 'quit'],
   }
+  const TEMPLATE_KEYS = new Set(['template', 'requested_template', 'from_template', 'to_template', 'recommended', 'recommended_template'])
+  const TEMPLATE_SLUG = /^[a-z][a-z0-9_-]{1,31}$/
   for (const [key, allowed] of Object.entries(enums)) {
     let raw: unknown = input[key]
     if (key === 'os') raw = canonOs(raw)
     if (key === 'outcome') raw = canonOutcome(raw)
-    if (typeof raw === 'string' && allowed.includes(raw)) out[key] = raw
+    if (typeof raw === 'string' && (allowed.includes(raw) || (TEMPLATE_KEYS.has(key) && TEMPLATE_SLUG.test(raw)))) out[key] = raw
   }
   for (const key of ['outro_applied', 'brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'blocked', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', 'is_recommended', 'accepted_recommendation', 'is_first_success_device', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean

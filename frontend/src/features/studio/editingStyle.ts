@@ -1,7 +1,17 @@
 export const HTML_TEMPLATE_CHOICES = ['editorial', 'street', 'news', 'cinema', 'classic'] as const
-export type HtmlTemplateChoice = (typeof HTML_TEMPLATE_CHOICES)[number]
+export type BuiltinTemplateChoice = (typeof HTML_TEMPLATE_CHOICES)[number]
+export type HtmlTemplateChoice = string
 export type EditingStyle = HtmlTemplateChoice
-export const DEFAULT_HTML_TEMPLATE: HtmlTemplateChoice = 'editorial'
+export const DEFAULT_HTML_TEMPLATE: BuiltinTemplateChoice = 'editorial'
+export const TEMPLATE_SLUG_RE = /^[a-z][a-z0-9_-]{1,31}$/
+
+export function isBuiltinTemplate(value: string | undefined): value is BuiltinTemplateChoice {
+  return Boolean(value && (HTML_TEMPLATE_CHOICES as readonly string[]).includes(value))
+}
+
+export function isValidTemplateChoice(value: string | undefined): boolean {
+  return Boolean(value && (value === 'classic' || TEMPLATE_SLUG_RE.test(value)))
+}
 
 export const REASON_CODES = ['seated_interview', 'street_quick', 'speech', 'default', 'timeout'] as const
 export type ReasonCode = (typeof REASON_CODES)[number]
@@ -25,7 +35,7 @@ const EMPTY_SIGNALS: StyleSignals = {
 }
 
 export function chosenTemplate(value: string | undefined): HtmlTemplateChoice {
-  return value && (HTML_TEMPLATE_CHOICES as readonly string[]).includes(value) ? value as HtmlTemplateChoice : DEFAULT_HTML_TEMPLATE
+  return value && isValidTemplateChoice(value) ? value : DEFAULT_HTML_TEMPLATE
 }
 
 /** Import fields for the HTML template. The flag-off path sends nothing. */
@@ -33,7 +43,7 @@ export function templateImportFields(enabled: boolean, value: string | undefined
   if (!enabled) return {}
   const html_template = chosenTemplate(value)
   const recommended_template = recommended === 'editorial' || recommended === 'street' || recommended === 'classic' ? recommended : undefined
-  // Recommendation stays on the three scored styles. news and cinema are explicit choices.
+  // Recommendation stays on the three scored styles. Additional templates are explicit choices.
   return recommended_template ? { html_template, recommended_template } : { html_template }
 }
 

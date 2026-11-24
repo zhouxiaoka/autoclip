@@ -1,0 +1,51 @@
+id: interview_card
+version: 2
+name: {zh: 访谈卡片, en: Interview Card}
+fit:
+  formats: {sit_down_interview: 1.0, podcast_studio: 0.9, keynote_stage: 0.6, street_interview: 0.2}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  # Cloned from a Xiaohongshu YC Lightcone clip: navy card, 16:9 window in the middle band,
+  # coral hairlines, headline block on top, bilingual captions and source footer below.
+  framing: window
+  face_y: 0.45
+  head_zone: [656, 1264]
+  zoom:
+    mode: creep
+    creep: 0.0
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.02:saturation=1.0"
+  # The overlay is opaque navy outside y 656..1264, so the picture must sit in that band.
+  picture_layout: fit
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 230, alt_top: 230}
+    subtitle: {top: 1350, max_rows: 2}
+  safe_area: xiaohongshu
+  limits: {emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, speakers]
+audio: {bgm: none}
+cover: {layout: interview_card_3x4, from_overlay: true}
+caption_layout:
+  font_px: 32
+  inset_px: 124
+  source_limit: 60
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "深蓝卡片 + 居中横屏画框，顶部标题嘉宾、底部双语字幕与出处", en: "Navy card with a centered 16:9 window, headline, bilingual captions and source"}
+  tags: [interview, podcast, bilingual, xiaohongshu]
+  category: interview
+  order: 50
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: fit
+qa: {}

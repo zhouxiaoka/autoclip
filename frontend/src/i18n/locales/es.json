@@ -2303,5 +2303,12 @@
   "已导出成片": "Video exportado",
   "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "Esta versión ya está renderizada. Puedes descargar el video existente o renderizar uno nuevo.",
   "重新渲染": "Renderizar de nuevo",
-  "已关闭上传参考帧，当前使用本地排版封面": "El envío de fotogramas de referencia está desactivado; se usa diseño local."
+  "已关闭上传参考帧，当前使用本地排版封面": "El envío de fotogramas de referencia está desactivado; se usa diseño local.",
+  "editing_style.sync_catalog": "Buscar nuevas plantillas",
+  "editing_style.syncing": "Sincronizando…",
+  "editing_style.install": "Instalar",
+  "editing_style.installing": "Instalando…",
+  "editing_style.update": "Actualizar",
+  "editing_style.remote_badge": "Nueva",
+  "editing_style.install_failed": "No se pudo sincronizar o instalar la plantilla. Inténtalo de nuevo."
 }

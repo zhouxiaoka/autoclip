@@ -19,6 +19,8 @@ base:
   # The warm grade is one per-channel curves LUT. It matches curves+colorbalance within 2 levels on a gray ramp;
   # colorbalance does float math on every pixel and doubled the editorial composite time.
   grade: "curves=r='0/0.043 0.125/0.160 0.25/0.274 0.375/0.414 0.5/0.535 0.625/0.652 0.75/0.766 0.875/0.875 1/0.984':g='0/0.027 0.125/0.149 0.25/0.274 0.375/0.399 0.5/0.520 0.625/0.637 0.75/0.750 0.875/0.859 1/0.969':b='0/0.000 0.125/0.129 0.25/0.274 0.375/0.383 0.5/0.504 0.625/0.621 0.75/0.734 0.875/0.844 1/0.953',eq=saturation=1.0:contrast=1.04,noise=alls=4:allf=u"
+  scrim: {enabled: true, height: 1000, color: "0x0C0A08", mid_stop: 0.38, mid_alpha: 0.38, bottom_alpha: 0.78}
+  progress_bar: {enabled: true, height: 2, inset_x: 60, y_from_bottom: 94, color: "0xF4EFE6@0.8"}
 overlay:
   entry: index.html
   slots:
@@ -32,4 +34,22 @@ fields:
   optional: [kicker, emphasis, numbers, gloss, speakers]
 audio: {bgm: none}
 cover: {layout: editorial_3x4, from_overlay: true}
+caption_layout:
+  font_px: 52
+  inset_px: 60
+  source_limit: 34
+  paging_mode: grouped_screen
+  screen_chars: 8
+  screen_sec: 2.6
+  hold_slack: 2
+  bilingual_align: synced
+  strip_speaker_prefix: false
+  en_key_propagates: false
+meta:
+  desc: {zh: 暖调杂志排版，适合深度访谈与观点切片, en: Warm editorial typography for interviews and talks}
+  tags: [interview, podcast, bilingual]
+  category: interview
+  order: 10
+  package_version: "1.0.0"
+  preview_layout: blur
 qa: {}

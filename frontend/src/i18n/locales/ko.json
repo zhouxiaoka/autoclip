@@ -2303,5 +2303,12 @@
   "已导出成片": "내보낸 영상",
   "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "현재 버전은 이미 렌더링되었습니다. 기존 영상을 다운로드하거나 새 버전으로 다시 렌더링할 수 있습니다.",
   "重新渲染": "다시 렌더링",
-  "已关闭上传参考帧，当前使用本地排版封面": "참고 프레임 전송이 꺼져 있어 로컬 레이아웃 커버를 사용 중입니다."
+  "已关闭上传参考帧，当前使用本地排版封面": "참고 프레임 전송이 꺼져 있어 로컬 레이아웃 커버를 사용 중입니다.",
+  "editing_style.sync_catalog": "새 템플릿 확인",
+  "editing_style.syncing": "동기화 중…",
+  "editing_style.install": "설치",
+  "editing_style.installing": "설치 중…",
+  "editing_style.update": "업데이트",
+  "editing_style.remote_badge": "신규",
+  "editing_style.install_failed": "템플릿 동기화 또는 설치에 실패했습니다."
 }

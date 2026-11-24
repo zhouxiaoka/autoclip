@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { t } from '../../i18n'
+import { getLocale, t } from '../../i18n'
 import { telemetryId } from '../../analytics/workflow'
 import { trackTemplateOverride, trackTemplatePickerShown, trackTemplatePreviewFailed, trackTemplatePreviewPlayed, trackTemplateRestore } from '../../analytics/studio'
 import { captureStudioException } from '../../desktop/sentry'
 import { requestStyleRecommendation } from './editingStyleClient'
-import { STYLE_POSTERS, loadStylePreview } from './editingStyleMedia'
+import { loadStylePreview, posterForTemplate } from './editingStyleMedia'
 import { beginStyleRecommendation, readStyle, subscribeStyle, type StyleSnapshot } from './editingStyleSession'
 import {
-  HTML_TEMPLATE_CHOICES, PREVIEW_SECONDS, chosenTemplate, degradeFromEnvironment, intelMacFromHints, selectionAfterRecommendation, supportsBackdrop,
-  type EditingStyle, type HtmlTemplateChoice,
+  PREVIEW_SECONDS, chosenTemplate, degradeFromEnvironment, intelMacFromHints, isBuiltinTemplate, selectionAfterRecommendation, supportsBackdrop,
+  type BuiltinTemplateChoice, type EditingStyle, type HtmlTemplateChoice,
 } from './editingStyle'
+import {
+  installRemoteTemplate, resolveLocalizedCopy, syncTemplateCatalog, useTemplateCatalog,
+  type TemplateCatalogItem,
+} from './templateCatalogClient'
 
 type InputKind = 'mouse' | 'keyboard'
 type Trigger = 'hover' | 'focus' | 'keyboard' | 'button' | 'select'
 
-const COPY: Record<EditingStyle, { name: string; desc: string }> = {
+const COPY: Record<BuiltinTemplateChoice, { name: string; desc: string }> = {
   editorial: { name: 'editing_style.editorial.name', desc: 'editing_style.editorial.desc' },
   street: { name: 'editing_style.street.name', desc: 'editing_style.street.desc' },
   news: { name: 'editing_style.news.name', desc: 'editing_style.news.desc' },
@@ -57,6 +61,20 @@ export default function EditingStylePicker({
   url?: string
   file?: File | null
 }) {
+  const { items: catalogItems, installed, remote } = useTemplateCatalog()
+  const [syncing, setSyncing] = useState(false)
+  const [installingId, setInstallingId] = useState<string | null>(null)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const locale = getLocale()
+  const itemById = new Map<string, TemplateCatalogItem>(catalogItems.map(item => [item.id, item]))
+  const installedIds = installed.map(item => item.id)
+  const styleName = (id: EditingStyle): string => (
+    isBuiltinTemplate(id) ? t(COPY[id].name) : resolveLocalizedCopy(itemById.get(id)?.name, locale, id)
+  )
+  const styleDesc = (id: EditingStyle): string => (
+    isBuiltinTemplate(id) ? t(COPY[id].desc) : resolveLocalizedCopy(itemById.get(id)?.desc, locale, '')
+  )
+
   const [snap, setSnap] = useState<StyleSnapshot>(() => readStyle())
   const [manual, setManual] = useState<EditingStyle | null>(null)
   const manualRef = useRef<EditingStyle | null>(null)
@@ -90,7 +108,7 @@ export default function EditingStylePicker({
   const recommendation = snap.key === sourceKey ? snap.result : null
   const resolved = selectionAfterRecommendation(manual, recommendation?.template ?? null, current)
   const selected = resolved.selected
-  const index = HTML_TEMPLATE_CHOICES.indexOf(selected)
+  const index = installedIds.indexOf(selected)
 
   useEffect(() => subscribeStyle(() => setSnap(readStyle())), [])
 
@@ -180,8 +198,9 @@ export default function EditingStylePicker({
       if (onScreen(selected)) playing.push(selected)
     }
   }
-  const screenKey = HTML_TEMPLATE_CHOICES.map(id => visible.current[id] === false ? '0' : '1').join('')
-  const playKey = `${playing.slice(0, 2).join(',')}|${screenKey}|${viewTick}`
+  const installedKey = installedIds.join(',')
+  const screenKey = installedIds.map(id => visible.current[id] === false ? '0' : '1').join('')
+  const playKey = `${playing.slice(0, 2).join(',')}|${screenKey}|${viewTick}|${installedKey}`
 
   useEffect(() => {
     if (!sourceKey || typeof IntersectionObserver !== 'function') return
@@ -198,22 +217,22 @@ export default function EditingStylePicker({
       }
       if (changed) setViewTick(value => value + 1)
     }, { threshold: 0.01 })
-    for (const id of HTML_TEMPLATE_CHOICES) {
+    for (const id of installedIds) {
       const node = cards.current[id]
       if (node) observer.observe(node)
     }
     return () => observer.disconnect()
-  }, [sourceKey])
+  }, [sourceKey, installedKey])
 
   useEffect(() => {
     if (!sourceKey || reducedMotion) return
     const recommended = recommendation?.template ?? selected
-    const order = [recommended, ...HTML_TEMPLATE_CHOICES.filter(id => id !== recommended && visible.current[id] !== false)]
+    const order = [recommended, ...installedIds.filter(id => id !== recommended && visible.current[id] !== false)]
     let cancel = false
     let cursor = 0
     const ric = window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline), 80))
     const prime = async (id: EditingStyle) => {
-      const urls = await loadStylePreview(id)
+      const urls = await loadStylePreview(id, itemById.get(id))
       if (cancel) return
       const node = videos.current[id]
       if (!node) return
@@ -242,12 +261,12 @@ export default function EditingStylePicker({
       if (window.cancelIdleCallback) window.cancelIdleCallback(handle)
       else window.clearTimeout(handle)
     }
-  }, [sourceKey, reducedMotion, selected, recommendation?.template, viewTick])
+  }, [sourceKey, reducedMotion, selected, recommendation?.template, viewTick, installedKey])
 
   useEffect(() => {
     const want = new Set(playKey.split('|')[0].split(',').filter(Boolean) as EditingStyle[])
     let cancel = false
-    for (const id of HTML_TEMPLATE_CHOICES) {
+    for (const id of installedIds) {
       const node = videos.current[id]
       if (!node) continue
       if (!want.has(id)) {
@@ -258,7 +277,7 @@ export default function EditingStylePicker({
       const trigger: Trigger = pinned === id && reducedMotion ? 'button' : hover === id ? 'hover' : focus === id && id !== selected ? 'focus' : lastInput.current === 'keyboard' && id === selected ? 'keyboard' : 'select'
       const mark = `${id}:${trigger}`
       node.dataset.show = '1'
-      void loadStylePreview(id).then(urls => {
+      void loadStylePreview(id, itemById.get(id)).then(urls => {
         if (cancel || !want.has(id)) return
         assignPreview(node, previewUrl(node, urls))
         if (!started.current.has(id)) {
@@ -320,6 +339,33 @@ export default function EditingStylePicker({
     if (next !== selected) onChange(next)
   }
 
+  const onSyncCatalog = async () => {
+    if (syncing || disabled) return
+    setSyncing(true)
+    setCatalogError(null)
+    try {
+      await syncTemplateCatalog()
+    } catch {
+      setCatalogError(t('editing_style.install_failed'))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const onInstallRemote = async (id: string) => {
+    if (installingId || disabled) return
+    setInstallingId(id)
+    setCatalogError(null)
+    try {
+      await installRemoteTemplate(id)
+      choose(id, 'mouse')
+    } catch {
+      setCatalogError(t('editing_style.install_failed'))
+    } finally {
+      setInstallingId(null)
+    }
+  }
+
   const onCardKey = (id: EditingStyle, event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -329,7 +375,7 @@ export default function EditingStylePicker({
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
     event.preventDefault()
     const delta = event.key === 'ArrowRight' ? 1 : -1
-    const next = HTML_TEMPLATE_CHOICES[(HTML_TEMPLATE_CHOICES.indexOf(id) + delta + HTML_TEMPLATE_CHOICES.length) % HTML_TEMPLATE_CHOICES.length]
+    const next = installedIds[(installedIds.indexOf(id) + delta + installedIds.length) % installedIds.length]
     choose(next, 'keyboard')
     cards.current[next]?.focus()
   }
@@ -346,12 +392,21 @@ export default function EditingStylePicker({
   const flat = degraded || reducedTransparency
   return <fieldset className={`studio-template-picker studio-style-picker${disabled ? ' is-disabled' : ''}${flat ? ' is-degraded' : ''}${reducedMotion ? ' is-still' : ''}`} disabled={disabled}>
     <legend>{t('editing_style.title')}</legend>
-    <p className="studio-muted">{t('editing_style.lead_ready')}</p>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <p className="studio-muted" style={{ margin: 0 }}>{t('editing_style.lead_ready')}</p>
+      <button type="button" className="studio-link" disabled={disabled || syncing} onClick={onSyncCatalog}>
+        {syncing ? t('editing_style.syncing') : t('editing_style.sync_catalog')}
+      </button>
+    </div>
     <div className="studio-style-row" role="radiogroup" aria-label={t('editing_style.title')} aria-disabled={disabled || undefined}>
-      {HTML_TEMPLATE_CHOICES.map(id => {
+      {installed.map(item => {
+        const id = item.id
         const on = id === selected
         const recommendedCard = recommendation?.template === id
-        const label = `${t(COPY[id].name)}${recommendedCard ? `, ${t('editing_style.badge')}` : ''}, ${t(COPY[id].desc)}`
+        const name = styleName(id)
+        const desc = styleDesc(id)
+        const poster = posterForTemplate(id, item)
+        const label = `${name}${recommendedCard ? `, ${t('editing_style.badge')}` : ''}, ${desc}`
         return <div
           key={id}
           ref={node => { cards.current[id] = node }}
@@ -370,7 +425,7 @@ export default function EditingStylePicker({
           onBlur={() => setFocus(current => current === id ? null : current)}
         >
           <div className="studio-style-thumb">
-            <img src={STYLE_POSTERS[id]} alt="" />
+            <img src={poster} alt="" />
             <video
               ref={node => { videos.current[id] = node }}
               muted
@@ -378,7 +433,7 @@ export default function EditingStylePicker({
               playsInline
               preload="auto"
               aria-hidden="true"
-              poster={STYLE_POSTERS[id]}
+              poster={poster}
               onError={event => {
                 // Missing or undecodable preview: hide the video so the static poster <img> shows.
                 const node = event.currentTarget
@@ -398,19 +453,38 @@ export default function EditingStylePicker({
             />
             {loading && id === 'editorial' ? <span className="studio-style-badge studio-style-badge--wait" aria-hidden="true" /> : null}
             {recommendedCard ? <span className="studio-style-badge">{t('editing_style.badge')}</span> : null}
+            {item.update_available ? <button type="button" className="studio-style-preview-btn" onClick={event => { event.stopPropagation(); void onInstallRemote(id) }}>{installingId === id ? t('editing_style.installing') : t('editing_style.update')}</button> : null}
             <span className={`studio-style-radio${on ? ' is-on' : ''}`} aria-hidden="true">{on ? '✓' : ''}</span>
             <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span>
             <span className="studio-style-progress" aria-hidden="true"><i ref={node => { bars.current[id] = node }} /></span>
             {reducedMotion && <button type="button" className="studio-style-preview-btn" onClick={event => { event.stopPropagation(); setPinned(id) }}>{t('editing_style.preview_button')}</button>}
           </div>
-          <div className="studio-style-name">{t(COPY[id].name)}</div>
-          <div className="studio-style-desc">{t(COPY[id].desc)}</div>
+          <div className="studio-style-name">{name}</div>
+          <div className="studio-style-desc">{desc}</div>
+        </div>
+      })}
+      {remote.map(item => {
+        const id = item.id
+        const name = resolveLocalizedCopy(item.name, locale, id)
+        const desc = resolveLocalizedCopy(item.desc, locale, '')
+        const poster = posterForTemplate(id, item)
+        const busy = installingId === id
+        return <div key={id} data-style={id} className="studio-style-card studio-style-card--remote">
+          <div className="studio-style-thumb">
+            <img src={poster} alt="" />
+            <span className="studio-style-badge">{t('editing_style.remote_badge')}</span>
+            <button type="button" className="studio-style-preview-btn" disabled={disabled || Boolean(installingId)} onClick={() => void onInstallRemote(id)}>
+              {busy ? t('editing_style.installing') : t('editing_style.install')}
+            </button>
+          </div>
+          <div className="studio-style-name">{name}</div>
+          <div className="studio-style-desc">{desc}</div>
         </div>
       })}
     </div>
     <div className="studio-style-why" aria-live="polite">
-      {loading ? <span className="studio-style-why-wait">{t('editing_style.analyzing')}</span> : overridden && recommendation ? <>
-        <b>{t('editing_style.override', { style: t(COPY[manual].name), recommended: t(COPY[recommendation.template].name) })}</b>
+      {catalogError ? <span>{catalogError}</span> : loading ? <span className="studio-style-why-wait">{t('editing_style.analyzing')}</span> : overridden && recommendation ? <>
+        <b>{t('editing_style.override', { style: styleName(manual), recommended: styleName(recommendation.template) })}</b>
         <button type="button" className="studio-link" onClick={restore}>{t('editing_style.restore')}</button>
       </> : <span>{t(`editing_style.reason.${recommendation?.reason_code || 'default'}`)}</span>}
     </div>

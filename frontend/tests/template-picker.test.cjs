@@ -20,7 +20,7 @@ function load() {
   runInSandbox(code, {
     exports,
     require: id => {
-      if (id === '../../i18n') return { t: text => text }
+      if (id === '../../i18n') return { t: text => text, getLocale: () => 'zh-CN' }
       if (id === '../../analytics/studio') return {
         trackTemplateOverride: props => events.push(props),
         trackTemplatePickerShown: () => {},
@@ -28,6 +28,17 @@ function load() {
       if (id === '../../analytics/workflow') return { telemetryId: () => 't-abc123def456' }
       if (id === './editingStyle') return styleExports
       if (id === './EditingStylePicker') return { default: () => null }
+      if (id === './templateCatalogClient') return {
+        resolveLocalizedCopy: (copy, _locale, fallback) => copy?.zh || copy?.en || fallback,
+        useTemplateCatalog: () => {
+          const items = [...styleExports.HTML_TEMPLATE_CHOICES.map(tid => ({
+            id: tid, name: { zh: tid, en: tid }, desc: { zh: '', en: '' }, installed: true,
+          })), {
+            id: 'geek_note', name: { zh: '极客笔记', en: 'Geek Note' }, desc: { zh: '技术切片', en: 'Tech clip' }, installed: true,
+          }]
+          return { items, installed: items, remote: [] }
+        },
+      }
       if (id === 'react') return { useEffect() {}, useRef: value => ({ current: value }) }
       if (id === 'react/jsx-runtime') return {
         jsx: (type, props) => ({ type, props }),
@@ -63,4 +74,10 @@ test('the import default is editorial and a change is an override event', () => 
   assert.equal(events[0].flow_id, 't-abc123def456')
   assert.equal(events[0].input, 'mouse')
   assert.deepEqual(fields(exports.templateImportFields(true, 'street', 'editorial')), { html_template: 'street', recommended_template: 'editorial' })
+  // Dynamic installed template is selectable and accepted by chosenTemplate/templateImportFields.
+  assert.equal(exports.chosenTemplate('geek_note'), 'geek_note')
+  assert.deepEqual(fields(exports.templateImportFields(true, 'geek_note')), { html_template: 'geek_note' })
+  assert.equal(buttons.length, 6)
+  buttons[5].props.onClick()
+  assert.equal(chosen[1], 'geek_note')
 })

@@ -11,11 +11,20 @@ import platform
 import sys
 
 from backend.services.studio.features import flag_enabled, resolve_features
+from backend.services.studio.templates import registry as template_registry
 from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS, STYLE_IDS
 
 HTML_CLIP_LIMIT = 3
 HTML_TEMPLATES = HTML_TEMPLATE_IDS
 _INTEL = {'x86_64', 'amd64', 'i386'}
+
+
+def _is_html(name: str | None) -> bool:
+    return template_registry.is_html_template(name)
+
+
+def _is_style(name: str | None) -> bool:
+    return template_registry.is_valid_style(name)
 
 
 def _resolved(features: dict | None) -> dict:
@@ -37,22 +46,22 @@ def selected_template(generation: dict | None) -> str | None:
     if not flag_enabled(_resolved(generation.get('features')), 'pkg_templates_v1'):
         return None
     name = generation.get('html_template')
-    return name if name in HTML_TEMPLATES else None
+    return name if _is_html(name) else None
 
 
 def style_for_request(template: str | None, features: dict | None = None) -> dict[str, str]:
     """The style a request will actually use. Unsupported names raise ValueError."""
-    if template not in (None, *STYLE_IDS):
+    if template is not None and not _is_style(template):
         raise UserFacingError('不支持的剪辑风格')
     requested = template or 'classic'
-    applied = requested if requested in HTML_TEMPLATES and flag_enabled(_resolved(features), 'pkg_templates_v1') else 'classic'
+    applied = requested if _is_html(requested) and flag_enabled(_resolved(features), 'pkg_templates_v1') else 'classic'
     return {'template': applied, 'requested_template': requested}
 
 
 def recorded_style(html_template: str | None, requested_template: str | None = None, features: dict | None = None) -> dict[str, str]:
     """What an export job should say it used. The flag-off path stays classic."""
-    requested = requested_template if requested_template in STYLE_IDS else None
-    if requested is None and html_template in STYLE_IDS:
+    requested = requested_template if _is_style(requested_template) else None
+    if requested is None and _is_style(html_template):
         requested = html_template
     return style_for_request(requested, features)
 
@@ -62,12 +71,12 @@ def style_from_generation(generation: dict | None) -> dict[str, str]:
     if isinstance(generation, dict):
         stored = generation.get('template')
         requested = generation.get('requested_template')
-        if stored in STYLE_IDS and requested in STYLE_IDS:
+        if _is_style(stored) and _is_style(requested):
             return {'template': stored, 'requested_template': requested}
     requested = None
     if isinstance(generation, dict):
         raw = generation.get('requested_template') or generation.get('html_template')
-        if raw in STYLE_IDS:
+        if _is_style(raw):
             requested = raw
     applied = selected_template(generation) or 'classic'
     return {'template': applied, 'requested_template': requested or 'classic'}
@@ -81,14 +90,14 @@ def manual_draft_template(state: dict) -> str | None:
     """
     overrides = (state.get('plan') or {}).get('overrides') or {}
     value = overrides.get('html_template', (state.get('generation') or {}).get('html_template'))
-    return value if value in STYLE_IDS else None
+    return value if _is_style(value) else None
 
 
 def restore_manual_draft_templates(state: dict) -> None:
     """Older standalone drafts inherit only a request bound to their own production."""
     plan = state.get('plan') or {}
     choice = (plan.get('overrides') or {}).get('html_template')
-    if not plan.get('id') or choice not in STYLE_IDS:
+    if not plan.get('id') or not _is_style(choice):
         return
     owned = {draft_id for attempt in state.get('attempts') or []
              if isinstance(attempt, dict) and attempt.get('kind') == 'production' and attempt.get('plan_id') == plan['id']

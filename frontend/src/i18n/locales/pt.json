@@ -2303,5 +2303,12 @@
   "已导出成片": "Vídeo exportado",
   "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "Esta versão já foi renderizada. Você pode baixar o vídeo existente ou renderizar uma nova cópia.",
   "重新渲染": "Renderizar novamente",
-  "已关闭上传参考帧，当前使用本地排版封面": "O envio de quadro de referência está desativado; usando layout local."
+  "已关闭上传参考帧，当前使用本地排版封面": "O envio de quadro de referência está desativado; usando layout local.",
+  "editing_style.sync_catalog": "Verificar novos modelos",
+  "editing_style.syncing": "Sincronizando…",
+  "editing_style.install": "Instalar",
+  "editing_style.installing": "Instalando…",
+  "editing_style.update": "Atualizar",
+  "editing_style.remote_badge": "Novo",
+  "editing_style.install_failed": "Não foi possível sincronizar ou instalar o modelo."
 }

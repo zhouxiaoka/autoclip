@@ -241,8 +241,8 @@ async def import_visual(
     platforms: list[str] = Form(['douyin']),
     auto_start: bool = Form(False),
     portrait_style: Literal['auto', 'interview', 'podcast'] = Form('auto'),
-    html_template: Optional[Literal['editorial', 'street', 'news', 'cinema', 'classic']] = Form(None),
-    recommended_template: Optional[Literal['editorial', 'street', 'classic']] = Form(None),
+    html_template: Optional[str] = Form(None),
+    recommended_template: Optional[str] = Form(None),
     brand_outro_enabled: bool = Form(True),
     subtitle: Optional[UploadFile] = File(None),
     name: str = Form('智能剪辑', max_length=200),
@@ -256,6 +256,11 @@ async def import_visual(
 ):
     if bool(url) == bool(video):
         raise HTTPException(422, '请提供一个视频链接或文件')
+    from backend.services.studio.templates import registry as template_registry
+    if html_template is not None and not template_registry.is_valid_style(html_template):
+        raise HTTPException(422, f'不支持的剪辑风格: {html_template}')
+    if recommended_template is not None and not template_registry.is_valid_style(recommended_template):
+        raise HTTPException(422, f'不支持的推荐风格: {recommended_template}')
     from backend.services.studio import readiness
     call(readiness.ensure_analysis_usable)
     if url:
@@ -395,6 +400,78 @@ async def template_recommend(
         raise HTTPException(422, '请提供一个视频链接或文件')
     from backend.services.studio.template_recommend import recommend_template
     return recommend_template(url=url, header=blob)
+
+
+@router.get('/templates')
+def list_templates(include_remote: bool = True):
+    """Return built-in, user-installed, and cached remote packaging templates."""
+    from backend.services.studio.templates import catalog
+    return catalog.list_template_items(include_remote=include_remote)
+
+
+@router.post('/templates/sync')
+def sync_templates(force: bool = True):
+    """Refresh remote template catalog metadata from GitHub Releases / configured URL."""
+    from backend.services.studio.templates import catalog
+    try:
+        catalog.sync_catalog(force=force)
+    except catalog.TemplateCatalogError as error:
+        raise HTTPException(502, str(error)) from None
+    return catalog.list_template_items(include_remote=True)
+
+
+@router.post('/templates/import')
+async def import_template_archive(archive: UploadFile = File(...)):
+    """Install a local .zip template pack into the user template directory."""
+    from backend.services.studio.templates import catalog
+    try:
+        blob = await archive.read(catalog.MAX_ARCHIVE_BYTES + 1)
+    finally:
+        await archive.close()
+    if not blob:
+        raise HTTPException(422, '请上传有效的模板 ZIP 文件')
+    try:
+        installed = catalog.install_from_archive(blob, source_url='local-upload')
+    except catalog.TemplateCatalogError as error:
+        raise HTTPException(422, str(error)) from None
+    return {'installed': installed.spec.id, 'version': installed.spec.effective_meta().package_version, **catalog.list_template_items(include_remote=True)}
+
+
+@router.post('/templates/{template_id}/install')
+def install_template(template_id: str):
+    """Download, verify SHA-256 + security contract, and hot-install a remote template."""
+    from backend.services.studio.templates import catalog
+    try:
+        installed = catalog.install_remote_template(template_id)
+    except catalog.TemplateCatalogError as error:
+        raise HTTPException(422, str(error)) from None
+    return {'installed': installed.spec.id, 'version': installed.spec.effective_meta().package_version, **catalog.list_template_items(include_remote=True)}
+
+
+@router.delete('/templates/{template_id}')
+def uninstall_template(template_id: str):
+    """Remove a user-installed template (built-in templates cannot be removed)."""
+    from backend.services.studio.templates import catalog
+    try:
+        catalog.uninstall_template(template_id)
+    except catalog.TemplateCatalogError as error:
+        raise HTTPException(404, str(error)) from None
+    return {'removed': template_id, **catalog.list_template_items(include_remote=True)}
+
+
+@router.get('/templates/{template_id}/assets/{filename}')
+def template_preview_asset(template_id: str, filename: str):
+    """Serve local preview poster/video for a built-in or user-installed template."""
+    from backend.services.studio.templates import catalog
+    asset = catalog.resolve_preview_asset(template_id, filename)
+    if asset is None:
+        raise HTTPException(404, '模板预览资源不存在')
+    media_type = {
+        'poster.webp': 'image/webp',
+        'preview.mp4': 'video/mp4',
+        'preview.webm': 'video/webm',
+    }.get(filename, 'application/octet-stream')
+    return FileResponse(asset, media_type=media_type)
 
 
 @router.get('/{project_id}')

@@ -16,6 +16,8 @@ base:
     intro: {from: 1.22, dur: 1.0}
   transitions: {broll: cut, max: 2}
   grade: "eq=contrast=1.06:saturation=1.08"
+  step_window: true
+  progress_bar: {enabled: true, height: 12, inset_x: 0, y_from_bottom: 12, color: "0xD7FF3A"}
 overlay:
   entry: index.html
   slots:
@@ -29,4 +31,19 @@ fields:
   optional: [kicker, emphasis, numbers, speakers, stickers]
 audio: {bgm: none, optional_bed: false}
 cover: {layout: street_3x4, from_overlay: true}
+caption_layout:
+  font_px: 64
+  inset_px: 30
+  source_limit: 42
+  paging_mode: sentence
+  bilingual_align: sentence_screens
+  strip_speaker_prefix: true
+  en_key_propagates: true
+meta:
+  desc: {zh: 高对比快节奏大字幕，适合街采与短平快金句, en: High-contrast punchy captions for fast-paced clips}
+  tags: [street, fast, short]
+  category: street
+  order: 20
+  package_version: "1.0.0"
+  preview_layout: crop
 qa: {}

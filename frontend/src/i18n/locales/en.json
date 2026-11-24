@@ -2303,5 +2303,12 @@
   "已导出成片": "Exported video",
   "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "This version is already rendered. Download the existing video or render a new copy.",
   "重新渲染": "Render again",
-  "已关闭上传参考帧，当前使用本地排版封面": "Reference frame upload is off; using local cover layout."
+  "已关闭上传参考帧，当前使用本地排版封面": "Reference frame upload is off; using local cover layout.",
+  "editing_style.sync_catalog": "Check new templates",
+  "editing_style.syncing": "Syncing…",
+  "editing_style.install": "Install",
+  "editing_style.installing": "Installing…",
+  "editing_style.update": "Update",
+  "editing_style.remote_badge": "New",
+  "editing_style.install_failed": "Could not sync or install template. Please try again."
 }

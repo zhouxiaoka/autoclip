@@ -2303,5 +2303,12 @@
   "已导出成片": "已导出成片",
   "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。": "当前版本已渲染完成，可直接下载已有成片，或重新渲染新版本。",
   "重新渲染": "重新渲染",
-  "已关闭上传参考帧，当前使用本地排版封面": "已关闭上传参考帧，当前使用本地排版封面"
+  "已关闭上传参考帧，当前使用本地排版封面": "已关闭上传参考帧，当前使用本地排版封面",
+  "editing_style.sync_catalog": "检查新模板",
+  "editing_style.syncing": "同步中…",
+  "editing_style.install": "下载安装",
+  "editing_style.installing": "安装中…",
+  "editing_style.update": "更新",
+  "editing_style.remote_badge": "新上线",
+  "editing_style.install_failed": "模板同步或安装失败，请稍后重试"
 }

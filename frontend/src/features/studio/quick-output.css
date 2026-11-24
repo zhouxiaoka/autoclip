@@ -594,6 +594,23 @@
   transform: translateX(-50%);
 }
 
+.studio-style-card--remote .studio-style-thumb {
+  border: 1.5px dashed var(--ac-border);
+  opacity: .92;
+}
+
+.studio-style-card--remote:hover .studio-style-thumb {
+  border-color: var(--ac-accent);
+  opacity: 1;
+}
+
+.studio-style-card--remote .studio-style-preview-btn {
+  background: var(--ac-accent);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .24);
+}
+
 .studio-style-why {
   display: flex;
   min-height: 44px;
