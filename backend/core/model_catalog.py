@@ -71,6 +71,19 @@ def _openai_vision(name: str) -> bool | None:
     return True
 
 
+_EXPLICIT_VISION_IDS = frozenset({
+    'qwen3.8-max',
+    'qwen3.8-flash',
+    'deepseek-flash',
+    'deepseek-v4-flash',
+    'deepseek-v4-flash-vision-exp',
+})
+
+
+def _model_leaf(model: str) -> str:
+    return (model or "").strip().lower().rsplit("/", 1)[-1]
+
+
 def known_text_only(model: str) -> bool:
     """A name this catalog has classified as text-only.
 
@@ -79,7 +92,7 @@ def known_text_only(model: str) -> bool:
     configured and then fail as a truncated answer.
     """
     name = (model or "").strip().lower()
-    if not name or name in {'qwen3.8-max', 'qwen3.8-flash'}:
+    if not name or _model_leaf(name) in _EXPLICIT_VISION_IDS:
         return False
     return any(marker in name for marker in _TEXT_ONLY_MARKERS)
 
@@ -95,13 +108,13 @@ _CATALOG_VISION_IDS = {
 
 
 def catalog_vision_model(model: str) -> bool:
-    return model.lower() in _CATALOG_VISION_IDS and not known_text_only(model)
+    return (_model_leaf(model) in _EXPLICIT_VISION_IDS or model.lower() in _CATALOG_VISION_IDS) and not known_text_only(model)
 
 
 def supports_vision(model: str) -> bool:
     name = (model or "").strip().lower()
     # Explicitly verified official model IDs; these no longer carry a -vl suffix.
-    if name in {'qwen3.8-max', 'qwen3.8-flash'}:
+    if _model_leaf(name) in _EXPLICIT_VISION_IDS:
         return True
     if not name or known_text_only(name):
         return False

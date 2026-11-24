@@ -151,7 +151,7 @@ def test_text_model_mode_without_endpoint_is_unconfigured(monkeypatch):
 
 def test_text_only_model_is_not_used_for_vision(monkeypatch):
     monkeypatch.setattr(vision_settings, '_environment', lambda: None)
-    _use_text_model(monkeypatch, {'base_url': 'https://api.deepseek.com', 'api_key': 'sk-ds', 'model': 'deepseek-flash'})
+    _use_text_model(monkeypatch, {'base_url': 'https://api.deepseek.com', 'api_key': 'sk-ds', 'model': 'deepseek-v4-pro'})
     public = vision_settings.public()
     assert public['configured'] is False and public['text_only'] is True
     from backend.services.studio import intelligence
