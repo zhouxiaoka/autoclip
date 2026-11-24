@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "Importer .zip",
   "editing_style.importing": "Importation…",
   "editing_style.uninstall": "Supprimer le modèle",
-  "editing_style.new_count": "{{count}} nouveaux modèles"
+  "editing_style.new_count": "{{count}} nouveaux modèles",
+  "editing_style.category.all": "Tous",
+  "editing_style.category.gaming": "Gaming",
+  "editing_style.category.interview": "Interview",
+  "editing_style.category.knowledge": "Notes",
+  "editing_style.category.general": "Général",
+  "editing_style.view_all": "Tout ({{count}})",
+  "editing_style.gallery_title": "Choisir un style",
+  "editing_style.scroll_prev": "Précédent",
+  "editing_style.scroll_next": "Suivant"
 }

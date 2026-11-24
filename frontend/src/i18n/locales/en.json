@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "Import .zip",
   "editing_style.importing": "Importing…",
   "editing_style.uninstall": "Remove template",
-  "editing_style.new_count": "{{count}} new templates"
+  "editing_style.new_count": "{{count}} new templates",
+  "editing_style.category.all": "All",
+  "editing_style.category.gaming": "Gaming",
+  "editing_style.category.interview": "Interview",
+  "editing_style.category.knowledge": "Notes",
+  "editing_style.category.general": "General",
+  "editing_style.view_all": "All {{count}}",
+  "editing_style.gallery_title": "Choose Editing Style",
+  "editing_style.scroll_prev": "Previous",
+  "editing_style.scroll_next": "Next"
 }

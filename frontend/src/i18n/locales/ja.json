@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "ZIPをインポート",
   "editing_style.importing": "インポート中…",
   "editing_style.uninstall": "テンプレートを削除",
-  "editing_style.new_count": "新着 {{count}} 件"
+  "editing_style.new_count": "新着 {{count}} 件",
+  "editing_style.category.all": "すべて",
+  "editing_style.category.gaming": "ゲーム配信",
+  "editing_style.category.interview": "インタビュー",
+  "editing_style.category.knowledge": "解説",
+  "editing_style.category.general": "汎用",
+  "editing_style.view_all": "全 {{count}} 件",
+  "editing_style.gallery_title": "編集スタイルを選択",
+  "editing_style.scroll_prev": "前へ",
+  "editing_style.scroll_next": "次へ"
 }

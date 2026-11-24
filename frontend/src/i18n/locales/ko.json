@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "ZIP 가져오기",
   "editing_style.importing": "가져오는 중…",
   "editing_style.uninstall": "템플릿 제거",
-  "editing_style.new_count": "새 템플릿 {{count}}개"
+  "editing_style.new_count": "새 템플릿 {{count}}개",
+  "editing_style.category.all": "전체",
+  "editing_style.category.gaming": "게임 방송",
+  "editing_style.category.interview": "인터뷰",
+  "editing_style.category.knowledge": "정보",
+  "editing_style.category.general": "일반",
+  "editing_style.view_all": "전체 {{count}}개",
+  "editing_style.gallery_title": "편집 스타일 선택",
+  "editing_style.scroll_prev": "이전",
+  "editing_style.scroll_next": "다음"
 }

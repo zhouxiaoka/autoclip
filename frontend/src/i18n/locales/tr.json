@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": ".zip içe aktar",
   "editing_style.importing": "İçe aktarılıyor…",
   "editing_style.uninstall": "Şablonu kaldır",
-  "editing_style.new_count": "{{count}} yeni şablon"
+  "editing_style.new_count": "{{count}} yeni şablon",
+  "editing_style.category.all": "Tümü",
+  "editing_style.category.gaming": "Oyun",
+  "editing_style.category.interview": "Röportaj",
+  "editing_style.category.knowledge": "Notlar",
+  "editing_style.category.general": "Genel",
+  "editing_style.view_all": "Tümü ({{count}})",
+  "editing_style.gallery_title": "Kurgu Stili Seç",
+  "editing_style.scroll_prev": "Önceki",
+  "editing_style.scroll_next": "Sonraki"
 }

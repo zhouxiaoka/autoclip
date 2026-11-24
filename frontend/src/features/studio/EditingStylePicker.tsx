@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Modal } from 'antd'
 import { getLocale, t } from '../../i18n'
 import { telemetryId } from '../../analytics/workflow'
 import { trackTemplateOverride, trackTemplatePickerShown, trackTemplatePreviewFailed, trackTemplatePreviewPlayed, trackTemplateRestore } from '../../analytics/studio'
@@ -51,6 +52,25 @@ function useMedia(query: string): boolean {
   return matches
 }
 
+const CATEGORY_ORDER = ['gaming', 'interview', 'knowledge', 'general'] as const
+
+function categoryLabel(cat: string): string {
+  if (cat === 'all') return t('editing_style.category.all')
+  if (cat === 'gaming') return t('editing_style.category.gaming')
+  if (cat === 'interview') return t('editing_style.category.interview')
+  if (cat === 'knowledge') return t('editing_style.category.knowledge')
+  if (cat === 'general') return t('editing_style.category.general')
+  return cat
+}
+
+function itemCategory(item: TemplateCatalogItem): string {
+  const raw = (item.category || 'general').trim().toLowerCase()
+  if (raw === 'gaming' || raw === 'game' || raw === 'livestream') return 'gaming'
+  if (raw === 'interview' || raw === 'podcast' || raw === 'editorial') return 'interview'
+  if (raw === 'knowledge' || raw === 'notes' || raw === 'note' || raw === 'xiaohongshu') return 'knowledge'
+  return 'general'
+}
+
 export default function EditingStylePicker({
   value, disabled, onChange, sourceKey, url, file,
 }: {
@@ -65,9 +85,55 @@ export default function EditingStylePicker({
   const [syncing, setSyncing] = useState(false)
   const [installingId, setInstallingId] = useState<string | null>(null)
   const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory] = useState<string>('all')
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [canPrev, setCanPrev] = useState(false)
+  const [canNext, setCanNext] = useState(false)
+  const rowRef = useRef<HTMLDivElement | null>(null)
   const locale = getLocale()
   const itemById = new Map<string, TemplateCatalogItem>(catalogItems.map(item => [item.id, item]))
+  const categories = useMemo(() => {
+    const present = new Set<string>()
+    for (const item of [...installed, ...remote]) present.add(itemCategory(item))
+    const ordered = [
+      ...CATEGORY_ORDER.filter(cat => present.has(cat)),
+      ...Array.from(present).filter(cat => !(CATEGORY_ORDER as readonly string[]).includes(cat)).sort(),
+    ]
+    return ordered.length > 1 ? ['all', ...ordered] : []
+  }, [installed, remote])
+  const visibleInstalled = useMemo(
+    () => activeCategory === 'all' ? installed : installed.filter(item => itemCategory(item) === activeCategory),
+    [installed, activeCategory],
+  )
+  const visibleRemote = useMemo(
+    () => activeCategory === 'all' ? remote : remote.filter(item => itemCategory(item) === activeCategory),
+    [remote, activeCategory],
+  )
+  const totalCount = installed.length + remote.length
   const installedIds = installed.map(item => item.id)
+
+  const updateScrollArrows = useCallback(() => {
+    const el = rowRef.current
+    if (!el) { setCanPrev(false); setCanNext(false); return }
+    setCanPrev(el.scrollLeft > 4)
+    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+  }, [])
+
+  useEffect(() => {
+    updateScrollArrows()
+    const el = rowRef.current
+    if (!el) return
+    const onResize = () => updateScrollArrows()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [updateScrollArrows, visibleInstalled.length, visibleRemote.length, sourceKey])
+
+  const scrollRow = (dir: -1 | 1) => {
+    const el = rowRef.current
+    if (!el) return
+    const step = Math.max(240, Math.round(el.clientWidth * 0.8))
+    el.scrollBy({ left: dir * step, behavior: 'smooth' })
+  }
   const styleName = (id: EditingStyle): string => (
     isBuiltinTemplate(id) ? t(COPY[id].name) : resolveLocalizedCopy(itemById.get(id)?.name, locale, id)
   )
@@ -398,6 +464,18 @@ export default function EditingStylePicker({
     </fieldset>
   }
 
+  const chooseFromGallery = (id: EditingStyle) => {
+    choose(id, 'mouse')
+    setGalleryOpen(false)
+    if (activeCategory !== 'all') {
+      const item = itemById.get(id)
+      if (item && itemCategory(item) !== activeCategory) setActiveCategory('all')
+    }
+    window.setTimeout(() => {
+      cards.current[id]?.scrollIntoView?.({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+    }, 60)
+  }
+
   const loading = !recommendation
   const overridden = manual !== null && recommendation !== null && manual !== recommendation.template
   const flat = degraded || reducedTransparency
@@ -405,23 +483,74 @@ export default function EditingStylePicker({
     <legend>{t('editing_style.title')}</legend>
     <div className="studio-style-toolbar">
       <p className="studio-muted" style={{ margin: 0 }}>{t('editing_style.lead_ready')}</p>
-      <button
-        type="button"
-        className={`studio-style-refresh-btn${syncing ? ' is-syncing' : ''}`}
-        disabled={disabled || syncing}
-        title={remote.length > 0 ? t('editing_style.new_count', { count: remote.length }) : t('editing_style.sync_catalog')}
-        aria-label={remote.length > 0 ? t('editing_style.new_count', { count: remote.length }) : t('editing_style.sync_catalog')}
-        onClick={onSyncCatalog}
-      >
-        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M13.5 8a5.5 5.5 0 1 1-1.35-3.6" />
-          <path d="M13.5 2.5v2.9h-2.9" />
-        </svg>
-        {remote.length > 0 ? <span className="studio-style-refresh-dot" aria-hidden="true" /> : null}
-      </button>
+      <div className="studio-style-toolbar-actions">
+        {totalCount > 5 ? (
+          <button
+            type="button"
+            className="studio-style-all-btn"
+            disabled={disabled}
+            onClick={() => setGalleryOpen(true)}
+          >
+            {t('editing_style.view_all', { count: totalCount })}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={`studio-style-refresh-btn${syncing ? ' is-syncing' : ''}`}
+          disabled={disabled || syncing}
+          title={remote.length > 0 ? t('editing_style.new_count', { count: remote.length }) : t('editing_style.sync_catalog')}
+          aria-label={remote.length > 0 ? t('editing_style.new_count', { count: remote.length }) : t('editing_style.sync_catalog')}
+          onClick={onSyncCatalog}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M13.5 8a5.5 5.5 0 1 1-1.35-3.6" />
+            <path d="M13.5 2.5v2.9h-2.9" />
+          </svg>
+          {remote.length > 0 ? <span className="studio-style-refresh-dot" aria-hidden="true" /> : null}
+        </button>
+      </div>
     </div>
-    <div className="studio-style-row" role="radiogroup" aria-label={t('editing_style.title')} aria-disabled={disabled || undefined}>
-      {installed.map(item => {
+    {categories.length > 0 ? (
+      <div className="studio-style-cats" role="tablist" aria-label={t('editing_style.title')}>
+        {categories.map(cat => (
+          <button
+            key={cat}
+            type="button"
+            role="tab"
+            aria-selected={activeCategory === cat}
+            className={`studio-style-cat-pill${activeCategory === cat ? ' is-active' : ''}`}
+            disabled={disabled}
+            onClick={() => { setActiveCategory(cat); if (rowRef.current) rowRef.current.scrollLeft = 0 }}
+          >
+            {categoryLabel(cat)}
+          </button>
+        ))}
+      </div>
+    ) : null}
+    <div className="studio-style-carousel">
+      {canPrev ? (
+        <button type="button" className="studio-style-nav studio-style-nav--prev" aria-label={t('editing_style.scroll_prev')} onClick={() => scrollRow(-1)}>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10 3.5L5.5 8 10 12.5" />
+          </svg>
+        </button>
+      ) : null}
+      {canNext ? (
+        <button type="button" className="studio-style-nav studio-style-nav--next" aria-label={t('editing_style.scroll_next')} onClick={() => scrollRow(1)}>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 3.5L10.5 8 6 12.5" />
+          </svg>
+        </button>
+      ) : null}
+      <div
+        ref={rowRef}
+        className="studio-style-row"
+        role="radiogroup"
+        aria-label={t('editing_style.title')}
+        aria-disabled={disabled || undefined}
+        onScroll={updateScrollArrows}
+      >
+        {visibleInstalled.map(item => {
         const id = item.id
         const on = id === selected
         const recommendedCard = recommendation?.template === id
@@ -486,7 +615,7 @@ export default function EditingStylePicker({
           <div className="studio-style-desc">{desc}</div>
         </div>
       })}
-      {remote.map(item => {
+      {visibleRemote.map(item => {
         const id = item.id
         const name = resolveLocalizedCopy(item.name, locale, id)
         const desc = resolveLocalizedCopy(item.desc, locale, '')
@@ -504,7 +633,78 @@ export default function EditingStylePicker({
           <div className="studio-style-desc">{desc}</div>
         </div>
       })}
+      </div>
     </div>
+    <Modal
+      open={galleryOpen}
+      onCancel={() => setGalleryOpen(false)}
+      footer={null}
+      centered
+      width={880}
+      title={t('editing_style.gallery_title')}
+      className="studio-style-gallery-modal"
+    >
+      {categories.length > 0 ? (
+        <div className="studio-style-cats studio-style-cats--modal" role="tablist">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              role="tab"
+              aria-selected={activeCategory === cat}
+              className={`studio-style-cat-pill${activeCategory === cat ? ' is-active' : ''}`}
+              onClick={() => setActiveCategory(cat)}
+            >
+              {categoryLabel(cat)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="studio-style-modal-grid">
+        {visibleInstalled.map(item => {
+          const id = item.id
+          const on = id === selected
+          const recommendedCard = recommendation?.template === id
+          const name = styleName(id)
+          const desc = styleDesc(id)
+          const poster = posterForTemplate(id, item)
+          return <div
+            key={id}
+            className={`studio-style-card${on ? ' is-selected' : ''}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => chooseFromGallery(id)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chooseFromGallery(id) } }}
+          >
+            <div className="studio-style-thumb">
+              <img src={poster} alt="" />
+              {recommendedCard ? <span className="studio-style-badge">{t('editing_style.badge')}</span> : null}
+              <span className={`studio-style-radio${on ? ' is-on' : ''}`} aria-hidden="true">{on ? '✓' : ''}</span>
+            </div>
+            <div className="studio-style-name">{name}</div>
+            <div className="studio-style-desc">{desc}</div>
+          </div>
+        })}
+        {visibleRemote.map(item => {
+          const id = item.id
+          const name = resolveLocalizedCopy(item.name, locale, id)
+          const desc = resolveLocalizedCopy(item.desc, locale, '')
+          const poster = posterForTemplate(id, item)
+          const busy = installingId === id
+          return <div key={id} className="studio-style-card studio-style-card--remote">
+            <div className="studio-style-thumb">
+              <img src={poster} alt="" />
+              <span className="studio-style-badge">{t('editing_style.remote_badge')}</span>
+              <button type="button" className="studio-style-preview-btn" disabled={Boolean(installingId)} onClick={() => void onInstallRemote(id).then(() => setGalleryOpen(false))}>
+                {busy ? t('editing_style.installing') : t('editing_style.install')}
+              </button>
+            </div>
+            <div className="studio-style-name">{name}</div>
+            <div className="studio-style-desc">{desc}</div>
+          </div>
+        })}
+      </div>
+    </Modal>
     <div className="studio-style-why" aria-live="polite">
       {catalogError ? <span>{catalogError}</span> : loading ? <span className="studio-style-why-wait">{t('editing_style.analyzing')}</span> : overridden && recommendation ? <>
         <b>{t('editing_style.override', { style: styleName(manual), recommended: styleName(recommendation.template) })}</b>

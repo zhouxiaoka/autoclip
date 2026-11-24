@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "Impor .zip",
   "editing_style.importing": "Mengimpor…",
   "editing_style.uninstall": "Hapus templat",
-  "editing_style.new_count": "{{count}} templat baru"
+  "editing_style.new_count": "{{count}} templat baru",
+  "editing_style.category.all": "Semua",
+  "editing_style.category.gaming": "Gaming",
+  "editing_style.category.interview": "Wawancara",
+  "editing_style.category.knowledge": "Catatan",
+  "editing_style.category.general": "Umum",
+  "editing_style.view_all": "Semua {{count}}",
+  "editing_style.gallery_title": "Pilih Gaya Edit",
+  "editing_style.scroll_prev": "Sebelumnya",
+  "editing_style.scroll_next": "Berikutnya"
 }
