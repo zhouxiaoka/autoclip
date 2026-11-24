@@ -1,0 +1,27 @@
+{
+  "version": "1.6.0",
+  "commit": "2566158cf31fbc4ca19955783d56a031a233b5e4",
+  "build_run_id": 45221265389,
+  "regressions": {
+    "v160-live-replay-6-channels-and-e2e-clipping": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:56:10Z",
+      "summary": "Native macOS GUI verified parallel Live Replay home tab, dismissible NEW badge, inline OBS WebSocket settings, all 6 channels (OBS/Twitch/YouTube/Kick/Discord/Other), and E2E twitch_file + 0-18s trim TikTok clipping (51s -> 11.82s 4.05 MB MP4 with preserved Twitch attribution and unified Result Card). Windows Session 2 verified /api/v1/obs, /api/v1/obs/replays, /api/v1/replay-channels/availability, /twitch, /youtube all 200 OK with no keychain hang."
+    },
+    "v160-python-fastapi-68-non-ascii-yunet-buffer-load": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:12Z",
+      "summary": "Shipped macOS and Windows portable Python bundles both verified framing.create_detector and in-memory YuNet ONNX byte loading on non-ASCII directory paths; Windows CI native OpenCV 4.13 regression passed."
+    },
+    "v160-13-locales-ui-and-sponsor-promo-routing": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:56:49Z",
+      "summary": "Native macOS language dropdown verified 13-locale expansion (including zh-TW, de, id, tr, vi); both macOS and Windows shipped bundles returned 200 OK on /api/v1/settings/sponsor-promo across zh/en/tr/de/zh-TW."
+    },
+    "v160-macos-ulmo-lzma-dmg-packaging": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:30:57Z",
+      "summary": "ULMO LZMA macOS DMG reduced installer size from ~405 MB to 324 MB and verified CRC32 checksum, mount, and extraction cleanly on Apple Silicon macOS 26.6.2."
+    }
+  }
+}

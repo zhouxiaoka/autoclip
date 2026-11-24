@@ -1,0 +1,31 @@
+{
+  "tag": "v1.6.0",
+  "commit": "2566158cf31fbc4ca19955783d56a031a233b5e4",
+  "build_run_id": 45315704863,
+  "internal_acceptance_run_id": 45315570248,
+  "jobs_passed": [
+    "build-macos-arm64",
+    "build-windows-x64",
+    "candidate-gate",
+    "ci-guards",
+    "provider-e2e / live-e2e",
+    "provider-e2e / mock-e2e",
+    "provider-e2e / provider-e2e",
+    "release",
+    "sensevoice-runtime / real-transcription (macos-15)",
+    "sensevoice-runtime / real-transcription (ubuntu-latest)",
+    "sensevoice-runtime / real-transcription (windows-latest)",
+    "smoke-windows-x64",
+    "source-quality / Backend tests",
+    "source-quality / Diagnostics SQL and recovery contracts",
+    "source-quality / Docker compose smoke",
+    "source-quality / Docker development compose smoke",
+    "source-quality / Frontend checks",
+    "source-quality / Release contract checks",
+    "source-quality / windows-runtime / Windows Proactor cleanup",
+    "source-quality / windows-runtime / Windows cancel_job process tree",
+    "source-quality / windows-runtime / Windows media runtime regressions",
+    "whisper-runtime / windows-recovery"
+  ],
+  "note": "Exact same commit 2566158c rebuilt by Desktop Build tag workflow 45315704863; all 18 required CI/build/smoke/release jobs succeeded."
+}

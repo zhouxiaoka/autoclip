@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "evidence_contract": "impact-inheritance/v1",
+  "tag": "v1.6.0",
+  "commit": "2566158cf31fbc4ca19955783d56a031a233b5e4",
+  "release_type": "routine",
+  "build_run_id": 45315704863,
+  "assets": {
+    "autoclip-1.6.0-cli-mcp.zip": "3131757ddb1ab6fbbf57fda1a442289a049868d6458991bfb6cc5e48e74749ed",
+    "AutoClip.Desktop_1.6.0_aarch64.app.tar.gz": "4028f64372c0796d7dad2c8ddeb52d23da805e0dfd8571acefbfd3e605c25ab1",
+    "AutoClip.Desktop_1.6.0_aarch64.app.tar.gz.sig": "22a701159dfe7d795116b95a8be1d71d8230d1f2b8f5e1b0c270001c64ec0c39",
+    "AutoClip.Desktop_1.6.0_aarch64.dmg": "f2f4fcb2094b240071e55ac6d8b0a9df881cf01f63d23de76cfd4457a18adef8",
+    "AutoClip.Desktop_1.6.0_x64-setup.exe": "9325073264d0f26f98f1fedd8d8c88da1a8f545b952048568513bf15078daccc",
+    "AutoClip.Desktop_1.6.0_x64-setup.exe.sig": "3ae9fc2d01950350833f63dea0efe4a083fecf59d2626e10c7be8f1574f5bd71",
+    "autoclip_mcp-1.6.0-py3-none-any.whl": "e723d038f19c6249128d6dd10114ddd16b3311432720f898e55abf4d03050417",
+    "build-provenance.json": "e8c704a40a825f8a21167e3bacb4fd6014ed7dd6372914e7d71d97c4d48dc776",
+    "latest.json": "2f36ff1e1d3264bdfbb0ca5b8bd66931c511c2bb29165d2e8123dcef240f8976",
+    "python-release-sha256.txt": "fd9f5ccc01e5fbd7a3e63550e090c2ae4b26176bf977e85f172c26fc68280ae7"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server 2025 Datacenter x64",
+      "machine": "Cloud x64 VM (active RDP session 2); not a physical Windows 11 desktop",
+      "runtime": "Packaged portable Python 3.13 + bundled FFmpeg/FFprobe + bundled Playwright Node (yt-dlp EJS)",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-clean_install.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:44:55Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-upgrade_legacy.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-model_settings.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:46:23Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-local_with_subtitles.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:47:36Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-local_without_subtitles.json"
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Windows QA cloud VM datacenter IP encounters Bilibili HTTP 412 anti-bot and YouTube timeout without international egress; real YouTube link_import passed on macOS arm64 1.6.0 DMG (2566158c) and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+        },
+        "visual_generation": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:48:12Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-visual_generation.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-failure_recovery.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:47:36Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-output_delivery.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-windows-x64-privacy_telemetry.json"
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS 26.6.2 arm64 (Apple Silicon)",
+      "machine": "Apple Silicon Mac; native arm64 ULMO DMG bundle; isolated QA app copy and isolated data dirs",
+      "runtime": "Packaged portable Python 3.13.13 + bundled static FFmpeg/FFprobe 9.0.2 + bundled Playwright",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:35:14Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-clean_install.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:45:25Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-upgrade_legacy.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:45:25Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-model_settings.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:46:15Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-local_with_subtitles.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:46:54Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-local_without_subtitles.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:47:45Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-link_import.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:48:18Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-visual_generation.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:35:16Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-failure_recovery.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:47:45Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-output_delivery.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-24T01:35:18Z",
+          "reviewed_at": "2026-11-24T05:32:00Z",
+          "evidence": "evidence/review-macos-arm64-privacy_telemetry.json"
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-11-24T01:56:10Z",
+      "reviewed_at": "2026-11-24T05:32:00Z",
+      "evidence": "evidence/review-reg-v160-live-replay-6-channels-and-e2e-clipping.json",
+      "id": "v160-live-replay-6-channels-and-e2e-clipping",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ]
+    },
+    {
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-11-24T01:45:12Z",
+      "reviewed_at": "2026-11-24T05:32:00Z",
+      "evidence": "evidence/review-reg-v160-python-fastapi-68-non-ascii-yunet-buffer-load.json",
+      "id": "v160-python-fastapi-68-non-ascii-yunet-buffer-load",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ]
+    },
+    {
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-11-24T01:56:49Z",
+      "reviewed_at": "2026-11-24T05:32:00Z",
+      "evidence": "evidence/review-reg-v160-13-locales-ui-and-sponsor-promo-routing.json",
+      "id": "v160-13-locales-ui-and-sponsor-promo-routing",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ]
+    },
+    {
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-11-24T01:30:57Z",
+      "reviewed_at": "2026-11-24T05:32:00Z",
+      "evidence": "evidence/review-reg-v160-macos-ulmo-lzma-dmg-packaging.json",
+      "id": "v160-macos-ulmo-lzma-dmg-packaging",
+      "platforms": [
+        "macos-arm64"
+      ]
+    }
+  ],
+  "observation": {
+    "status": "waived",
+    "waiver_reason": "Owner explicitly authorized promoting v1.6.0 on 2026-11-24 after 19/20 dual-platform installed-package cases, Live Replay E2E verification, Internal Acceptance (45315570248), and Tag Desktop Build (45315704863) passed, so active users immediately receive v1.6.0 Sentry crash fixes (PYTHON-FASTAPI-67/68/6A/6F) instead of staying on v1.5.9."
+  },
+  "blockers": [],
+  "owner_waiver": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-24T05:32:10Z",
+    "reason": "Owner decision on 2026-11-24: waive the 24h Pre-release observation window and Windows cloud-VM datacenter link_import so v1.6.0 ships immediately to stop ongoing Sentry errors on v1.5.9; post-promotion monitoring via Sentry and PostHog with Promote/Halt rollback readiness."
+  },
+  "approval": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-24T05:32:15Z"
+  }
+}

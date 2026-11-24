@@ -1,0 +1,59 @@
+{
+  "version": "1.6.0",
+  "platform": "windows-x64",
+  "commit": "2566158cf31fbc4ca19955783d56a031a233b5e4",
+  "build_run_id": 45221265389,
+  "package": {
+    "name": "AutoClip Desktop_1.6.0_x64-setup.exe",
+    "sha256": "516dc1c43ddb638e7c8a1befd88348ede301c7bff31f455dd48c2a39df2b3736"
+  },
+  "pre_upgrade_binary_sha256": "a960f463d2a65cfb3f57de2e57dd54af624c93c7c9c4e1d33a278b7c139aafed",
+  "installed_binary_sha256": "024df62960fa0de1cb28019ffe34ff5ff6014b1b3e76bae86de05a4bfbe9cd4a",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:10Z",
+      "summary": "Isolated portable Python 3.13 booted against clean data dir; health=200 version=1.6.0, projects=0, autoclip.db initialized."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:44:55Z",
+      "summary": "Silent NSIS upgrade over v1.5.9 exited 0; binary sha256 updated to 024df629...; autoclip.db preserved; launched in interactive RDP session 2 with health=200 version=1.6.0."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:10Z",
+      "summary": "Existing DashScope roles survived upgrade; isolated loopback probe verified 401 invalid_key -> 429 rate_limited -> 200 ok."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:46:23Z",
+      "summary": "Real local MP4 + SRT completed in 76s; rendered 46.89s 1080x1920 MP4 (11,659,424 bytes, h264+aac)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:47:36Z",
+      "summary": "Real local MP4 without SRT transcribed via DashScope Cloud ASR and rendered 46.89s 1080x1920 MP4 (11,738,817 bytes, h264+aac) in 72s."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:48:12Z",
+      "summary": "Primary OutputVariantCard AI cover regeneration with allow_reference_once=True completed on attempt 1 (cover=ai, status=completed)."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:10Z",
+      "summary": "Isolated loopback probe verified HTTP 401 (invalid_key) -> HTTP 429 (rate_limited) -> HTTP 200 (ok)."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:47:36Z",
+      "summary": "Both rendered MP4 outputs verified via bundled ffprobe (1080x1920 h264 + aac valid streams and durations)."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:10Z",
+      "summary": "Isolated clean install persisted crash_reports=false and analytics=false cleanly."
+    }
+  }
+}

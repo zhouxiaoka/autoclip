@@ -1,0 +1,64 @@
+{
+  "version": "1.6.0",
+  "platform": "macos-arm64",
+  "commit": "2566158cf31fbc4ca19955783d56a031a233b5e4",
+  "build_run_id": 45221265389,
+  "package": {
+    "name": "AutoClip Desktop_1.6.0_aarch64.dmg",
+    "sha256": "d2cc3b72d21c57e4f6ed7070c000983a65867678f937202c53d46a0f469c5565",
+    "bytes": 339972548
+  },
+  "installed_binary_sha256": "92bea0732ee85dc2e23469121f11e306678bfc2c5dfa9f7e01d2920aa7ef394c",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:35:14Z",
+      "summary": "ULMO LZMA DMG (324 MB) verified, mounted, and extracted cleanly on Apple Silicon macOS 26.6.2; portable Python 3.13.13 booted against isolated empty data dir with health=200 version=1.6.0, projects=0, autoclip.db initialized."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:25Z",
+      "summary": "Isolated copy of v1.5.9 autoclip.db and ai-model-settings.json loaded cleanly under 1.6.0 shipped bundle (11 projects and DashScope provider connection preserved)."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:25Z",
+      "summary": "Existing DashScope roles persisted across upgrade; isolated loopback probe verified 401 -> 429 -> 200 recovery."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:46:15Z",
+      "summary": "Real local 20s MP4 + SRT completed in 50s; rendered 21.89s MP4 (3,876,954 bytes)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:46:54Z",
+      "summary": "Real local 20s MP4 without SRT transcribed via DashScope Cloud ASR and rendered 21.82s MP4 (3,790,135 bytes) in 39s."
+    },
+    "link_import": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:47:45Z",
+      "summary": "Real public YouTube link (Me at the zoo, 19s) downloaded via bundled yt-dlp, transcribed, and rendered 19.59s MP4 (3,793,161 bytes) in 51s."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:48:18Z",
+      "summary": "Primary OutputVariantCard AI cover regeneration with allow_reference_once=True completed on attempt 1 (cover=ai, status=completed)."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:35:16Z",
+      "summary": "Isolated loopback mock verified HTTP 401 -> HTTP 429 -> HTTP 200 recovery cleanly."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:47:45Z",
+      "summary": "All rendered MP4 outputs verified via bundled ffprobe 9.0.2 (valid h264 + aac streams and durations)."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-24T01:35:18Z",
+      "summary": "Isolated clean install persisted crash_reports=false and analytics=false across backend restart."
+    }
+  }
+}

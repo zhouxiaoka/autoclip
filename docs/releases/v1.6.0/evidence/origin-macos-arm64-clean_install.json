@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "commit": "2566158cf31fbc4ca19955783d56a031a233b5e4",
+  "build_run_id": 45221265389,
+  "assets": {
+    "AutoClip Desktop_1.6.0_aarch64.dmg": "d2cc3b72d21c57e4f6ed7070c000983a65867678f937202c53d46a0f469c5565",
+    "AutoClip Desktop_1.6.0_x64-setup.exe": "516dc1c43ddb638e7c8a1befd88348ede301c7bff31f455dd48c2a39df2b3736",
+    "AutoClip Desktop_1.6.0_x64-setup.exe.sig": "b4e8427ae15a230c2f13c49223427df7b598f3124fa1feb6503d3cc750bf3dc9",
+    "AutoClip.Desktop_1.6.0_aarch64.app.tar.gz": "b21b6dec7efa346785b794a3ede0e5fd49e0f45983706e44887c14a10b12bbbb",
+    "AutoClip.Desktop_1.6.0_aarch64.app.tar.gz.sig": "d6ac19b216b044e9807d8475d8346a4bb3f519426cc1511437dd7f222d355d82",
+    "internal-build-provenance.json": "82624047c00f656e9fefcbe7bcd49c9cfb1d708b6f48322c24769c971603fb73"
+  },
+  "platforms": [
+    "macos-arm64"
+  ],
+  "label": "macos-arm64/clean_install",
+  "completed_at": "2026-11-24T01:35:14Z",
+  "assertions": [
+    "macos-arm64-clean_install:passed"
+  ],
+  "build": {
+    "path": "evidence/origin-build-45221265389.json",
+    "sha256": "da74d2c5cd1a6f684b2e2d0ad26c013cbc2c127c997f1bde1f8e758119af138f"
+  },
+  "provenance": {
+    "path": "evidence/origin-provenance-45221265389.json",
+    "sha256": "1be057389908f48c762e37e4a815061e439148b69d6ccc4d8c3654119101f18c"
+  },
+  "evidence": {
+    "path": "evidence/macos-1.6.0-summary.json",
+    "sha256": "0e7accc7558ab9489f8925e4162ec82491302dd8f28741ae18e8091351f90133"
+  }
+}
