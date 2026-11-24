@@ -45,7 +45,7 @@ Open-source, local-first AI clipping for **podcasts, interviews, and gaming stre
 </p>
 
 <p>
-  <strong>English</strong> · <a href="README-ZH.md">简体中文</a> · <a href="README-ZH-TW.md">繁體中文</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-ES.md">Español</a> · <a href="README-PT.md">Português</a> · <a href="README-RU.md">Русский</a> · <a href="README-FR.md">Français</a> · <a href="README-ID.md">Bahasa Indonesia</a> · <a href="README-TR.md">Türkçe</a> · <a href="README-VI.md">Tiếng Việt</a> · <a href="README-DE.md">Deutsch</a>
+  <strong>English</strong> · <a href="docs/i18n/README-ZH.md">简体中文</a> · <a href="docs/i18n/README-ZH-TW.md">繁體中文</a> · <a href="docs/i18n/README-JA.md">日本語</a> · <a href="docs/i18n/README-KO.md">한국어</a> · <a href="docs/i18n/README-ES.md">Español</a> · <a href="docs/i18n/README-PT.md">Português</a> · <a href="docs/i18n/README-RU.md">Русский</a> · <a href="docs/i18n/README-FR.md">Français</a> · <a href="docs/i18n/README-ID.md">Bahasa Indonesia</a> · <a href="docs/i18n/README-TR.md">Türkçe</a> · <a href="docs/i18n/README-VI.md">Tiếng Việt</a> · <a href="docs/i18n/README-DE.md">Deutsch</a>
 </p>
 
 <br>
@@ -386,7 +386,7 @@ Check the failed stage: subtitles/transcription, model connection, FFmpeg, disk 
 | Install &amp; first clips | [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
 | Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [CLI &amp; MCP](docs/CLI_AND_MCP.md) (ZH) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
 | Models &amp; troubleshooting | [Multi-LLM Setup](docs/MULTI_LLM_PROVIDER_GUIDE.md) (ZH) · [FAQ](docs/FAQ.en.md) |
-| Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |
+| Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |
 | Research | [Pick the Moment, Not the Effect](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
 | Contributing &amp; i18n | [Contributing](CONTRIBUTING.md) (ZH) · [Translation Guide](docs/i18n.md) (ZH) |
 

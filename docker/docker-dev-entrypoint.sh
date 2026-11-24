@@ -3,7 +3,7 @@
 set -euo pipefail
 cd /app
 export PATH="/app/venv/bin:$PATH"
-python init_database.py
+python scripts/ops/init_database.py
 # Compose isolates Linux dependencies from a host's macOS/Windows node_modules.
 # npm ci checks the lock file and never rewrites package manifests.
 (cd frontend && npm ci)

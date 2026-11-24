@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="76" height="76">
+<img src="../../src-tauri/icons/128x128.png" alt="AutoClip" width="76" height="76">
 
 # AutoClip
 
@@ -17,7 +17,7 @@
   <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square&color=FFD700&logo=github&logoColor=white&label=Stars" alt="GitHub stars" height="20"></a>&nbsp;
   <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square&color=10B981" alt="Downloads" height="20"></a>&nbsp;
   <img src="https://img.shields.io/badge/Languages-13-0EA5E9?style=flat-square" alt="13 Languages" height="20">&nbsp;
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT" height="20"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT" height="20"></a>
 </p>
 
 <br>
@@ -45,7 +45,7 @@
 </p>
 
 <p>
-  <a href="README.md">English</a> · <strong>简体中文</strong> · <a href="README-ZH-TW.md">繁體中文</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-ES.md">Español</a> · <a href="README-PT.md">Português</a> · <a href="README-RU.md">Русский</a> · <a href="README-FR.md">Français</a> · <a href="README-ID.md">Bahasa Indonesia</a> · <a href="README-TR.md">Türkçe</a> · <a href="README-VI.md">Tiếng Việt</a> · <a href="README-DE.md">Deutsch</a>
+  <a href="../../README.md">English</a> · <strong>简体中文</strong> · <a href="README-ZH-TW.md">繁體中文</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-ES.md">Español</a> · <a href="README-PT.md">Português</a> · <a href="README-RU.md">Русский</a> · <a href="README-FR.md">Français</a> · <a href="README-ID.md">Bahasa Indonesia</a> · <a href="README-TR.md">Türkçe</a> · <a href="README-VI.md">Tiếng Việt</a> · <a href="README-DE.md">Deutsch</a>
 </p>
 
 <br>
@@ -64,7 +64,7 @@
 
 **本机优先：** 剪辑与渲染全部在本机完成，无需上传原片排队，也没有订阅费。支持自带云端 API Key，或搭配 **Ollama / LM Studio + Whisper / SenseVoice** 实现 100% 离线运行。
 
-![AutoClip v1.6 直播回放切片演示](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 直播回放切片演示](../images/v1.6/autoclip-v1.6-demo.gif)
 
 <p align="center"><em>首页 → 6 路直播回放入口 → OBS WebSocket 配置 → Twitch 导入 → 成片卡与一键发布。</em></p>
 
@@ -86,27 +86,27 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="50%">
-<img src="docs/images/v1.6/zh-01-home.jpg" alt="首页三大入口：链接导入、文件导入、直播回放"><br>
+<img src="../images/v1.6/zh-01-home.jpg" alt="首页三大入口：链接导入、文件导入、直播回放"><br>
 <em>首页 —— 链接导入、文件导入与直播回放</em>
 </td>
 <td align="center" valign="top" width="50%">
-<img src="docs/images/v1.6/zh-02-replays-obs.jpg" alt="直播回放 6 路渠道选择"><br>
+<img src="../images/v1.6/zh-02-replays-obs.jpg" alt="直播回放 6 路渠道选择"><br>
 <em>直播回放 —— 6 路渠道选择</em>
 </td>
 </tr>
 <tr>
 <td align="center" valign="top" width="50%">
-<img src="docs/images/v1.6/zh-03-replays-obs-settings.jpg" alt="OBS Studio WebSocket 页内连接设置"><br>
+<img src="../images/v1.6/zh-03-replays-obs-settings.jpg" alt="OBS Studio WebSocket 页内连接设置"><br>
 <em>OBS Studio WebSocket 页内设置</em>
 </td>
 <td align="center" valign="top" width="50%">
-<img src="docs/images/v1.6/zh-04-replays-twitch.jpg" alt="Twitch 回放与本地录像导入"><br>
+<img src="../images/v1.6/zh-04-replays-twitch.jpg" alt="Twitch 回放与本地录像导入"><br>
 <em>Twitch 回放快捷入口与本地录像导入</em>
 </td>
 </tr>
 <tr>
 <td align="center" valign="top" colspan="2">
-<img src="docs/images/v1.6/zh-05-result-card.jpg" width="75%" alt="统一成片卡与一键发布"><br>
+<img src="../images/v1.6/zh-05-result-card.jpg" width="75%" alt="统一成片卡与一键发布"><br>
 <em>成片卡 —— 保留渠道来源归属、竖屏取景、字幕与一键下载 / 发布 / 重做</em>
 </td>
 </tr>
@@ -125,25 +125,25 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="../images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates"></a><br>
 <strong>Bill Gates</strong><br>
 访谈式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ 播放 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="../images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate"></a><br>
 <strong>AI Experts Debate</strong><br>
 访谈式 · Shorts · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ 播放 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="../images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins"></a><br>
 <strong>Tony Robbins</strong><br>
 满屏播客 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ 播放 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="../images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler"></a><br>
 <strong>Garfield × Poehler</strong><br>
 满屏播客 · Shorts · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ 播放 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">原片</a>
@@ -156,12 +156,12 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫"></a><br>
 <strong>佟丽娅 × 鲁豫</strong> · 16:9 · B 站 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ 播放 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">原片</a>
 </td>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="../images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman"></a><br>
 <strong>Sam Altman</strong> · 16:9 · B 站 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ 播放 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">原片</a>
 </td>
@@ -174,25 +174,25 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="../images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann"></a><br>
 <strong>Adam Neumann</strong><br>
 满屏播客 · TikTok · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ 播放 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="../images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫"></a><br>
 <strong>小奇 × 鲁豫</strong><br>
 访谈式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ 播放 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫"></a><br>
 <strong>郭柯宇 × 鲁豫</strong><br>
 访谈式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ 播放 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="../images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe"></a><br>
 <strong>Willem Dafoe</strong><br>
 满屏播客 · TikTok · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ 播放 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">原片</a>
@@ -200,25 +200,25 @@
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="../images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩"></a><br>
 <strong>TIM × 罗永浩</strong><br>
 访谈式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ 播放 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang"></a><br>
 <strong>Jensen Huang</strong><br>
 访谈式 · 小红书 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ 播放 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy"></a><br>
 <strong>Andrej Karpathy</strong><br>
 访谈式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ 播放 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="../images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro"></a><br>
 <strong>A20 Pro</strong><br>
 访谈式 · 小红书 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ 播放 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">原片</a>
@@ -226,13 +226,13 @@
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="../images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone"></a><br>
 <strong>Sylvester Stallone</strong><br>
 访谈式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ 播放 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="../images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast"></a><br>
 <strong>MrBeast</strong><br>
 满屏播客 · TikTok · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ 播放 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">原片</a>
@@ -305,7 +305,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-浏览器打开 `http://localhost:3000`（后端 API 文档在 `http://localhost:8000/docs`）。绑定挂载权限与自定义域名配置见 [Docker 指南](DOCKER.md)。
+浏览器打开 `http://localhost:3000`（后端 API 文档在 `http://localhost:8000/docs`）。绑定挂载权限与自定义域名配置见 [Docker 指南](../DOCKER.md)。
 
 ---
 
@@ -325,7 +325,7 @@ docker compose up -d --build
 <table>
   <tr>
     <td align="center" width="140">
-      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="../sponsors/apimart.png" alt="APIMart" width="88"></a><br>
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
@@ -355,7 +355,7 @@ docker compose up -d --build
 <details>
 <summary>我的视频会上传吗？</summary>
 
-剪辑与渲染都在本机完成。云端分析仅发送字幕文本；视觉模型仅发送抽帧图片；云端转写会上传音频。搭配本地模型 + Whisper / SenseVoice 可全程离线。统计与崩溃报告可在设置中关闭，详见 [隐私说明](docs/PRIVACY.md)。
+剪辑与渲染都在本机完成。云端分析仅发送字幕文本；视觉模型仅发送抽帧图片；云端转写会上传音频。搭配本地模型 + Whisper / SenseVoice 可全程离线。统计与崩溃报告可在设置中关闭，详见 [隐私说明](../PRIVACY.md)。
 
 </details>
 
@@ -373,7 +373,7 @@ docker compose up -d --build
 
 </details>
 
-[完整排错指南](docs/FAQ.md) · [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)
+[完整排错指南](../FAQ.md) · [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)
 
 ---
 
@@ -383,12 +383,12 @@ docker compose up -d --build
 
 | 主题 | 指南 |
 | :--- | :--- |
-| 安装与首次出片 | [安装指南](docs/USER_INSTALLATION_GUIDE.md) |
-| 自部署与 Agent | [Docker](DOCKER.md) · [CLI 与 MCP](docs/CLI_AND_MCP.md) · [Agent Skill](skills/autoclip/SKILL.md) · [OpenCode](docs/OPENCODE.md) |
-| 模型与排错 | [多模型配置](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](docs/FAQ.md) |
-| 版本与隐私 | [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md) · [社区看板](docs/COMMUNITY_BOARD.md) · [隐私说明](docs/PRIVACY.md) |
-| 专题研究 | [什么决定播放量](docs/research/2026-10-what-drives-views/article-zh.md) · [English](docs/research/2026-10-what-drives-views/article-en.md) |
-| 参与贡献与翻译 | [贡献指南](CONTRIBUTING.md) · [多语言说明](docs/i18n.md) |
+| 安装与首次出片 | [安装指南](../USER_INSTALLATION_GUIDE.md) |
+| 自部署与 Agent | [Docker](../DOCKER.md) · [CLI 与 MCP](../CLI_AND_MCP.md) · [Agent Skill](../../skills/autoclip/SKILL.md) · [OpenCode](../OPENCODE.md) |
+| 模型与排错 | [多模型配置](../MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](../FAQ.md) |
+| 版本与隐私 | [更新日志](../../CHANGELOG.md) · [路线图](../ROADMAP.md) · [社区看板](../COMMUNITY_BOARD.md) · [隐私说明](../PRIVACY.md) |
+| 专题研究 | [什么决定播放量](../research/2026-10-what-drives-views/article-zh.md) · [English](../research/2026-10-what-drives-views/article-en.md) |
+| 参与贡献与翻译 | [贡献指南](../../CONTRIBUTING.md) · [多语言说明](../i18n.md) |
 
 ## 参与贡献
 
@@ -402,4 +402,4 @@ docker compose up -d --build
 
 ![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)
 
-基于 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper 与 FunASR 构建。[MIT License](LICENSE)。
+基于 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper 与 FunASR 构建。[MIT License](../../LICENSE)。

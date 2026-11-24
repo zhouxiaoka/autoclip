@@ -10,12 +10,13 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
-    "README.md", "README-ZH.md", "README-ZH-TW.md", "README-JA.md", "README-KO.md",
-    "README-ES.md", "README-PT.md", "README-RU.md", "README-FR.md",
-    "README-ID.md", "README-TR.md", "README-VI.md", "README-DE.md",
+    "README.md",
+    "docs/i18n/README-ZH.md", "docs/i18n/README-ZH-TW.md", "docs/i18n/README-JA.md", "docs/i18n/README-KO.md",
+    "docs/i18n/README-ES.md", "docs/i18n/README-PT.md", "docs/i18n/README-RU.md", "docs/i18n/README-FR.md",
+    "docs/i18n/README-ID.md", "docs/i18n/README-TR.md", "docs/i18n/README-VI.md", "docs/i18n/README-DE.md",
 )
 GUIDES = (
-    "DOCKER.md", "docs/DOCKER.en.md", "docs/README.md", "docs/i18n.md",
+    "docs/DOCKER.md", "docs/DOCKER.en.md", "docs/README.md", "docs/i18n.md",
     "docs/USER_INSTALLATION_GUIDE.md", "docs/USER_INSTALLATION_GUIDE.en.md",
     "docs/FAQ.md", "docs/FAQ.en.md", "docs/images/README.md",
     "CONTRIBUTING.md", "docs/MULTI_LLM_PROVIDER_GUIDE.md",
@@ -89,8 +90,13 @@ def main() -> int:
         if len(re.findall(r"^```", content, re.MULTILINE)) != 2 * len(blocks):
             errors.append(f"{name}: unbalanced code fences")
         links = collect_links(content)
-        for other in FILES:
-            if other != name and other not in links:
+        resolved_links = {
+            (path.parent / unquote(urlsplit(link).path)).resolve()
+            for link in links
+            if not urlsplit(link).scheme and not urlsplit(link).netloc and urlsplit(link).path
+        }
+        for other, other_path in files.items():
+            if other != name and other_path.resolve() not in resolved_links:
                 errors.append(f"{name}: missing language link to {other}")
         for link in links:
             url = urlsplit(link)

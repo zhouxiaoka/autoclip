@@ -171,7 +171,7 @@ install_backend_deps() {
     # W157-F7: playwright Python package ships in the desktop bundle (no browsers;
     # rendering uses the system Chrome / Edge). Kept out of requirements.txt so
     # Docker/server installs stay lean. Must match packaging_runtime.PACKAGES.
-    "$PORTABLE_PY" -m pip install -r requirements-desktop.txt --quiet --index-url "$pip_index"
+    "$PORTABLE_PY" -m pip install -r requirements/requirements-desktop.txt --quiet --index-url "$pip_index"
     echo "OK"
 }
 
@@ -289,7 +289,7 @@ stdlib = set(sys.stdlib_module_names)
 # cv2: speaker framing (backend/services/studio/framing.py), installed on demand like Whisper.
 # numpy: imported only after loading Whisper, for the PyAV decoding fallback;
 # faster-whisper's runtime installation provides it through its dependencies.
-# playwright is bundled since 1.5.7 (requirements-desktop.txt) and checked by verify_playwright_bundled.
+# playwright is bundled since 1.5.7 (requirements/requirements-desktop.txt) and checked by verify_playwright_bundled.
 runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2", "numpy", "funasr", "torch"}
 mods = set()
 for root, _, files in os.walk(backend_dir):

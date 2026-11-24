@@ -1,6 +1,6 @@
 """Final output branding shared by Studio and legacy exports.
 
-The outro is a designed 1.8 s animation (logo, wordmark, chime; source in design/outro-v5),
+The outro is a designed 1.8 s animation (logo, wordmark, chime; source in docs/design/outro-v5),
 shipped pre-rendered in vertical and horizontal. It is conformed once per output spec (size,
 frame rate, time base, audio layout) and cached, then joined to the content by stream copy.
 """

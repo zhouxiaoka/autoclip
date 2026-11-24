@@ -1,6 +1,6 @@
 # 贡献指南
 
-AutoClip 接受故障修复、文档与翻译改进，以及已经确认范围的功能贡献。首次参与可先看 [README](README.md)、[仓库目录说明](docs/REPOSITORY_LAYOUT.md) 和 [当前状态](HANDOFF.md)。个人业余维护，回复时间不固定。
+AutoClip 接受故障修复、文档与翻译改进，以及已经确认范围的功能贡献。首次参与可先看 [README](README.md)、[仓库目录说明](docs/REPOSITORY_LAYOUT.md) 和 [当前状态](docs/HANDOFF.md)。个人业余维护，回复时间不固定。
 
 ## 先选择反馈入口
 
@@ -22,7 +22,7 @@ git fetch upstream
 git switch -c fix/your-change upstream/main
 ```
 
-源码 Web 环境以 [STARTUP_GUIDE.md](STARTUP_GUIDE.md) 为准；当前 CI 验证 Python 3.11 和 Node.js 20。Python 依赖统一在根目录 `requirements.txt`，Node 依赖只在 `frontend/`，安装时使用锁定依赖：
+源码 Web 环境以 [STARTUP_GUIDE.md](docs/STARTUP_GUIDE.md) 为准；当前 CI 验证 Python 3.11 和 Node.js 20。Python 依赖统一在根目录 `requirements.txt`，Node 依赖只在 `frontend/`，安装时使用锁定依赖：
 
 ```bash
 python3 -m venv venv
@@ -32,13 +32,13 @@ python -m pip install -r requirements.txt
 cp env.example .env
 ```
 
-以上命令适用于 macOS/Linux。Windows 桌面开发与打包按 [BUILD_GUIDE.md](BUILD_GUIDE.md) 和 [scripts/README.md](scripts/README.md) 准备工具链，不要直接套用 POSIX Web 启动脚本。
+以上命令适用于 macOS/Linux。Windows 桌面开发与打包按 [BUILD_GUIDE.md](docs/BUILD_GUIDE.md) 和 [scripts/README.md](scripts/README.md) 准备工具链，不要直接套用 POSIX Web 启动脚本。
 
-Web 开发需要 Redis，准备后用 `./start_autoclip.sh`；管理命令和手动启动方式见启动指南。桌面后端由 Tauri 管理，入口是 `backend/desktop_main.py`；容器部署见 [DOCKER.md](DOCKER.md)，CLI/MCP 见 [对应指南](docs/CLI_AND_MCP.md)。
+Web 开发需要 Redis，准备后用 `./start_autoclip.sh`；管理命令和手动启动方式见启动指南。桌面后端由 Tauri 管理，入口是 `backend/desktop_main.py`；容器部署见 [DOCKER.md](docs/DOCKER.md)，CLI/MCP 见 [对应指南](docs/CLI_AND_MCP.md)。
 
 ## 修改与验证
 
-保持改动聚焦，遵循相关模块已有的结构和命名。说明解决了什么问题，以及哪些条件会触发它。UI 修改遵循 [DESIGN.md](DESIGN.md)，涉及行为变化时附截图或操作说明。翻译修改遵循 [翻译维护](docs/i18n.md)。
+保持改动聚焦，遵循相关模块已有的结构和命名。说明解决了什么问题，以及哪些条件会触发它。UI 修改遵循 [DESIGN.md](docs/DESIGN.md)，涉及行为变化时附截图或操作说明。翻译修改遵循 [翻译维护](docs/i18n.md)。
 
 完整质量与安装包验收要求见 [测试验收工作流](docs/TESTING_ACCEPTANCE.md)。提交前安装 `requirements-test.txt`，在隔离数据目录运行统一入口；报告写到仓库外，避免把测试记录混入源码：
 
@@ -69,7 +69,7 @@ npm run build
 
 CI 的后端 lint 使用 Ruff，目前是非阻塞检查；测试及前端检查仍需通过。项目没有统一配置 Black、isort 或 Prettier，不要为无关修改重新格式化整个仓库。修复可复现的代码故障时补充有意义的回归覆盖；纯文档修改检查命令、链接和对应实现即可。
 
-涉及启动、Docker、桌面安装或平台差异时，应验证受影响路线并记录平台与结果。CI 通过不等于安装包已完成界面或真实出片验收，发布必须遵守 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。
+涉及启动、Docker、桌面安装或平台差异时，应验证受影响路线并记录平台与结果。CI 通过不等于安装包已完成界面或真实出片验收，发布必须遵守 [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)。
 
 ## 提交 Pull Request
 

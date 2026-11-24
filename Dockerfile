@@ -86,9 +86,9 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 # 复制项目文件
 COPY backend/ ./backend/
 COPY scripts/ ./scripts/
-COPY init_database.py ./
+COPY scripts/ops/init_database.py ./
 COPY env.example .env
-COPY docker-entrypoint.sh ./
+COPY docker/docker-entrypoint.sh ./
 
 # 创建必要的目录
 RUN mkdir -p data/projects data/uploads data/temp data/output logs

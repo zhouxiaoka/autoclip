@@ -1,6 +1,6 @@
 # Docker deployment and troubleshooting
 
-[简体中文](../DOCKER.md) · [README](../README.md) · [FAQ](FAQ.en.md)
+[简体中文](DOCKER.md) · [README](../README.md) · [FAQ](FAQ.en.md)
 
 Use Docker for Linux, Intel Mac, servers, or a web interface. Install Docker and Docker Compose v2; the commands use `docker compose`. Allow additional disk space for footage, models, caches, and exports.
 
@@ -115,7 +115,7 @@ Use `docker compose stop` to pause services or `docker compose down` to remove c
 
 ## Development mode
 
-The [development stack](../docker-compose.dev.yml) is for source development and may use the same ports as production. Do not run both at once:
+The [development stack](../docker/docker-compose.dev.yml) is for source development and may use the same ports as production. Do not run both at once:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d --build

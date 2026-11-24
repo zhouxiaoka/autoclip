@@ -76,7 +76,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-test.txt
+          pip install -r requirements/requirements-test.txt
 
       - name: Set up Node for model settings round-trip tests and source launcher
         uses: actions/setup-node@v4
@@ -127,17 +127,17 @@ jobs:
             if docker exec autoclip-source-redis redis-cli ping; then break; fi
             sleep 1
           done
-          ./quick_start.sh
-          ./status_autoclip.sh
-          ./stop_autoclip.sh
-          if ./status_autoclip.sh; then echo 'Stopped services incorrectly reported healthy'; exit 1; fi
+          ./scripts/ops/quick_start.sh
+          ./scripts/ops/status_autoclip.sh
+          ./scripts/ops/stop_autoclip.sh
+          if ./scripts/ops/status_autoclip.sh; then echo 'Stopped services incorrectly reported healthy'; exit 1; fi
       - name: Source runtime logs on failure
         if: failure()
         run: cat logs/backend.log logs/frontend.log logs/celery.log 2>/dev/null || true
       - name: Clean up source smoke
         if: always()
         run: |
-          ./stop_autoclip.sh || true
+          ./scripts/ops/stop_autoclip.sh || true
           docker rm -f autoclip-source-redis || true
 
   frontend:
@@ -261,9 +261,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build development image
-        run: docker compose -f docker-compose.dev.yml build autoclip-dev
+        run: docker compose -f docker/docker-compose.dev.yml build autoclip-dev
       - name: Start development services through compatibility entrypoint
-        run: ./docker-start.sh dev --no-build
+        run: ./docker/docker-start.sh dev --no-build
       - name: Wait for both development servers and the worker
         run: |
           for i in $(seq 1 90); do
@@ -273,21 +273,21 @@ jobs:
           curl -fsS http://localhost:8000/api/v1/health/
           curl -fsS http://localhost:3000/ >/dev/null
           for i in $(seq 1 20); do
-            out=$(docker compose -f docker-compose.dev.yml exec -T celery-worker-dev celery -A backend.core.celery_app inspect --json --timeout 5 active_queues 2>/dev/null || true)
+            out=$(docker compose -f docker/docker-compose.dev.yml exec -T celery-worker-dev celery -A backend.core.celery_app inspect --json --timeout 5 active_queues 2>/dev/null || true)
             if echo "$out" | grep -q '"name": "processing"'; then break; fi
             sleep 3
           done
           for q in celery processing video notification upload; do
             echo "$out" | grep -q "\"name\": \"$q\""
           done
-          ./docker-status.sh dev
+          ./docker/docker-status.sh dev
       - name: Stop through compatibility entrypoint
         run: |
-          ./docker-stop.sh dev
-          if ./docker-status.sh dev; then echo 'Stopped containers incorrectly reported healthy'; exit 1; fi
+          ./docker/docker-stop.sh dev
+          if ./docker/docker-status.sh dev; then echo 'Stopped containers incorrectly reported healthy'; exit 1; fi
       - name: Dump logs on failure
         if: failure()
-        run: docker compose -f docker-compose.dev.yml logs --no-color
+        run: docker compose -f docker/docker-compose.dev.yml logs --no-color
       - name: Tear down CI resources
         if: always()
-        run: docker compose -f docker-compose.dev.yml down -v --remove-orphans
+        run: docker compose -f docker/docker-compose.dev.yml down -v --remove-orphans

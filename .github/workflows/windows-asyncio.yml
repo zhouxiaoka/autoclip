@@ -69,7 +69,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13.13"
-      - run: python -m pip install -r requirements.txt -r requirements-test.txt
+      - run: python -m pip install -r requirements.txt -r requirements/requirements-test.txt
       - name: Real media inference, SenseVoice recovery and Windows state replacement
         env:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-media-regression

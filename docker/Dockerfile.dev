@@ -39,7 +39,7 @@ RUN cd frontend && npm ci
 COPY . .
 
 # 复制开发环境启动脚本
-COPY docker-dev-entrypoint.sh ./
+COPY docker/docker-dev-entrypoint.sh ./
 
 # 创建必要的目录
 RUN mkdir -p data/projects data/uploads data/temp data/output logs

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
+<img src="../../src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
 
 # AutoClip
 
@@ -14,20 +14,20 @@ Uygulama ücretsizdir; bulut modeller kullanıma göre ücretlendirilir. Ayarlam
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square" alt="GitHub stars"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[Web sitesi](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Masaüstü sürümünü indir](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Örnek kütüphanesi](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Araştırma](docs/research/2026-10-what-drives-views/article-en.md) · [Hızlı başlangıç](#quick-start) · [Belgeler](#documentation) · [Sorun bildir](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[Web sitesi](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Masaüstü sürümünü indir](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Örnek kütüphanesi](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Araştırma](../research/2026-10-what-drives-views/article-en.md) · [Hızlı başlangıç](#quick-start) · [Belgeler](#documentation) · [Sorun bildir](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · **Türkçe** · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](../../README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · **Türkçe** · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
 
-![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](../images/v1.6/autoclip-v1.6-demo.gif)
 
-**[En son sürüm](https://github.com/zhouxiaoka/autoclip/releases/latest)**, `autoclip --version` çıktısında görünen sürümdür; masaüstü, CLI ve MCP birlikte güncellenir. Hızlı çıktı, altyazı sayfalama, konuşmacı kadrajı ve uzun video kuyruğu düzeltmeleri için [değişiklik günlüğüne](CHANGELOG.md) bakın. Eski kurulumları lütfen güncelleyin.
+**[En son sürüm](https://github.com/zhouxiaoka/autoclip/releases/latest)**, `autoclip --version` çıktısında görünen sürümdür; masaüstü, CLI ve MCP birlikte güncellenir. Hızlı çıktı, altyazı sayfalama, konuşmacı kadrajı ve uzun video kuyruğu düzeltmeleri için [değişiklik günlüğüne](../../CHANGELOG.md) bakın. Eski kurulumları lütfen güncelleyin.
 
 ## Gerçek örnekler
 
@@ -38,25 +38,25 @@ Klibin tamamını izlemek için bir ekran görüntüsüne veya “Oynat” bağl
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="../images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
 <strong>Bill Gates</strong><br>
 Röportaj · Douyin · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ Oynat 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="../images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
 <strong>AI Experts Debate</strong><br>
 Röportaj · Shorts · İngilizce<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ Oynat 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="../images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
 <strong>Tony Robbins</strong><br>
 Tam ekran podcast · Douyin · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ Oynat 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="../images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
 <strong>Andrew Garfield × Amy Poehler</strong><br>
 Tam ekran podcast · Shorts · İngilizce<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ Oynat 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">Kaynak</a>
@@ -69,13 +69,13 @@ Tam ekran podcast · Shorts · İngilizce<br>
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
 <strong>佟丽娅 × 鲁豫</strong><br>
 Orijinal kadraj · Bilibili · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ Oynat 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">Kaynak</a>
 </td>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="../images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
 <strong>Sam Altman</strong><br>
 Orijinal kadraj · Bilibili · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ Oynat 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">Kaynak</a>
@@ -89,25 +89,25 @@ Orijinal kadraj · Bilibili · Çince<br>
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="../images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
 <strong>Adam Neumann</strong><br>
 Tam ekran podcast · TikTok · İngilizce<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ Oynat 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="../images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
 <strong>小奇 × 鲁豫</strong><br>
 Röportaj · Douyin · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ Oynat 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
 <strong>郭柯宇 × 鲁豫</strong><br>
 Röportaj · Douyin · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ Oynat 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="../images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
 <strong>Willem Dafoe</strong><br>
 Tam ekran podcast · TikTok · İngilizce<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ Oynat 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">Kaynak</a>
@@ -115,25 +115,25 @@ Tam ekran podcast · TikTok · İngilizce<br>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="../images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
 <strong>TIM × 罗永浩</strong><br>
 Röportaj · Douyin · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ Oynat 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
 <strong>Jensen Huang</strong><br>
 Röportaj · Xiaohongshu · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ Oynat 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
 <strong>Andrej Karpathy</strong><br>
 Röportaj · Douyin · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ Oynat 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="../images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
 <strong>A20 Pro</strong><br>
 Röportaj · Xiaohongshu · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ Oynat 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">Kaynak</a>
@@ -141,13 +141,13 @@ Röportaj · Xiaohongshu · Çince<br>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="../images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
 <strong>Sylvester Stallone</strong><br>
 Röportaj · Douyin · Çince<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ Oynat 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">Kaynak</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="../images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
 <strong>MrBeast</strong><br>
 Tam ekran podcast · TikTok · İngilizce<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ Oynat 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">Kaynak</a>
@@ -190,13 +190,13 @@ Bunlar geliştirme sırasında üç farklı kaynak üzerinde alınmış ölçüm
 
 1 Ekim 2026, aynı Apple Silicon Mac. İlk iki çalıştırma yeni hattı kullandı ve 10 klip render etti; eski hat 33 klip render etti; girdi ve çıktı sayıları farklıdır. Jensen için içerik üreticisinin altyazıları, TIM için yerel Whisper base kullanıldı.
 
-İçerik üreticisinin altyazıları transkripsiyonu atlar; aksi halde yerel veya bulut ASR seçin. Ek platformlar ve isteğe bağlı klipler süre ve kullanım ekler. Aşamaların kayıtları ve varsayımlar için [ölçümler ve maliyetlendirme](docs/COST_PER_VIDEO.md) sayfasına bakın (Çince).
+İçerik üreticisinin altyazıları transkripsiyonu atlar; aksi halde yerel veya bulut ASR seçin. Ek platformlar ve isteğe bağlı klipler süre ve kullanım ekler. Aşamaların kayıtları ve varsayımlar için [ölçümler ve maliyetlendirme](../COST_PER_VIDEO.md) sayfasına bakın (Çince).
 
 </details>
 
 ## Modellerinizi ve veri akışını seçin
 
-Kesme ve render işlemleri bilgisayarınızda çalışır. Bulut analizi ilgili altyazıları ve paylaşım metnini gönderir; görsel anlama veya referans görsel üretimi gerekli örnek kareleri, bulut ASR ise sesi gönderir. Yerel analiz ve transkripsiyon için ilgili bir bulut API'sine gerek yoktur. Bitmiş klipler, siz yayınlamayı seçtiğinizde bağlı platformlara yüklenir. Analitik ve hata raporları Ayarlar'dan kapatılabilir. Ayrıntılar için [gizlilik](docs/PRIVACY.en.md) sayfasına bakın.
+Kesme ve render işlemleri bilgisayarınızda çalışır. Bulut analizi ilgili altyazıları ve paylaşım metnini gönderir; görsel anlama veya referans görsel üretimi gerekli örnek kareleri, bulut ASR ise sesi gönderir. Yerel analiz ve transkripsiyon için ilgili bir bulut API'sine gerek yoktur. Bitmiş klipler, siz yayınlamayı seçtiğinizde bağlı platformlara yüklenir. Analitik ve hata raporları Ayarlar'dan kapatılabilir. Ayrıntılar için [gizlilik](../PRIVACY.en.md) sayfasına bakın.
 
 <a id="quick-start"></a>
 
@@ -215,9 +215,9 @@ Kesme ve render işlemleri bilgisayarınızda çalışır. Bulut analizi ilgili 
 3. **Önce örneğe bakın, sonra kendi videonuzu deneyin.** Ana ekranda hiç proje yokken “用示例项目看看效果” (Örnek projeyi görün) düğmesine tıklayın. API anahtarı gerekmez; örnek yükleyicinin içindedir. Ardından kendi röportajınızı veya podcast'inizi kullanıp bir dikey düzen seçin. Kaynakta altyazı yoksa ya da yerel Whisper kurulmuyor veya çok yavaş kalıyorsa Ayarlar → Varsayılan modeller → “Speech to subtitles” (sesten altyazıya) yolunu açıp Bailian bulut transkripsiyonuna geçin (`qwen-audio-3.1-asr-flash`; saat başına yaklaşık 0,1 yuan, gerçek tutar Alibaba Cloud faturasındadır). Ses buluta yüklenir. İçe aktarma engellenirse “Use cloud transcription instead” (Bunun yerine bulut transkripsiyonu kullan) düğmesine tıklayın. İlk yerel kurulumda yaklaşık 220 MB indirilir; yavaş bir ağda yaklaşık 15 dakika sürer.
 4. **İnceleyin ve indirin.** Altyazıları, kadrajı ve içerik bütünlüğünü kontrol edin; ardından yayın paketini kaydedin veya yayınlamak için bir hesap bağlayın. Daha fazla klip gerekirse isteğe bağlı alternatifleri üretin.
 
-Intel Mac için masaüstü sürümü yoktur. Intel Mac ve Linux için Docker veya CLI kullanın. [Kurulum kılavuzuna](docs/USER_INSTALLATION_GUIDE.en.md) ve [son sürüme](https://github.com/zhouxiaoka/autoclip/releases/latest) bakın.
+Intel Mac için masaüstü sürümü yoktur. Intel Mac ve Linux için Docker veya CLI kullanın. [Kurulum kılavuzuna](../USER_INSTALLATION_GUIDE.en.md) ve [son sürüme](https://github.com/zhouxiaoka/autoclip/releases/latest) bakın.
 
-[Tam kurulum kılavuzu](docs/USER_INSTALLATION_GUIDE.en.md) · [Sorun giderme](docs/FAQ.en.md)
+[Tam kurulum kılavuzu](../USER_INSTALLATION_GUIDE.en.md) · [Sorun giderme](../FAQ.en.md)
 
 **CLI / MCP (Claude Code, Codex, OpenCode ve betikler)**
 
@@ -258,7 +258,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-Web arayüzünü `http://localhost:3000` adresinde açın (API belgeleri: `http://localhost:8000/docs`). Bağlama izinleri ve özel alan adları için [Docker Kılavuzu](docs/DOCKER.en.md) sayfasına bakın.
+Web arayüzünü `http://localhost:3000` adresinde açın (API belgeleri: `http://localhost:8000/docs`). Bağlama izinleri ve özel alan adları için [Docker Kılavuzu](../DOCKER.en.md) sayfasına bakın.
 ## Model kurulumu
 
 | Seçenek | Kurulum |
@@ -269,26 +269,26 @@ Web arayüzünü `http://localhost:3000` adresinde açın (API belgeleri: `http:
 
 Docker içinde `localhost` konteynerin kendisidir. Konteynerin erişebildiği bir ana makine adresine yönlendirin.
 
-[Model kurulumu](docs/MULTI_LLM_PROVIDER_GUIDE.md) (Çince) · [Yerel modeller ve konteynerler](docs/CLI_AND_MCP.md) (Çince)
+[Model kurulumu](../MULTI_LLM_PROVIDER_GUIDE.md) (Çince) · [Yerel modeller ve konteynerler](../CLI_AND_MCP.md) (Çince)
 
 ## Özel teşekkürler ❤️
 
 <table>
   <tr>
     <td align="center" width="140">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="../sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
     <td>
       AutoClip'e sponsor olduğu için <strong>88API Token Platform</strong>'a teşekkürler! GPT, Claude, Gemini, Grok, DeepSeek, Kimi ve GLM modellerini transkript analizi, öne çıkan anların seçimi ve başlık üretimi için bir araya getiriyor.<br>
       🎨 <strong>Medya yetenekleri</strong>: Platform, GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper ve TTS dahil görsel, video ve ses modelleri sunuyor. AutoClip uyumlu analiz, kapak görseli ve transkripsiyon API'lerini kullanır.<br>
       🏷️ <strong>Hizmet ve faturalandırma</strong>: İş ortağı; yurt dışı kurumsal işletme, canlı destek, fatura ve 1:1 bakiye yükleme oranı bildiriyor; platform koşulları geçerlidir.<br>
-      🎁 <strong>Yeni kullanıcı fırsatı</strong>: <a href="https://88api.ai/sign-up?aff=2PIc">referans kayıt bağlantımızla</a> modelleri denemek için deneme kredisi alın; promosyon koşulları geçerlidir. <a href="docs/88API_SETUP.en.md">Kurulum kılavuzu</a>
+      🎁 <strong>Yeni kullanıcı fırsatı</strong>: <a href="https://88api.ai/sign-up?aff=2PIc">referans kayıt bağlantımızla</a> modelleri denemek için deneme kredisi alın; promosyon koşulları geçerlidir. <a href="../88API_SETUP.en.md">Kurulum kılavuzu</a>
     </td>
   </tr>
   <tr>
     <td align="center" width="140">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="../sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>
     <td>
@@ -296,12 +296,12 @@ Docker içinde `localhost` konteynerin kendisidir. Konteynerin erişebildiği bi
       ⚙️ <strong>Uyumlu kurulum</strong>: AutoClip'te OpenAI uyumlu sağlayıcıyı seçin; Base URL'yi, API anahtarınızı ve kullanılabilir bir modeli girin.<br>
       🧩 <strong>Model seçimi</strong>: İş ortağı Claude, GPT, Gemini, DeepSeek ve diğer model ailelerini sunuyor. Transkript analizi ve öne çıkan an seçimini karşılaştırmak için uyumlu uç noktayı destekleyen modelleri seçin.<br>
       🏷️ <strong>Fiyatlandırma ve hizmetler</strong>: İş ortağına göre seçili modeller resmi liste fiyatlarının <strong>%1'i kadar</strong> düşük maliyetlidir; RMB faturalandırma, fatura ve model orijinalliği doğrulaması sunulur. Uygun modeller, güncel fiyatlar ve hizmet koşulları için platformu kontrol edin.<br>
-      🎁 <strong>AutoClip fırsatı</strong>: Yeni kullanıcılar <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">referans kayıt bağlantımızla</a> <strong>5 $ deneme kredisi</strong> alabilir; promosyon koşulları geçerlidir. <a href="docs/INFISTAR_SETUP.en.md">Kurulum kılavuzu</a>
+      🎁 <strong>AutoClip fırsatı</strong>: Yeni kullanıcılar <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">referans kayıt bağlantımızla</a> <strong>5 $ deneme kredisi</strong> alabilir; promosyon koşulları geçerlidir. <a href="../INFISTAR_SETUP.en.md">Kurulum kılavuzu</a>
     </td>
   </tr>
   <tr>
     <td align="center" width="140">
-      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="../sponsors/apimart.png" alt="APIMart" width="88"></a><br>
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
@@ -331,7 +331,7 @@ Uygulama ücretsizdir ve MIT lisanslıdır. Bulut analizi, transkripsiyon ve yap
 <details>
 <summary>Videolarım yükleniyor mu?</summary>
 
-Kesme ve render işlemleri bilgisayarınızda çalışır. Bulut analizi ilgili altyazıları ve paylaşım metnini gönderir; görsel anlama veya referans görsel üretimi gerekli örnek kareleri, bulut ASR ise sesi gönderir. Yerel analiz ve transkripsiyon için ilgili bir bulut API'sine gerek yoktur. Bitmiş klipler, siz yayınlamayı seçtiğinizde bağlı platformlara yüklenir. Analitik ve hata raporları Ayarlar'dan kapatılabilir. Ayrıntılar için [gizlilik](docs/PRIVACY.en.md) sayfasına bakın.
+Kesme ve render işlemleri bilgisayarınızda çalışır. Bulut analizi ilgili altyazıları ve paylaşım metnini gönderir; görsel anlama veya referans görsel üretimi gerekli örnek kareleri, bulut ASR ise sesi gönderir. Yerel analiz ve transkripsiyon için ilgili bir bulut API'sine gerek yoktur. Bitmiş klipler, siz yayınlamayı seçtiğinizde bağlı platformlara yüklenir. Analitik ve hata raporları Ayarlar'dan kapatılabilir. Ayrıntılar için [gizlilik](../PRIVACY.en.md) sayfasına bakın.
 
 </details>
 
@@ -349,7 +349,7 @@ Başarısız olan aşamayı kontrol edin: altyazı/transkripsiyon, model bağlan
 
 </details>
 
-[Tam sorun giderme](docs/FAQ.en.md) · [Bilinen sorunlar](https://github.com/zhouxiaoka/autoclip/issues/96)
+[Tam sorun giderme](../FAQ.en.md) · [Bilinen sorunlar](https://github.com/zhouxiaoka/autoclip/issues/96)
 
 <a id="documentation"></a>
 
@@ -357,12 +357,12 @@ Başarısız olan aşamayı kontrol edin: altyazı/transkripsiyon, model bağlan
 
 | İhtiyacınız | Belgeler |
 | --- | --- |
-| Kurulum ve ilk klipler | [Kurulum](docs/USER_INSTALLATION_GUIDE.en.md) |
-| Kendi sunucunuz ve otomasyon | [Docker](docs/DOCKER.en.md) · [CLI / MCP](docs/CLI_AND_MCP.md) (Çince) · [Ajan becerisi](skills/autoclip/SKILL.md) (Çince) · [OpenCode](docs/OPENCODE.en.md) |
-| Modeller ve sorun giderme | [Model kurulumu](docs/MULTI_LLM_PROVIDER_GUIDE.md) (Çince) · [SSS](docs/FAQ.en.md) |
-| Sürümler, yol haritası, gizlilik | [Değişiklik günlüğü](CHANGELOG.md) · [Yol haritası](ROADMAP.md) (Çince) · [Topluluk panosu](docs/COMMUNITY_BOARD.md) (Çince) · [Gizlilik](docs/PRIVACY.en.md) |
-| Araştırma | [Araştırma notu #1: Etkiyi değil, anı seçin](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
-| Katkı ve çeviri | [Katkıda bulunma](CONTRIBUTING.md) (Çince) · [Çeviri bakımı](docs/i18n.md) (Çince) |
+| Kurulum ve ilk klipler | [Kurulum](../USER_INSTALLATION_GUIDE.en.md) |
+| Kendi sunucunuz ve otomasyon | [Docker](../DOCKER.en.md) · [CLI / MCP](../CLI_AND_MCP.md) (Çince) · [Ajan becerisi](../../skills/autoclip/SKILL.md) (Çince) · [OpenCode](../OPENCODE.en.md) |
+| Modeller ve sorun giderme | [Model kurulumu](../MULTI_LLM_PROVIDER_GUIDE.md) (Çince) · [SSS](../FAQ.en.md) |
+| Sürümler, yol haritası, gizlilik | [Değişiklik günlüğü](../../CHANGELOG.md) · [Yol haritası](../ROADMAP.md) (Çince) · [Topluluk panosu](../COMMUNITY_BOARD.md) (Çince) · [Gizlilik](../PRIVACY.en.md) |
+| Araştırma | [Araştırma notu #1: Etkiyi değil, anı seçin](../research/2026-10-what-drives-views/article-en.md) · [中文](../research/2026-10-what-drives-views/article-zh.md) |
+| Katkı ve çeviri | [Katkıda bulunma](../../CONTRIBUTING.md) (Çince) · [Çeviri bakımı](../i18n.md) (Çince) |
 
 ## Katkıda bulunun
 
