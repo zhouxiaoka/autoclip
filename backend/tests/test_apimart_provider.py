@@ -153,8 +153,8 @@ def test_live_list_uses_capability_tags_and_drops_non_chat_models():
     assert result.models[:3] == ["deepseek-v4-flash", "qwen3.8-flash", "gemini-3.8-flash"]
     assert set(result.models) == set(CHAT_IDS)
     # Category tags do not prohibit image input. Explicit input modalities do.
-    assert {name for name, cap in result.capabilities.items() if cap == 'multimodal'} == set(CHAT_IDS) - {'deepseek-v4-flash'}
-    assert result.capabilities['deepseek-v4-flash'] == 'chat'
+    assert {name for name, cap in result.capabilities.items() if cap == 'multimodal'} == set(CHAT_IDS)
+    assert result.capabilities['deepseek-v4-flash'] == 'multimodal'
     assert result.recommended["analysis"] == ["deepseek-v4-flash", "qwen3.8-flash", "gemini-3.8-flash"]
     assert result.recommended["vision"] == ["qwen3.8-flash", "gemini-3.8-flash"]
     assert http.seen[0]["url"] == BASE + "/models?expand=category"
@@ -169,7 +169,8 @@ def test_text_tag_does_not_veto_vision_and_non_chat_families_are_dropped():
     assert supports_vision("gemini-3.8-flash")
     assert supports_vision("qwen3.8-flash")
     assert supports_vision("claude-haiku-5-5")
-    assert not supports_vision("deepseek-v4-flash")
+    assert supports_vision("deepseek-v4-flash")
+    assert not supports_vision("deepseek-v4-pro")
     for name in (
         "gpt-4o-realtime-preview", "gpt-4o-mini-transcribe", "omni-moderation-latest",
         "o3-deep-research", "gpt-5-search-api", "babbage-002", "davinci-002",
@@ -180,14 +181,12 @@ def test_text_tag_does_not_veto_vision_and_non_chat_families_are_dropped():
     rows = _records(SimpleNamespace(provider="apimart"), LIVE_LIST["data"], {})
     by_id = {row["id"]: row for row in rows}
     assert set(by_id) == set(CHAT_IDS)
-    for name in ("gpt-4o", "gemini-3.8-flash", "qwen3.8-flash", "claude-haiku-5-5"):
+    for name in ("gpt-4o", "gemini-3.8-flash", "qwen3.8-flash", "claude-haiku-5-5", "deepseek-v4-flash"):
         assert by_id[name]["capability"] == "multimodal"
         assert by_id[name]["capability_source"] == "name"
         assert by_id[name]["analysis"] is True
     assert by_id["chatgpt-4o-latest"]["capability"] == "multimodal"
     assert by_id["chatgpt-4o-latest"]["capability_source"] == "provider"
-    assert by_id["deepseek-v4-flash"]["capability"] != "multimodal"
-    assert by_id["deepseek-v4-flash"]["analysis"] is True
     assert pick_available_vision_model(
         "apimart",
         CHAT_IDS,

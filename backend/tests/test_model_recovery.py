@@ -556,7 +556,7 @@ def test_text_only_model_length_is_not_reported_as_truncation(monkeypatch):
         ).encode())
 
     monkeypatch.setattr(intelligence.urllib.request, "urlopen", urlopen)
-    config = {"base_url": "https://api.deepseek.com", "model": "deepseek-flash", "api_key": SECRET, "timeout": 10,
+    config = {"base_url": "https://api.deepseek.com", "model": "deepseek-v4-pro", "api_key": SECRET, "timeout": 10,
               "identity": {"provider": "deepseek", "config_source": "preset"}}
     with pytest.raises(UserFacingError) as caught:
         intelligence.vision_call([{"type": "text", "text": "look"}], config=config)
