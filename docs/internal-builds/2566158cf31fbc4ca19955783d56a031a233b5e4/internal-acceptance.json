@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "stage": "internal",
+  "version": "1.6.0",
+  "commit": "2566158cf31fbc4ca19955783d56a031a233b5e4",
+  "build_run_id": 45221265389,
+  "evidence_contract": "impact-inheritance/v2",
+  "assets": {
+    "AutoClip Desktop_1.6.0_aarch64.dmg": "d2cc3b72d21c57e4f6ed7070c000983a65867678f937202c53d46a0f469c5565",
+    "AutoClip Desktop_1.6.0_x64-setup.exe": "516dc1c43ddb638e7c8a1befd88348ede301c7bff31f455dd48c2a39df2b3736",
+    "AutoClip Desktop_1.6.0_x64-setup.exe.sig": "b4e8427ae15a230c2f13c49223427df7b598f3124fa1feb6503d3cc750bf3dc9",
+    "AutoClip.Desktop_1.6.0_aarch64.app.tar.gz": "b21b6dec7efa346785b794a3ede0e5fd49e0f45983706e44887c14a10b12bbbb",
+    "AutoClip.Desktop_1.6.0_aarch64.app.tar.gz.sig": "d6ac19b216b044e9807d8475d8346a4bb3f519426cc1511437dd7f222d355d82",
+    "internal-build-provenance.json": "82624047c00f656e9fefcbe7bcd49c9cfb1d708b6f48322c24769c971603fb73"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server 2025 Datacenter x64",
+      "machine": "Cloud x64 VM (active RDP session 2); not a physical Windows 11 desktop",
+      "runtime": "Packaged portable Python 3.13 + bundled FFmpeg/FFprobe + bundled Playwright Node (yt-dlp EJS)",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:44:55Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:46:23Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:47:36Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Windows QA cloud VM datacenter IP encounters Bilibili HTTP 412 anti-bot and YouTube timeout without international egress; real YouTube link_import passed on macOS arm64 1.6.0 DMG (2566158c) and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:48:12Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:47:36Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:45:10Z",
+          "evidence": "evidence/windows-1.6.0-summary.json"
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS 26.6.2 arm64 (Apple Silicon)",
+      "machine": "Apple Silicon Mac; native arm64 ULMO DMG bundle; isolated QA app copy and isolated data dirs",
+      "runtime": "Packaged portable Python 3.13.13 + bundled static FFmpeg/FFprobe 9.0.2 + bundled Playwright",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:35:14Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:45:25Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:45:25Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:46:15Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:46:54Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:47:45Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:48:18Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:35:16Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:47:45Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-24T01:35:18Z",
+          "evidence": "evidence/macos-1.6.0-summary.json"
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "v160-live-replay-6-channels-and-e2e-clipping",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-24T01:56:10Z",
+      "evidence": "evidence/regressions-1.6.0.json"
+    },
+    {
+      "id": "v160-python-fastapi-68-non-ascii-yunet-buffer-load",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-24T01:45:12Z",
+      "evidence": "evidence/regressions-1.6.0.json"
+    },
+    {
+      "id": "v160-13-locales-ui-and-sponsor-promo-routing",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-24T01:56:49Z",
+      "evidence": "evidence/regressions-1.6.0.json"
+    },
+    {
+      "id": "v160-macos-ulmo-lzma-dmg-packaging",
+      "platforms": [
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-24T01:30:57Z",
+      "evidence": "evidence/regressions-1.6.0.json"
+    }
+  ],
+  "blockers": [],
+  "owner_waiver": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-24T02:50:03Z",
+    "reason": "Owner approved shipping v1.6.0 Pre-release from 2566158c after 19/20 dual-platform cases (10/10 macOS arm64 + 9/10 Windows x64), live replay E2E UX verification, and all CI/smoke gates passed; waive Windows cloud-VM datacenter link_import."
+  },
+  "approval": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-24T02:50:10Z"
+  }
+}
