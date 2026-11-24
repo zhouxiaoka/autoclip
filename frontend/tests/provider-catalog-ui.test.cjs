@@ -691,3 +691,49 @@ test('pasting an OpenRouter key into its compatible connection stays in the fiel
     assert.equal(prevented, intercept)
   }
 })
+
+test('custom gateway cards show an unsaved badge while pending save and clear it once saved', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const saved = {
+    ...settings,
+    saved: true,
+    connections: [{
+      id: 'gw-saved', name: 'Saved Gateway', provider: 'compatible',
+      base_url: 'https://saved.example/v1', api_key: '', has_key: true,
+      image_api: 'auto', image_base_url: '', base_url_source: 'user',
+    }],
+  }
+  const current = {
+    ...saved,
+    connections: [
+      saved.connections[0],
+      {
+        id: 'gw-draft', name: 'Pending Gateway', provider: 'compatible',
+        base_url: 'https://pending.example/v1', api_key: '', has_key: false,
+        image_api: 'auto', image_base_url: '', base_url_source: 'user',
+      },
+    ],
+  }
+
+  const unsavedTree = Catalog({
+    settings: current, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    unsavedConnectionIds: view.unsavedConnectionIds(current, saved),
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const unsavedNodes = flatten(unsavedTree)
+  const savedCard = unsavedNodes.find(node => node.props?.['data-provider-id'] === 'custom:gw-saved')
+  const draftCard = unsavedNodes.find(node => node.props?.['data-provider-id'] === 'custom:gw-draft')
+  assert.equal(savedCard.props['data-unsaved'], undefined)
+  assert.doesNotMatch(textOf(savedCard), /有未保存的更改/)
+  assert.equal(draftCard.props['data-unsaved'], '1')
+  assert.match(textOf(draftCard), /有未保存的更改/)
+
+  const afterSaveTree = Catalog({
+    settings: current, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    unsavedConnectionIds: view.unsavedConnectionIds(current, current),
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const afterSaveCard = flatten(afterSaveTree).find(node => node.props?.['data-provider-id'] === 'custom:gw-draft')
+  assert.equal(afterSaveCard.props['data-unsaved'], undefined)
+  assert.doesNotMatch(textOf(afterSaveCard), /有未保存的更改/)
+})

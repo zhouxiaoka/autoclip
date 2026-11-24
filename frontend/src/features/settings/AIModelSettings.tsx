@@ -287,6 +287,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
           moreOpen={moreOpen}
           selectedId={selectedId}
           asrReady={asrReady}
+          unsavedConnectionIds={m.unsavedConnectionIds}
           onQuery={setQuery}
           onFilter={setFilter}
           onToggleMore={() => setMoreOpen(open => !open)}

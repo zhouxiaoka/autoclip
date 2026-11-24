@@ -862,7 +862,7 @@ function settingsHook(s, transport, initial, placement = 'home_setup') {
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
     './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
     './modelDefaults':defaults,'./modelSettingsLogic':logic,'./defaultModelSlots':slotLogic,
-    './providerCatalogView':{assignAnalysis:value=>value,ensureCatalogConnection:value=>({settings:value,changed:false}),selectLocalAsr:value=>value},
+    './providerCatalogView':{assignAnalysis:value=>value,ensureCatalogConnection:value=>({settings:value,changed:false}),selectLocalAsr:value=>value,unsavedConnectionIds:()=>new Set()},
     './providerPresets':{getProvider:()=>undefined},
     './customProvider':custom,
     './keyGuide':loadTs('keyGuide.ts'),

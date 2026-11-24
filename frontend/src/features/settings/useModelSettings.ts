@@ -14,7 +14,7 @@ import { applyModelDefaults, syncFollowingCover } from './modelDefaults'
 import { enabledModelIds } from './modelVisibility'
 import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
-import { assignAnalysis, catalogDraftConnection, catalogPreset, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
+import { assignAnalysis, catalogDraftConnection, catalogPreset, ensureCatalogConnection, selectLocalAsr, unsavedConnectionIds as computeUnsavedConnectionIds, type LocalAsrId } from './providerCatalogView'
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, IMAGE_MODEL_IN_ANALYSIS, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
@@ -889,9 +889,11 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
   }, [settings])
 
   const main = settings ? logic.mainConnection(settings) : undefined
+  const unsavedConnectionIds = computeUnsavedConnectionIds(settings, savedRef.current)
   const scopeHeld = !!settings?.connections.some(row => row._request_scope_conflict)
   return {
     settings, lists, busy, listErrors, loadSession: loadSession.current, dirty, dirtyRef, conflicted: conflicted || scopeHeld, saving: saving || matching, testing, error: scopeHeld ? t('设置已在另一处修改，请重新载入后再保存。') : error, configureProvider, testWarning, setError, main, keyHints,
+    unsavedConnectionIds,
     load, discover, fetchModels, update, editConnection, declareModel, chooseProvider, addCustomProvider, ensureCatalogProvider,
     assignAnalysisConnection, validateCatalogConnection, testCatalogProvider, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, clearConnectionKey, removeConnection, save, test, cancelTrial,
