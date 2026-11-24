@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
+<img src="../../src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
 
 # AutoClip
 
@@ -14,20 +14,20 @@
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square" alt="GitHub stars"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/)** · **[데스크톱 받기](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [사례](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [연구](docs/research/2026-10-what-drives-views/article-en.md) · [빠른 시작](#빠른-시작) · [문서](#문서) · [이슈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/)** · **[데스크톱 받기](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [사례](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [연구](../research/2026-10-what-drives-views/article-en.md) · [빠른 시작](#빠른-시작) · [문서](#문서) · [이슈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](../../README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
 
-![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](../images/v1.6/autoclip-v1.6-demo.gif)
 
-**[최신 정식 릴리스](https://github.com/zhouxiaoka/autoclip/releases/latest)**. 버전은 `autoclip --version`이 보여 주는 값입니다. 데스크톱·CLI·MCP를 함께 업데이트했습니다. 자동 제작, 자막 페이지 분할, 인물 구도, 긴 영상 대기열 수정은 [변경 기록](CHANGELOG.md)을 확인하고 이전 버전에서 업그레이드하세요.
+**[최신 정식 릴리스](https://github.com/zhouxiaoka/autoclip/releases/latest)**. 버전은 `autoclip --version`이 보여 주는 값입니다. 데스크톱·CLI·MCP를 함께 업데이트했습니다. 자동 제작, 자막 페이지 분할, 인물 구도, 긴 영상 대기열 수정은 [변경 기록](../../CHANGELOG.md)을 확인하고 이전 버전에서 업그레이드하세요.
 
 ## 실제 완성 클립
 
@@ -38,25 +38,25 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="../images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
 <strong>Bill Gates</strong><br>
 인터뷰형 · Douyin · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ 재생 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="../images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
 <strong>AI Experts Debate</strong><br>
 인터뷰형 · Shorts · 영어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ 재생 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="../images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
 <strong>Tony Robbins</strong><br>
 전체 화면 팟캐스트형 · Douyin · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ 재생 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="../images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
 <strong>Andrew Garfield × Amy Poehler</strong><br>
 전체 화면 팟캐스트형 · Shorts · 영어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ 재생 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">원본</a>
@@ -69,13 +69,13 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
 <strong>佟丽娅 × 鲁豫</strong><br>
 원본 화면 비율 · Bilibili · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ 재생 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">원본</a>
 </td>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="../images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
 <strong>Sam Altman</strong><br>
 원본 화면 비율 · Bilibili · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ 재생 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">원본</a>
@@ -89,25 +89,25 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="../images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
 <strong>Adam Neumann</strong><br>
 전체 화면 팟캐스트형 · TikTok · 영어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ 재생 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="../images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
 <strong>小奇 × 鲁豫</strong><br>
 인터뷰형 · Douyin · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ 재생 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
 <strong>郭柯宇 × 鲁豫</strong><br>
 인터뷰형 · Douyin · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ 재생 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="../images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
 <strong>Willem Dafoe</strong><br>
 전체 화면 팟캐스트형 · TikTok · 영어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ 재생 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">원본</a>
@@ -115,25 +115,25 @@
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="../images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
 <strong>TIM × 罗永浩</strong><br>
 인터뷰형 · Douyin · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ 재생 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
 <strong>Jensen Huang</strong><br>
 인터뷰형 · 샤오훙슈 · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ 재생 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
 <strong>Andrej Karpathy</strong><br>
 인터뷰형 · Douyin · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ 재생 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="../images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
 <strong>A20 Pro</strong><br>
 인터뷰형 · 샤오훙슈 · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ 재생 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">원본</a>
@@ -141,13 +141,13 @@
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="../images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
 <strong>Sylvester Stallone</strong><br>
 인터뷰형 · Douyin · 중국어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ 재생 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">원본</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="../images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
 <strong>MrBeast</strong><br>
 전체 화면 팟캐스트형 · TikTok · 영어<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ 재생 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">원본</a>
@@ -190,13 +190,13 @@
 
 2026-10-01, 같은 Apple Silicon Mac. 신규 흐름 두 건은 10개, 이전 흐름은 33개로 소재와 개수가 다릅니다. Jensen은 제작자 자막, TIM은 로컬 Whisper base를 사용했습니다.
 
-제작자 자막이 있으면 전사를 생략합니다. 없으면 로컬 또는 클라우드 ASR을 선택하세요. 플랫폼과 추가 클립이 늘면 시간·사용량도 늘어납니다. [측정 기록](docs/COST_PER_VIDEO.md)(중국어).
+제작자 자막이 있으면 전사를 생략합니다. 없으면 로컬 또는 클라우드 ASR을 선택하세요. 플랫폼과 추가 클립이 늘면 시간·사용량도 늘어납니다. [측정 기록](../COST_PER_VIDEO.md)(중국어).
 
 </details>
 
 ## 모델과 데이터 흐름을 선택하세요
 
-자르기와 렌더는 기기에서 실행합니다. 클라우드 분석에는 관련 자막·문구, 화면 이해나 참조 이미지 생성에는 필요한 샘플 프레임, 클라우드 전사에는 오디오를 보냅니다. 로컬 분석·전사에는 해당 클라우드 API가 필요 없습니다. 게시를 선택하면 완성 영상을 연결한 플랫폼으로 업로드합니다. 통계·오류 보고는 설정에서 끌 수 있습니다. [개인정보](docs/PRIVACY.en.md).
+자르기와 렌더는 기기에서 실행합니다. 클라우드 분석에는 관련 자막·문구, 화면 이해나 참조 이미지 생성에는 필요한 샘플 프레임, 클라우드 전사에는 오디오를 보냅니다. 로컬 분석·전사에는 해당 클라우드 API가 필요 없습니다. 게시를 선택하면 완성 영상을 연결한 플랫폼으로 업로드합니다. 통계·오류 보고는 설정에서 끌 수 있습니다. [개인정보](../PRIVACY.en.md).
 
 ## 빠른 시작
 
@@ -213,9 +213,9 @@
 3. **링크와 플랫폼 선택.** 자막이 있는 인터뷰나 팟캐스트로 시작하고 세로 레이아웃을 고르세요. 자막이 없으면 설정에서 Whisper / SenseVoice를 준비하거나 클라우드 전사를 설정하세요.
 4. **확인 후 저장.** 자막·구도·내용의 완결성을 확인하고 게시 패키지를 저장하거나 계정을 연결해 게시하세요. 더 필요하면 대체 후보를 제작하세요.
 
-Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 데스크톱 설치 파일은 현재 미서명 상태여서([#119](https://github.com/zhouxiaoka/autoclip/issues/119)) Windows SmartScreen이나 백신 경고가 뜰 수 있습니다. 모든 패키지는 공개 GitHub Actions(`Desktop Build`)로 빌드되며 Release의 `build-provenance.json`에서 SHA-256을 검증할 수 있습니다(Docker / CLI / 소스 실행도 가능). 요구 사항, 첫 실행 안내, 검증 범위는 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md)와 [최신 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)를 참고하세요.
+Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 데스크톱 설치 파일은 현재 미서명 상태여서([#119](https://github.com/zhouxiaoka/autoclip/issues/119)) Windows SmartScreen이나 백신 경고가 뜰 수 있습니다. 모든 패키지는 공개 GitHub Actions(`Desktop Build`)로 빌드되며 Release의 `build-provenance.json`에서 SHA-256을 검증할 수 있습니다(Docker / CLI / 소스 실행도 가능). 요구 사항, 첫 실행 안내, 검증 범위는 [설치 가이드](../USER_INSTALLATION_GUIDE.en.md)와 [최신 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)를 참고하세요.
 
-[설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md) · [문제 해결](docs/FAQ.en.md)
+[설치 가이드](../USER_INSTALLATION_GUIDE.en.md) · [문제 해결](../FAQ.en.md)
 
 **CLI / MCP (Claude Code, Codex, OpenCode 및 스크립트)**
 
@@ -256,7 +256,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다(API 문서: `http://localhost:8000/docs`). 바인드 마운트 권한과 커스텀 도메인 설정은 [Docker 가이드](docs/DOCKER.en.md)를 참고하세요.
+브라우저에서 `http://localhost:3000`을 엽니다(API 문서: `http://localhost:8000/docs`). 바인드 마운트 권한과 커스텀 도메인 설정은 [Docker 가이드](../DOCKER.en.md)를 참고하세요.
 ## 모델 설정
 
 | 방식 | 설정 |
@@ -267,14 +267,14 @@ docker compose up -d --build
 
 Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이너가 닿는 주소를 쓰세요.
 
-[모델 설정](docs/MULTI_LLM_PROVIDER_GUIDE.md)(중국어) · [로컬과 컨테이너](docs/CLI_AND_MCP.md)(중국어)
+[모델 설정](../MULTI_LLM_PROVIDER_GUIDE.md)(중국어) · [로컬과 컨테이너](../CLI_AND_MCP.md)(중국어)
 
 ## 후원에 감사드립니다 ❤️
 
 <table>
   <tr>
     <td align="center" width="140">
-      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="../sponsors/apimart.png" alt="APIMart" width="88"></a><br>
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
@@ -295,7 +295,7 @@ Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이�
 <details>
 <summary>영상이 업로드되나요?</summary>
 
-자르기와 렌더는 기기에서 실행합니다. 클라우드 분석에는 관련 자막·문구, 화면 이해나 참조 이미지 생성에는 필요한 샘플 프레임, 클라우드 전사에는 오디오를 보냅니다. 로컬 분석·전사에는 해당 클라우드 API가 필요 없습니다. 게시를 선택하면 완성 영상을 연결한 플랫폼으로 업로드합니다. 통계·오류 보고는 설정에서 끌 수 있습니다. [개인정보](docs/PRIVACY.en.md).
+자르기와 렌더는 기기에서 실행합니다. 클라우드 분석에는 관련 자막·문구, 화면 이해나 참조 이미지 생성에는 필요한 샘플 프레임, 클라우드 전사에는 오디오를 보냅니다. 로컬 분석·전사에는 해당 클라우드 API가 필요 없습니다. 게시를 선택하면 완성 영상을 연결한 플랫폼으로 업로드합니다. 통계·오류 보고는 설정에서 끌 수 있습니다. [개인정보](../PRIVACY.en.md).
 
 </details>
 
@@ -313,18 +313,18 @@ Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이�
 
 </details>
 
-[문제 해결](docs/FAQ.en.md) · [알려진 문제](https://github.com/zhouxiaoka/autoclip/issues/96)
+[문제 해결](../FAQ.en.md) · [알려진 문제](https://github.com/zhouxiaoka/autoclip/issues/96)
 
 ## 문서
 
 | 알고 싶은 것 | 문서 |
 | --- | --- |
-| 설치와 첫 클립 | [설치](docs/USER_INSTALLATION_GUIDE.en.md) |
-| 자체 운영과 자동화 | [Docker](docs/DOCKER.en.md) · [CLI / MCP](docs/CLI_AND_MCP.md)(중국어) · [Agent skill](skills/autoclip/SKILL.md)(중국어) · [OpenCode](docs/OPENCODE.en.md) |
-| 모델과 장애 | [모델 설정](docs/MULTI_LLM_PROVIDER_GUIDE.md)(중국어) · [FAQ](docs/FAQ.en.md) |
-| 버전·로드맵·개인정보 | [변경 기록](CHANGELOG.md) · [로드맵](ROADMAP.md)(중국어) · [커뮤니티 보드](docs/COMMUNITY_BOARD.md)(중국어) · [개인정보](docs/PRIVACY.en.md) |
-| 연구 | [연구 노트 #1](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
-| 개발과 번역 | [기여](CONTRIBUTING.md)(중국어) · [번역 관리](docs/i18n.md)(중국어) |
+| 설치와 첫 클립 | [설치](../USER_INSTALLATION_GUIDE.en.md) |
+| 자체 운영과 자동화 | [Docker](../DOCKER.en.md) · [CLI / MCP](../CLI_AND_MCP.md)(중국어) · [Agent skill](../../skills/autoclip/SKILL.md)(중국어) · [OpenCode](../OPENCODE.en.md) |
+| 모델과 장애 | [모델 설정](../MULTI_LLM_PROVIDER_GUIDE.md)(중국어) · [FAQ](../FAQ.en.md) |
+| 버전·로드맵·개인정보 | [변경 기록](../../CHANGELOG.md) · [로드맵](../ROADMAP.md)(중국어) · [커뮤니티 보드](../COMMUNITY_BOARD.md)(중국어) · [개인정보](../PRIVACY.en.md) |
+| 연구 | [연구 노트 #1](../research/2026-10-what-drives-views/article-en.md) · [中文](../research/2026-10-what-drives-views/article-zh.md) |
+| 개발과 번역 | [기여](../../CONTRIBUTING.md)(중국어) · [번역 관리](../i18n.md)(중국어) |
 
 ## 참여
 
@@ -338,4 +338,4 @@ Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이�
 
 ![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)
 
-FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper, FunASR와 모든 기여자에게 감사합니다. [MIT License](LICENSE).
+FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper, FunASR와 모든 기여자에게 감사합니다. [MIT License](../../LICENSE).

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
+<img src="../../src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
 
 # AutoClip
 
@@ -14,20 +14,20 @@ dành cho Douyin, Xiaohongshu, TikTok, Reels, YouTube Shorts, Bilibili hoặc Yo
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square" alt="GitHub stars"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[Trang web](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Tải bản desktop](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Thư viện ví dụ](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Nghiên cứu](docs/research/2026-10-what-drives-views/article-en.md) · [Bắt đầu nhanh](#quick-start) · [Tài liệu](#documentation) · [Báo lỗi](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[Trang web](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Tải bản desktop](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Thư viện ví dụ](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Nghiên cứu](../research/2026-10-what-drives-views/article-en.md) · [Bắt đầu nhanh](#quick-start) · [Tài liệu](#documentation) · [Báo lỗi](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · **Tiếng Việt** · [Deutsch](README-DE.md)
+[English](../../README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · **Tiếng Việt** · [Deutsch](README-DE.md)
 
 </div>
 
-![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](../images/v1.6/autoclip-v1.6-demo.gif)
 
-**[Phiên bản phát hành mới nhất](https://github.com/zhouxiaoka/autoclip/releases/latest)** là phiên bản mà `autoclip --version` hiển thị, với desktop, CLI và MCP được cập nhật đồng bộ. Xem [nhật ký thay đổi](CHANGELOG.md) để biết các bản sửa lỗi về xuất nhanh, phân trang phụ đề, căn khung hình người nói và hàng đợi video dài. Vui lòng nâng cấp các bản cài đặt cũ.
+**[Phiên bản phát hành mới nhất](https://github.com/zhouxiaoka/autoclip/releases/latest)** là phiên bản mà `autoclip --version` hiển thị, với desktop, CLI và MCP được cập nhật đồng bộ. Xem [nhật ký thay đổi](../../CHANGELOG.md) để biết các bản sửa lỗi về xuất nhanh, phân trang phụ đề, căn khung hình người nói và hàng đợi video dài. Vui lòng nâng cấp các bản cài đặt cũ.
 
 ## Video cắt thực tế
 
@@ -38,25 +38,25 @@ Nhấn vào ảnh chụp màn hình hoặc “Phát” để xem toàn bộ đo�
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="../images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
 <strong>Bill Gates</strong><br>
 Phỏng vấn · Douyin · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ Phát 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="../images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
 <strong>AI Experts Debate</strong><br>
 Phỏng vấn · Shorts · Tiếng Anh<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ Phát 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="../images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
 <strong>Tony Robbins</strong><br>
 Podcast toàn màn hình · Douyin · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ Phát 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="../images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
 <strong>Andrew Garfield × Amy Poehler</strong><br>
 Podcast toàn màn hình · Shorts · Tiếng Anh<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ Phát 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">Nguồn</a>
@@ -69,13 +69,13 @@ Podcast toàn màn hình · Shorts · Tiếng Anh<br>
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
 <strong>佟丽娅 × 鲁豫</strong><br>
 Khung hình gốc · Bilibili · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ Phát 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">Nguồn</a>
 </td>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="../images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
 <strong>Sam Altman</strong><br>
 Khung hình gốc · Bilibili · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ Phát 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">Nguồn</a>
@@ -89,25 +89,25 @@ Khung hình gốc · Bilibili · Tiếng Trung<br>
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="../images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
 <strong>Adam Neumann</strong><br>
 Podcast toàn màn hình · TikTok · Tiếng Anh<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ Phát 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="../images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
 <strong>小奇 × 鲁豫</strong><br>
 Phỏng vấn · Douyin · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ Phát 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
 <strong>郭柯宇 × 鲁豫</strong><br>
 Phỏng vấn · Douyin · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ Phát 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="../images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
 <strong>Willem Dafoe</strong><br>
 Podcast toàn màn hình · TikTok · Tiếng Anh<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ Phát 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">Nguồn</a>
@@ -115,25 +115,25 @@ Podcast toàn màn hình · TikTok · Tiếng Anh<br>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="../images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
 <strong>TIM × 罗永浩</strong><br>
 Phỏng vấn · Douyin · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ Phát 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
 <strong>Jensen Huang</strong><br>
 Phỏng vấn · Xiaohongshu · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ Phát 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
 <strong>Andrej Karpathy</strong><br>
 Phỏng vấn · Douyin · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ Phát 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="../images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
 <strong>A20 Pro</strong><br>
 Phỏng vấn · Xiaohongshu · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ Phát 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">Nguồn</a>
@@ -141,13 +141,13 @@ Phỏng vấn · Xiaohongshu · Tiếng Trung<br>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="../images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
 <strong>Sylvester Stallone</strong><br>
 Phỏng vấn · Douyin · Tiếng Trung<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ Phát 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">Nguồn</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="../images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
 <strong>MrBeast</strong><br>
 Podcast toàn màn hình · TikTok · Tiếng Anh<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ Phát 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">Nguồn</a>
@@ -190,13 +190,13 @@ Quá trình cắt ghép, căn khung hình và render đều chạy cục bộ. B
 
 Ngày 1 tháng 10 năm 2026, trên cùng một máy Mac Apple Silicon. Hai lượt chạy đầu sử dụng quy trình mới và render 10 clip; quy trình cũ render 33 clip, với đầu vào và số lượng đầu ra khác nhau. Video của Jensen sử dụng phụ đề có sẵn của tác giả; video của TIM sử dụng Whisper base cục bộ.
 
-Phụ đề sẵn có của tác giả giúp bỏ qua bước nhận dạng giọng nói; nếu không có, hãy chọn ASR cục bộ hoặc đám mây. Việc thêm nhiều nền tảng hoặc tạo thêm clip theo yêu cầu sẽ làm tăng thời gian và mức tiêu thụ tài nguyên. Xem [số liệu đo đạc và tính toán chi phí](docs/COST_PER_VIDEO.md) (tiếng Trung) để biết chi tiết từng giai đoạn và các giả định liên quan.
+Phụ đề sẵn có của tác giả giúp bỏ qua bước nhận dạng giọng nói; nếu không có, hãy chọn ASR cục bộ hoặc đám mây. Việc thêm nhiều nền tảng hoặc tạo thêm clip theo yêu cầu sẽ làm tăng thời gian và mức tiêu thụ tài nguyên. Xem [số liệu đo đạc và tính toán chi phí](../COST_PER_VIDEO.md) (tiếng Trung) để biết chi tiết từng giai đoạn và các giả định liên quan.
 
 </details>
 
 ## Chọn mô hình và luồng dữ liệu
 
-Việc cắt ghép và render chạy trực tiếp trên máy tính của bạn. Phân tích trên đám mây chỉ gửi các phụ đề liên quan và nội dung bài đăng; tính năng hiểu hình ảnh hoặc tạo ảnh tham chiếu gửi các khung hình mẫu cần thiết, còn ASR đám mây gửi tệp âm thanh. Phân tích và chuyển giọng nói cục bộ không cần bất kỳ API đám mây tương ứng nào. Các clip hoàn chỉnh sẽ được tải lên các nền tảng đã kết nối khi bạn chọn đăng bài. Dữ liệu phân tích và báo cáo lỗi có thể tắt trong Cài đặt. Xem thêm [chính sách quyền riêng tư](docs/PRIVACY.en.md).
+Việc cắt ghép và render chạy trực tiếp trên máy tính của bạn. Phân tích trên đám mây chỉ gửi các phụ đề liên quan và nội dung bài đăng; tính năng hiểu hình ảnh hoặc tạo ảnh tham chiếu gửi các khung hình mẫu cần thiết, còn ASR đám mây gửi tệp âm thanh. Phân tích và chuyển giọng nói cục bộ không cần bất kỳ API đám mây tương ứng nào. Các clip hoàn chỉnh sẽ được tải lên các nền tảng đã kết nối khi bạn chọn đăng bài. Dữ liệu phân tích và báo cáo lỗi có thể tắt trong Cài đặt. Xem thêm [chính sách quyền riêng tư](../PRIVACY.en.md).
 
 <a id="quick-start"></a>
 
@@ -215,9 +215,9 @@ Việc cắt ghép và render chạy trực tiếp trên máy tính của bạn.
 3. **Xem dự án mẫu, sau đó dùng video của riêng bạn.** Khi màn hình chính chưa có dự án nào, hãy nhấp vào “用示例项目看看效果” (Xem thử dự án mẫu). Thao tác này không cần khóa API; dự án mẫu đã có sẵn trong bộ cài đặt. Sau đó, hãy dùng video phỏng vấn hoặc podcast của bạn và chọn một bố cục dọc. Khi nguồn video không có phụ đề, hoặc Whisper cục bộ không thể cài đặt hay chạy quá chậm, hãy mở Cài đặt → Mô hình mặc định → “Chuyển giọng nói thành phụ đề” và chuyển sang dịch vụ chuyển giọng nói đám mây Bailian (`qwen-audio-3.1-asr-flash`, khoảng 0,1 nhân dân tệ mỗi giờ âm thanh; hóa đơn Alibaba Cloud là mức phí thực tế). Âm thanh sẽ được tải lên đám mây. Nếu quá trình nhập bị chặn, hãy nhấp vào “Dùng chuyển giọng nói đám mây thay thế”. Lần cài đặt cục bộ đầu tiên sẽ tải xuống khoảng 220 MB, mất khoảng 15 phút nếu mạng chậm.
 4. **Kiểm tra và tải xuống.** Rà soát lại phụ đề, khung hình và độ trọn vẹn của nội dung, sau đó lưu gói xuất bản hoặc kết nối tài khoản để đăng trực tiếp. Tạo thêm các clip dự phòng theo yêu cầu khi bạn cần nhiều đoạn cắt hơn.
 
-Hiện chưa có bản cài đặt desktop cho Intel Mac. Người dùng Intel Mac và Linux hãy sử dụng Docker hoặc CLI. Các trình cài đặt desktop hiện chưa được ký số (việc ký mã / công chứng đang được theo dõi tại [#119](https://github.com/zhouxiaoka/autoclip/issues/119)), do đó Windows SmartScreen, phần mềm diệt virus hoặc macOS Gatekeeper có thể cảnh báo với các bản dựng mới; mọi gói cài đặt đều được build công khai trên GitHub Actions (`Desktop Build`) và đi kèm tệp `build-provenance.json` để bạn đối chiếu chính xác mã băm SHA-256 trước khi chạy (hoặc bạn có thể dùng Docker / CLI / mã nguồn). Xem [hướng dẫn cài đặt](docs/USER_INSTALLATION_GUIDE.en.md) và [phiên bản Release mới nhất](https://github.com/zhouxiaoka/autoclip/releases/latest).
+Hiện chưa có bản cài đặt desktop cho Intel Mac. Người dùng Intel Mac và Linux hãy sử dụng Docker hoặc CLI. Các trình cài đặt desktop hiện chưa được ký số (việc ký mã / công chứng đang được theo dõi tại [#119](https://github.com/zhouxiaoka/autoclip/issues/119)), do đó Windows SmartScreen, phần mềm diệt virus hoặc macOS Gatekeeper có thể cảnh báo với các bản dựng mới; mọi gói cài đặt đều được build công khai trên GitHub Actions (`Desktop Build`) và đi kèm tệp `build-provenance.json` để bạn đối chiếu chính xác mã băm SHA-256 trước khi chạy (hoặc bạn có thể dùng Docker / CLI / mã nguồn). Xem [hướng dẫn cài đặt](../USER_INSTALLATION_GUIDE.en.md) và [phiên bản Release mới nhất](https://github.com/zhouxiaoka/autoclip/releases/latest).
 
-[Hướng dẫn cài đặt đầy đủ](docs/USER_INSTALLATION_GUIDE.en.md) · [Xử lý sự cố](docs/FAQ.en.md)
+[Hướng dẫn cài đặt đầy đủ](../USER_INSTALLATION_GUIDE.en.md) · [Xử lý sự cố](../FAQ.en.md)
 
 **CLI / MCP (Claude Code, Codex, OpenCode & tập lệnh)**
 
@@ -258,7 +258,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-Mở giao diện web tại `http://localhost:3000` (tài liệu API tại `http://localhost:8000/docs`). Xem [Hướng dẫn Docker](docs/DOCKER.en.md) để cấu hình quyền thư mục và tên miền tùy chỉnh.
+Mở giao diện web tại `http://localhost:3000` (tài liệu API tại `http://localhost:8000/docs`). Xem [Hướng dẫn Docker](../DOCKER.en.md) để cấu hình quyền thư mục và tên miền tùy chỉnh.
 ## Thiết lập mô hình
 
 | Tùy chọn | Cách thiết lập |
@@ -269,14 +269,14 @@ Mở giao diện web tại `http://localhost:3000` (tài liệu API tại `http:
 
 Bên trong Docker, `localhost` trỏ tới chính container đó. Hãy trỏ tới địa chỉ máy chủ (host) mà container có thể kết nối tới được.
 
-[Thiết lập mô hình](docs/MULTI_LLM_PROVIDER_GUIDE.md) (tiếng Trung) · [Mô hình cục bộ và container](docs/CLI_AND_MCP.md) (tiếng Trung)
+[Thiết lập mô hình](../MULTI_LLM_PROVIDER_GUIDE.md) (tiếng Trung) · [Mô hình cục bộ và container](../CLI_AND_MCP.md) (tiếng Trung)
 
 ## Đặc biệt cảm ơn ❤️
 
 <table>
   <tr>
     <td align="center" width="140">
-      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="../sponsors/apimart.png" alt="APIMart" width="88"></a><br>
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
@@ -306,7 +306,7 @@ Sử dụng liên kết này để đăng ký tài khoản Alibaba Cloud hoặc 
 <details>
 <summary>Video của tôi có bị tải lên máy chủ không?</summary>
 
-Quá trình cắt ghép và render chạy trên máy tính của bạn. Phân tích đám mây gửi các phụ đề liên quan và nội dung bài đăng; hiểu hình ảnh hoặc tạo ảnh tham chiếu gửi các khung hình mẫu cần thiết, và ASR đám mây gửi âm thanh. Phân tích và chuyển giọng nói cục bộ không cần API đám mây tương ứng. Các clip hoàn chỉnh chỉ được tải lên nền tảng đã kết nối khi bạn chọn đăng bài. Có thể tắt thu thập dữ liệu phân tích và báo cáo lỗi trong phần Cài đặt. Xem [chính sách quyền riêng tư](docs/PRIVACY.en.md).
+Quá trình cắt ghép và render chạy trên máy tính của bạn. Phân tích đám mây gửi các phụ đề liên quan và nội dung bài đăng; hiểu hình ảnh hoặc tạo ảnh tham chiếu gửi các khung hình mẫu cần thiết, và ASR đám mây gửi âm thanh. Phân tích và chuyển giọng nói cục bộ không cần API đám mây tương ứng. Các clip hoàn chỉnh chỉ được tải lên nền tảng đã kết nối khi bạn chọn đăng bài. Có thể tắt thu thập dữ liệu phân tích và báo cáo lỗi trong phần Cài đặt. Xem [chính sách quyền riêng tư](../PRIVACY.en.md).
 
 </details>
 
@@ -324,7 +324,7 @@ Hãy kiểm tra giai đoạn bị lỗi: phụ đề/chuyển giọng nói, kế
 
 </details>
 
-[Xử lý sự cố đầy đủ](docs/FAQ.en.md) · [Các vấn đề đã biết](https://github.com/zhouxiaoka/autoclip/issues/96)
+[Xử lý sự cố đầy đủ](../FAQ.en.md) · [Các vấn đề đã biết](https://github.com/zhouxiaoka/autoclip/issues/96)
 
 <a id="documentation"></a>
 
@@ -332,12 +332,12 @@ Hãy kiểm tra giai đoạn bị lỗi: phụ đề/chuyển giọng nói, kế
 
 | Nhu cầu | Tài liệu |
 | --- | --- |
-| Cài đặt và tạo clip đầu tiên | [Hướng dẫn cài đặt](docs/USER_INSTALLATION_GUIDE.en.md) |
-| Tự lưu trữ và tự động hóa | [Docker](docs/DOCKER.en.md) · [CLI / MCP](docs/CLI_AND_MCP.md) (tiếng Trung) · [Agent skill](skills/autoclip/SKILL.md) (tiếng Trung) · [OpenCode](docs/OPENCODE.en.md) |
-| Mô hình và xử lý sự cố | [Thiết lập mô hình](docs/MULTI_LLM_PROVIDER_GUIDE.md) (tiếng Trung) · [FAQ](docs/FAQ.en.md) |
-| Phiên bản, lộ trình, quyền riêng tư | [Nhật ký thay đổi](CHANGELOG.md) · [Lộ trình](ROADMAP.md) (tiếng Trung) · [Bảng cộng đồng](docs/COMMUNITY_BOARD.md) (tiếng Trung) · [Quyền riêng tư](docs/PRIVACY.en.md) |
-| Nghiên cứu | [Ghi chú nghiên cứu #1: Chọn khoảnh khắc, không phải hiệu ứng](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
-| Đóng góp và dịch thuật | [Đóng góp](CONTRIBUTING.md) (tiếng Trung) · [Bảo trì bản dịch](docs/i18n.md) (tiếng Trung) |
+| Cài đặt và tạo clip đầu tiên | [Hướng dẫn cài đặt](../USER_INSTALLATION_GUIDE.en.md) |
+| Tự lưu trữ và tự động hóa | [Docker](../DOCKER.en.md) · [CLI / MCP](../CLI_AND_MCP.md) (tiếng Trung) · [Agent skill](../../skills/autoclip/SKILL.md) (tiếng Trung) · [OpenCode](../OPENCODE.en.md) |
+| Mô hình và xử lý sự cố | [Thiết lập mô hình](../MULTI_LLM_PROVIDER_GUIDE.md) (tiếng Trung) · [FAQ](../FAQ.en.md) |
+| Phiên bản, lộ trình, quyền riêng tư | [Nhật ký thay đổi](../../CHANGELOG.md) · [Lộ trình](../ROADMAP.md) (tiếng Trung) · [Bảng cộng đồng](../COMMUNITY_BOARD.md) (tiếng Trung) · [Quyền riêng tư](../PRIVACY.en.md) |
+| Nghiên cứu | [Ghi chú nghiên cứu #1: Chọn khoảnh khắc, không phải hiệu ứng](../research/2026-10-what-drives-views/article-en.md) · [中文](../research/2026-10-what-drives-views/article-zh.md) |
+| Đóng góp và dịch thuật | [Đóng góp](../../CONTRIBUTING.md) (tiếng Trung) · [Bảo trì bản dịch](../i18n.md) (tiếng Trung) |
 
 ## Đóng góp
 
@@ -351,4 +351,4 @@ Dự án do một cá nhân duy trì. Phản hồi có thể không tức thì; 
 
 ![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)
 
-Cảm ơn FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper, FunASR và toàn thể các cộng tác viên. [Giấy phép MIT](LICENSE).
+Cảm ơn FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper, FunASR và toàn thể các cộng tác viên. [Giấy phép MIT](../../LICENSE).

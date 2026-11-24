@@ -18,8 +18,8 @@ services:
   # 主应用服务（开发模式）
   autoclip-dev:
     build:
-      context: .
-      dockerfile: Dockerfile.dev
+      context: ..
+      dockerfile: docker/Dockerfile.dev
     image: autoclip:dev
     container_name: autoclip-app-dev
     restart: unless-stopped
@@ -27,11 +27,11 @@ services:
       - "8000:8000"  # 后端API
       - "3000:3000"  # 前端界面
     volumes:
-      - ./backend:/app/backend
-      - ./frontend:/app/frontend
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./uploads:/app/uploads
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../uploads:/app/uploads
       - frontend_dev_modules:/app/frontend/node_modules
     environment:
       - REDIS_URL=redis://redis:6379/0
@@ -63,16 +63,16 @@ services:
   # Celery Worker服务（开发模式）
   celery-worker-dev:
     build:
-      context: .
-      dockerfile: Dockerfile.dev
+      context: ..
+      dockerfile: docker/Dockerfile.dev
     image: autoclip:dev
     container_name: autoclip-celery-worker-dev
     restart: unless-stopped
     volumes:
-      - ./backend:/app/backend
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./uploads:/app/uploads
+      - ../backend:/app/backend
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../uploads:/app/uploads
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:///./data/autoclip.db

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
+<img src="../../src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
 
 # AutoClip
 
@@ -14,20 +14,20 @@
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square" alt="GitHub stars"></a>
   <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[官網](https://zhouxiaoka.github.io/autoclip_intro/)** · **[下載桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [案例庫](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [研究](docs/research/2026-10-what-drives-views/article-zh.md) · [快速開始](#快速開始) · [文件](#文件) · [問題回報](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[官網](https://zhouxiaoka.github.io/autoclip_intro/)** · **[下載桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [案例庫](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [研究](../research/2026-10-what-drives-views/article-zh.md) · [快速開始](#快速開始) · [文件](#文件) · [問題回報](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[English](README.md) · [简体中文](README-ZH.md) · **繁體中文** · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](../../README.md) · [简体中文](README-ZH.md) · **繁體中文** · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
 
-![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](../images/v1.6/autoclip-v1.6-demo.gif)
 
-**[最新正式版](https://github.com/zhouxiaoka/autoclip/releases/latest)**，桌面版、CLI 與 MCP 同步更新。版本以 `autoclip --version` 與 MCP `get_version` 為準。一鍵出片、字幕分頁、人物取景與長影片佇列修復詳見 [更新日誌](CHANGELOG.md)。舊版使用者請升級。
+**[最新正式版](https://github.com/zhouxiaoka/autoclip/releases/latest)**，桌面版、CLI 與 MCP 同步更新。版本以 `autoclip --version` 與 MCP `get_version` 為準。一鍵出片、字幕分頁、人物取景與長影片佇列修復詳見 [更新日誌](../../CHANGELOG.md)。舊版使用者請升級。
 
 ## 實際成片
 
@@ -38,25 +38,25 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="../images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
 <strong>Bill Gates</strong><br>
 訪談式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ 播放 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="../images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
 <strong>AI Experts Debate</strong><br>
 訪談式 · Shorts · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ 播放 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="../images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
 <strong>Tony Robbins</strong><br>
 滿版 Podcast · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ 播放 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="../images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
 <strong>Andrew Garfield × Amy Poehler</strong><br>
 滿版 Podcast · Shorts · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ 播放 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">原片</a>
@@ -69,13 +69,13 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
 <strong>佟麗婭 × 魯豫</strong><br>
 原畫幅 · B 站 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ 播放 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">原片</a>
 </td>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="../images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
 <strong>Sam Altman</strong><br>
 原畫幅 · B 站 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ 播放 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">原片</a>
@@ -89,25 +89,25 @@
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="../images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
 <strong>Adam Neumann</strong><br>
 滿版 Podcast · TikTok · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ 播放 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="../images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
 <strong>小奇 × 魯豫</strong><br>
 訪談式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ 播放 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="../images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
 <strong>郭柯宇 × 魯豫</strong><br>
 訪談式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ 播放 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="../images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
 <strong>Willem Dafoe</strong><br>
 滿版 Podcast · TikTok · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ 播放 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">原片</a>
@@ -115,25 +115,25 @@
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="../images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
 <strong>TIM × 羅永浩</strong><br>
 訪談式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ 播放 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
 <strong>Jensen Huang</strong><br>
 訪談式 · 小紅書 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ 播放 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="../images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
 <strong>Andrej Karpathy</strong><br>
 訪談式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ 播放 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="../images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
 <strong>A20 Pro</strong><br>
 訪談式 · 小紅書 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ 播放 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">原片</a>
@@ -141,13 +141,13 @@
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="../images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
 <strong>Sylvester Stallone</strong><br>
 訪談式 · 抖音 · 中文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ 播放 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">原片</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="../images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
 <strong>MrBeast</strong><br>
 滿版 Podcast · TikTok · 英文<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ 播放 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">原片</a>
@@ -190,13 +190,13 @@
 
 2026-10-01，同一台 Apple Silicon Mac。前兩支為新流程、自動生成 10 支；舊流程生成 33 支，素材與輸出數量不同。Jensen 使用作者字幕，TIM 使用本機 Whisper base。
 
-已有作者字幕時會跳過轉錄；沒有字幕時可選本機或雲端轉錄。追加平台與製作備選會增加處理時間與用量。完整階段記錄與估算口徑見 [成本與時間](docs/COST_PER_VIDEO.md)。
+已有作者字幕時會跳過轉錄；沒有字幕時可選本機或雲端轉錄。追加平台與製作備選會增加處理時間與用量。完整階段記錄與估算口徑見 [成本與時間](../COST_PER_VIDEO.md)。
 
 </details>
 
 ## 模型與資料由你掌控
 
-剪輯與算繪皆在你的電腦上完成。使用雲端分析會傳送相關字幕與文案；畫面理解或參考影格生圖會傳送所需抽樣畫面，雲端轉錄則會傳送音訊。使用本機分析與本機轉錄時不需要對應的雲端 API。成片只有在選擇投稿後才會上傳到已連結的平台；匿名統計與錯誤回報可在設定中關閉。詳見 [隱私權說明](docs/PRIVACY.md)。
+剪輯與算繪皆在你的電腦上完成。使用雲端分析會傳送相關字幕與文案；畫面理解或參考影格生圖會傳送所需抽樣畫面，雲端轉錄則會傳送音訊。使用本機分析與本機轉錄時不需要對應的雲端 API。成片只有在選擇投稿後才會上傳到已連結的平台；匿名統計與錯誤回報可在設定中關閉。詳見 [隱私權說明](../PRIVACY.md)。
 
 ## 快速開始
 
@@ -213,9 +213,9 @@
 3. **先看範例，再貼自己的影片**：首頁尚未建立專案時，點擊「用範例專案看看效果」，不需要 API Key，範例已內建於安裝包中。之後使用自己的訪談或 Podcast 影片時，可選擇直式版面。若沒有字幕、本機 Whisper 裝不上或速度太慢，請打開「設定 → 預設模型 → 語音轉字幕」，改用百煉雲端轉錄（`qwen-audio-3.1-asr-flash`，約 0.1 元人民幣/小時音訊，實際以阿里雲帳單為準）。音訊會上傳至雲端。匯入被阻擋時，點擊「改用雲端轉錄」。若安裝本機轉錄，首次需下載約 220 MB，中國大陸網路環境約 15 分鐘。
 4. **檢查並下載**：預覽自動成片，檢查字幕、取景與內容完整性，再下載發佈包或連結帳號投稿；需要更多片段時可生成備選。
 
-Intel Mac 目前沒有桌面安裝包，與 Linux 一樣請使用 Docker 或 CLI。桌面安裝包目前未購買程式碼簽章 / Apple 公證（計畫見 [#119](https://github.com/zhouxiaoka/autoclip/issues/119)），新版本可能觸發 SmartScreen 或防毒軟體誤報；所有安裝包均由公開 GitHub Actions `Desktop Build` 建置，可在 Release 附件 `build-provenance.json` 核對 SHA-256，或改用 Docker / 原始碼執行。安裝需求請見 [安裝指南](docs/USER_INSTALLATION_GUIDE.md) 與 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
+Intel Mac 目前沒有桌面安裝包，與 Linux 一樣請使用 Docker 或 CLI。桌面安裝包目前未購買程式碼簽章 / Apple 公證（計畫見 [#119](https://github.com/zhouxiaoka/autoclip/issues/119)），新版本可能觸發 SmartScreen 或防毒軟體誤報；所有安裝包均由公開 GitHub Actions `Desktop Build` 建置，可在 Release 附件 `build-provenance.json` 核對 SHA-256，或改用 Docker / 原始碼執行。安裝需求請見 [安裝指南](../USER_INSTALLATION_GUIDE.md) 與 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
 
-[完整安裝與首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到問題？](docs/FAQ.md)
+[完整安裝與首次使用指南](../USER_INSTALLATION_GUIDE.md) · [遇到問題？](../FAQ.md)
 
 **CLI / MCP（Claude Code、Codex、OpenCode 與腳本）**
 
@@ -256,7 +256,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-開啟 Web UI：`http://localhost:3000`（後端 API 文件：`http://localhost:8000/docs`）。掛載權限與自訂網域設定見 [Docker 指南](DOCKER.md)。
+開啟 Web UI：`http://localhost:3000`（後端 API 文件：`http://localhost:8000/docs`）。掛載權限與自訂網域設定見 [Docker 指南](../DOCKER.md)。
 ## 模型設定
 
 | 方式        | 設定                                                             |
@@ -267,14 +267,14 @@ docker compose up -d --build
 
 Docker 存取宿主機模型服務時，`localhost` 指向容器本身，需改為容器可存取的宿主機位址。
 
-[模型設定指南](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [本機模型與容器設定](docs/CLI_AND_MCP.md)
+[模型設定指南](../MULTI_LLM_PROVIDER_GUIDE.md) · [本機模型與容器設定](../CLI_AND_MCP.md)
 
 ## 特別感謝 ❤️
 
 <table>
   <tr>
     <td align="center" width="140">
-      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="88"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="../sponsors/apimart.png" alt="APIMart" width="88"></a><br>
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
@@ -304,7 +304,7 @@ Docker 存取宿主機模型服務時，`localhost` 指向容器本身，需改�
 <details>
 <summary>我的影片會上傳嗎？</summary>
 
-剪輯與算繪皆在你的電腦上完成。使用雲端分析會傳送相關字幕與文案；畫面理解或參考影格生圖會傳送所需抽樣畫面，雲端轉錄則會傳送音訊。使用本機分析與本機轉錄時不需要對應的雲端 API。成片只有在選擇投稿後才會上傳到已連結的平台；匿名統計與錯誤回報可在設定中關閉。詳見 [隱私權說明](docs/PRIVACY.md)。
+剪輯與算繪皆在你的電腦上完成。使用雲端分析會傳送相關字幕與文案；畫面理解或參考影格生圖會傳送所需抽樣畫面，雲端轉錄則會傳送音訊。使用本機分析與本機轉錄時不需要對應的雲端 API。成片只有在選擇投稿後才會上傳到已連結的平台；匿名統計與錯誤回報可在設定中關閉。詳見 [隱私權說明](../PRIVACY.md)。
 
 </details>
 
@@ -322,18 +322,18 @@ Docker 存取宿主機模型服務時，`localhost` 指向容器本身，需改�
 
 </details>
 
-[完整疑難排解指南](docs/FAQ.md) · [已知問題](https://github.com/zhouxiaoka/autoclip/issues/96)
+[完整疑難排解指南](../FAQ.md) · [已知問題](https://github.com/zhouxiaoka/autoclip/issues/96)
 
 ## 文件
 
 | 你想了解      | 文件                                                                                                                                    |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 安裝與首次出片   | [安裝指南](docs/USER_INSTALLATION_GUIDE.md)                                                                                               |
-| 自建服務與自動化  | [Docker 部署](DOCKER.md) · [CLI / MCP](docs/CLI_AND_MCP.md) · [Agent skill](skills/autoclip/SKILL.md) · [OpenCode 接入](docs/OPENCODE.md) |
-| 設定模型與疑難排解 | [模型設定](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [常見問題](docs/FAQ.md)                                                                        |
-| 版本、路線圖與隱私 | [更新日誌](CHANGELOG.md) · [路線圖](ROADMAP.md) · [社群看板](docs/COMMUNITY_BOARD.md) · [隱私權說明](docs/PRIVACY.md)                                  |
-| 研究筆記       | [選對瞬間，而不是堆特效](docs/research/2026-10-what-drives-views/article-zh.md) · [English](docs/research/2026-10-what-drives-views/article-en.md) |
-| 參與開發與翻譯   | [貢獻指南](CONTRIBUTING.md) · [翻譯維護](docs/i18n.md)                                                                                        |
+| 安裝與首次出片   | [安裝指南](../USER_INSTALLATION_GUIDE.md)                                                                                               |
+| 自建服務與自動化  | [Docker 部署](../DOCKER.md) · [CLI / MCP](../CLI_AND_MCP.md) · [Agent skill](../../skills/autoclip/SKILL.md) · [OpenCode 接入](../OPENCODE.md) |
+| 設定模型與疑難排解 | [模型設定](../MULTI_LLM_PROVIDER_GUIDE.md) · [常見問題](../FAQ.md)                                                                        |
+| 版本、路線圖與隱私 | [更新日誌](../../CHANGELOG.md) · [路線圖](../ROADMAP.md) · [社群看板](../COMMUNITY_BOARD.md) · [隱私權說明](../PRIVACY.md)                                  |
+| 研究筆記       | [選對瞬間，而不是堆特效](../research/2026-10-what-drives-views/article-zh.md) · [English](../research/2026-10-what-drives-views/article-en.md) |
+| 參與開發與翻譯   | [貢獻指南](../../CONTRIBUTING.md) · [翻譯維護](../i18n.md)                                                                                        |
 
 ## 參與貢獻
 
@@ -347,4 +347,4 @@ Docker 存取宿主機模型服務時，`localhost` 指向容器本身，需改�
 
 ![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)
 
-感謝 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper、FunASR，以及所有貢獻者。本專案採用 [MIT License](LICENSE)。
+感謝 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper、FunASR，以及所有貢獻者。本專案採用 [MIT License](../../LICENSE)。

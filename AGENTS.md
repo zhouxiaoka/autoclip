@@ -1,6 +1,6 @@
 # AutoClip quality and release requirements
 
-Read [docs/TESTING_ACCEPTANCE.md](docs/TESTING_ACCEPTANCE.md) before changing code or preparing a release. Use [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for release operations.
+Read [docs/TESTING_ACCEPTANCE.md](docs/TESTING_ACCEPTANCE.md) before changing code or preparing a release. Use [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for release operations.
 
 - Diagnose the latest report using its version, platform and build. Preserve unrelated work, user data and secrets. Use isolated data directories for every test.
 - For a production defect, reproduce the triggering conditions and show the regression fails before the fix and passes afterward. Test boundaries between configuration, requests, persistence, runtime and UI; test count alone is not acceptance.

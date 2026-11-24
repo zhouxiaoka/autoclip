@@ -122,7 +122,7 @@ if 'ps' in args and '-q' in args:
 
 def run_docker(action, env, *args):
     # Run from another directory; the wrapper must still select this checkout.
-    return subprocess.run(['bash', str(ROOT / f'docker-{action}.sh'), *args],
+    return subprocess.run(['bash', str(ROOT / f'docker/docker-{action}.sh'), *args],
                           cwd='/tmp', env=env, capture_output=True, text=True)
 
 
@@ -131,7 +131,7 @@ def test_docker_dev_stop_is_scoped_and_retains_volumes(docker_cli):
     result = run_docker('stop', env, 'dev', '--cleanup')
     assert result.returncode == 0, result.stderr
     calls = [json.loads(line) for line in capture.read_text().splitlines()]
-    assert calls[-1] == ['compose', '-f', str(ROOT / 'docker-compose.dev.yml'), 'down']
+    assert calls[-1] == ['compose', '-f', str(ROOT / 'docker/docker-compose.dev.yml'), 'down']
     assert not any('prune' in call or '--volumes' in call for call in calls)
 
 
@@ -159,7 +159,7 @@ def test_database_init_is_idempotent_and_preserves_existing_data(tmp_path):
         connection.execute("INSERT INTO existing_data VALUES ('keep me')")
     env = dict(os.environ, DATABASE_URL=f'sqlite:///{database}')
     for _ in range(2):
-        result = subprocess.run([sys.executable, str(ROOT / 'init_database.py')],
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/ops/init_database.py')],
                                 cwd=tmp_path, env=env, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr + result.stdout
     with sqlite3.connect(database) as connection:
@@ -169,14 +169,14 @@ def test_database_init_is_idempotent_and_preserves_existing_data(tmp_path):
 
 def test_database_failure_returns_nonzero(tmp_path):
     env = dict(os.environ, DATABASE_URL=f'sqlite:///{tmp_path}/missing/test.db')
-    result = subprocess.run([sys.executable, str(ROOT / 'init_database.py')],
+    result = subprocess.run([sys.executable, str(ROOT / 'scripts/ops/init_database.py')],
                             cwd=tmp_path, env=env, capture_output=True, text=True)
     assert result.returncode != 0
 
 
 def test_importing_database_helper_does_not_change_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    spec = importlib.util.spec_from_file_location('init_database_helper', ROOT / 'init_database.py')
+    spec = importlib.util.spec_from_file_location('init_database_helper', ROOT / 'scripts/ops/init_database.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert Path.cwd() == tmp_path

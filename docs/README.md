@@ -1,6 +1,6 @@
 # AutoClip 文档中心
 
-[English README](../README.md) · [简体中文 README](../README-ZH.md)
+[English README](../README.md) · [简体中文 README](i18n/README-ZH.md)
 
 ## 研究
 
@@ -19,13 +19,13 @@
 | --- | --- | --- |
 | 安装与第一次出片 | [安装指南](USER_INSTALLATION_GUIDE.md) | [Installation](USER_INSTALLATION_GUIDE.en.md) |
 | 费用、字幕、模型与排错 | [常见问题](FAQ.md) | [FAQ](FAQ.en.md) |
-| Docker 部署与备份 | [Docker](../DOCKER.md) | [Docker](DOCKER.en.md) |
+| Docker 部署与备份 | [Docker](DOCKER.md) | [Docker](DOCKER.en.md) |
 | 隐私说明 | [中文](PRIVACY.md) | [English](PRIVACY.en.md) |
 
 ## 开发与进阶
 
 - [仓库目录与旧文件用途](REPOSITORY_LAYOUT.md)
-- [源码 Web 服务启动](../STARTUP_GUIDE.md)
+- [源码 Web 服务启动](STARTUP_GUIDE.md)
 
 - [CLI、MCP 与本地模型](CLI_AND_MCP.md)（中文）
 - [opencode CLI 接入（MCP 一键注册）](OPENCODE.md)（中文 · [English](OPENCODE.en.md)）
@@ -33,7 +33,7 @@
 - [密钥引导与 autoclip://](KEY_GUIDE.md)（中文）
 - [发版前服务商端到端门槛](PROVIDER_E2E_GATE.md)（Environment、分层 live、用例库、¥300 月顶）
 - [贡献指南](../CONTRIBUTING.md)（中文）
-- [构建指南](../BUILD_GUIDE.md)（中文）
+- [构建指南](BUILD_GUIDE.md)（中文）
 - [README 翻译与徽章维护](i18n.md)（中文）
 - [更新日志](../CHANGELOG.md) · [发布版本](https://github.com/zhouxiaoka/autoclip/releases)
 - [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)

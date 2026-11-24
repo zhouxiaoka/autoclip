@@ -277,7 +277,7 @@ init_database() {
     # 确保数据目录存在
     mkdir -p data
     
-    python init_database.py
+    python scripts/ops/init_database.py
     log_success "数据库初始化成功"
 }
 

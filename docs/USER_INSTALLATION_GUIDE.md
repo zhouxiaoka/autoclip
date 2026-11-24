@@ -8,7 +8,7 @@
 | --- | --- |
 | macOS · Apple Silicon（M 系列） | [下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)，选择名称含 `aarch64` 的 `.dmg` |
 | Windows 10 / 11 · x64 | [下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)，选择名称含 `x64-setup.exe` 的安装包 |
-| Intel Mac / Linux / 自建服务 | 目前没有桌面安装包。用 [Docker](../DOCKER.md) 或 [CLI](CLI_AND_MCP.md) |
+| Intel Mac / Linux / 自建服务 | 目前没有桌面安装包。用 [Docker](DOCKER.md) 或 [CLI](CLI_AND_MCP.md) |
 
 以 Release 页面实际提供的安装包和系统要求为准。不要把源码压缩包 `Source code` 当作安装包。桌面版内置 Python 和 FFmpeg；本地语言模型、语音转写组件和模型文件需要另外准备。
 

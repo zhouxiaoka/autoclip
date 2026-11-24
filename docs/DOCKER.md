@@ -1,6 +1,6 @@
 # Docker 部署与排错
 
-[English](docs/DOCKER.en.md) · [返回首页](README.md) · [常见问题](docs/FAQ.md)
+[English](DOCKER.en.md) · [返回首页](../README.md) · [常见问题](FAQ.md)
 
 适合 Linux、Intel Mac、服务器或希望使用 Web 界面的用户。需要 Docker 和 Docker Compose v2；命令使用 `docker compose`。视频、模型、缓存和导出文件会占用额外磁盘，按素材规模预留空间。
 
@@ -43,7 +43,7 @@ docker compose ps
 
 ## 模型与字幕
 
-支持的提供商与环境变量以 [env.example](env.example) 和 [docker-compose.yml](docker-compose.yml) 为准。Web 设置页可以保存模型配置，不需要仅靠环境变量。
+支持的提供商与环境变量以 [env.example](../env.example) 和 [docker-compose.yml](../docker-compose.yml) 为准。Web 设置页可以保存模型配置，不需要仅靠环境变量。
 
 本地模型需要在宿主机启动。Docker Desktop 访问宿主机 Ollama 的示例：
 
@@ -62,7 +62,7 @@ extra_hosts:
 
 该主机名能解析并不保证模型可连接：宿主机模型服务还需要监听容器可访问的接口，防火墙允许相应连接。容器中的 `localhost` 不能访问宿主机的模型服务。环境变量或编排变更后运行 `docker compose up -d` 重建受影响容器；若设置页保存过旧地址，也要同步修改。
 
-没有字幕的视频需要准备本地转写组件与模型。首次安装较耗时，建议先使用本地视频加 SRT 验证主流程，详见 [安装指南](docs/USER_INSTALLATION_GUIDE.md)。
+没有字幕的视频需要准备本地转写组件与模型。首次安装较耗时，建议先使用本地视频加 SRT 验证主流程，详见 [安装指南](USER_INSTALLATION_GUIDE.md)。
 
 ## 排错
 
@@ -78,7 +78,7 @@ curl -f http://localhost:8000/api/v1/health/
 | 项目一直排队 | `celery-worker` 与 Redis 是否健康，是否保留了编排中的专用队列参数 |
 | Permission denied / 数据库只读 | `data/`、`logs/`、`uploads/` 是否对容器用户可写 |
 | 模型测试失败 | 提供商、模型名、API Key 和保存的 Base URL；本地模型是否能从容器访问 |
-| 没有生成片段 | 按字幕、分析、评分、导出阶段排查，见 [FAQ](docs/FAQ.md) |
+| 没有生成片段 | 按字幕、分析、评分、导出阶段排查，见 [FAQ](FAQ.md) |
 
 修改宿主机端口时，只修改映射左侧，例如 `"3001:3000"`，再使用新的宿主机端口访问。不要删除数据库来解决启动问题。
 
@@ -129,11 +129,11 @@ docker compose up -d --build
 
 ## 开发模式
 
-[开发编排](docker-compose.dev.yml) 用于源码开发；它与生产编排可能使用相同端口，不要同时启动：
+[开发编排](../docker/docker-compose.dev.yml) 用于源码开发；它与生产编排可能使用相同端口，不要同时启动：
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d --build
 docker compose -f docker-compose.dev.yml logs -f
 ```
 
-更多排错见 [FAQ](docs/FAQ.md)，版本变更见 [Releases](https://github.com/zhouxiaoka/autoclip/releases)。
+更多排错见 [FAQ](FAQ.md)，版本变更见 [Releases](https://github.com/zhouxiaoka/autoclip/releases)。

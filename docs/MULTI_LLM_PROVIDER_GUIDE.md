@@ -8,4 +8,4 @@ Python 提供商 SDK 已包含在锁定版本的 `requirements.txt` 中，不需
 python -m pip install -r requirements.txt
 ```
 
-源码启动见 [STARTUP_GUIDE.md](../STARTUP_GUIDE.md)，容器部署见 [DOCKER.md](../DOCKER.md)。不要使用旧指南里的 `python backend/main.py`，也不要另行无约束升级 SDK。
+源码启动见 [STARTUP_GUIDE.md](STARTUP_GUIDE.md)，容器部署见 [DOCKER.md](DOCKER.md)。不要使用旧指南里的 `python backend/main.py`，也不要另行无约束升级 SDK。
