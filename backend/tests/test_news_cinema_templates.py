@@ -25,23 +25,24 @@ def _literal_values(annotation):
 
 
 def test_import_accepts_news_and_cinema_and_rejects_unknown_styles():
-    from backend.api.v1.studio import import_visual
     from backend.services.studio.models import OutputVariant
     from backend.services.studio.template_choice import selected_template, style_for_request
+    from backend.services.studio.templates import registry
 
-    form = _literal_values(typing.get_type_hints(import_visual)['html_template'])
-    assert {'editorial', 'street', 'news', 'cinema', 'classic'} <= form
-    assert 'magazine' not in form
+    assert {'editorial', 'street', 'news', 'cinema', 'classic'} <= set(registry.style_ids())
+    assert not registry.is_valid_style('magazine')
     for name in ('news', 'cinema'):
         assert ImportOptions(html_template=name).html_template == name
         assert style_for_request(name, {'pkg_templates_v1': True}) == {'template': name, 'requested_template': name}
         assert selected_template({'html_template': name, 'features': {'pkg_templates_v1': True}}) == name
+        variant = OutputVariant(id='v1', draft_id='d1', draft_revision=1, strategy_id='douyin', html_template=name)
+        assert variant.html_template == name
     with pytest.raises(ValidationError):
         ImportOptions(html_template='magazine')
+    with pytest.raises(ValidationError):
+        OutputVariant(id='v1', draft_id='d1', draft_revision=1, strategy_id='douyin', html_template='magazine')
     with pytest.raises(ValueError):
         style_for_request('magazine')
-    variant = _literal_values(OutputVariant.model_fields['html_template'].annotation)
-    assert {'editorial', 'street', 'news', 'cinema'} <= variant
 
 
 def test_desktop_bundle_ships_the_four_template_folders():

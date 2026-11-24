@@ -2440,5 +2440,12 @@
   "请求头": "Cabeçalhos da solicitação",
   "请求头值": "Valor do cabeçalho",
   "值": "Valor",
-  "添加常用请求头": "Adicionar cabeçalho comum"
+  "添加常用请求头": "Adicionar cabeçalho comum",
+  "editing_style.sync_catalog": "Verificar novos modelos",
+  "editing_style.syncing": "Sincronizando…",
+  "editing_style.install": "Instalar",
+  "editing_style.installing": "Instalando…",
+  "editing_style.update": "Atualizar",
+  "editing_style.remote_badge": "Novo",
+  "editing_style.install_failed": "Não foi possível sincronizar ou instalar o modelo."
 }

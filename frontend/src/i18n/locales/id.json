@@ -2440,5 +2440,12 @@
   "请求头格式无效：请填写不重复的名称和字符串值。": "Header tidak valid: gunakan nama unik dan nilai string.",
   "附加请求参数（JSON）": "Parameter permintaan tambahan (JSON)",
   "高级请求设置": "Pengaturan permintaan lanjutan",
-  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "Secara default reasoning_effort tidak dikirim; nilai yang didukung bergantung pada penyedia."
+  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "Secara default reasoning_effort tidak dikirim; nilai yang didukung bergantung pada penyedia.",
+  "editing_style.sync_catalog": "Periksa templat baru",
+  "editing_style.syncing": "Menyinkronkan…",
+  "editing_style.install": "Pasang",
+  "editing_style.installing": "Memasang…",
+  "editing_style.update": "Perbarui",
+  "editing_style.remote_badge": "Baru",
+  "editing_style.install_failed": "Gagal menyinkronkan atau memasang templat. Silakan coba lagi."
 }

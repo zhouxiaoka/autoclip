@@ -2440,5 +2440,12 @@
   "请求头": "Cabeceras de solicitud",
   "请求头值": "Valor de cabecera",
   "值": "Valor",
-  "添加常用请求头": "Añadir cabecera común"
+  "添加常用请求头": "Añadir cabecera común",
+  "editing_style.sync_catalog": "Buscar nuevas plantillas",
+  "editing_style.syncing": "Sincronizando…",
+  "editing_style.install": "Instalar",
+  "editing_style.installing": "Instalando…",
+  "editing_style.update": "Actualizar",
+  "editing_style.remote_badge": "Nueva",
+  "editing_style.install_failed": "No se pudo sincronizar o instalar la plantilla. Inténtalo de nuevo."
 }

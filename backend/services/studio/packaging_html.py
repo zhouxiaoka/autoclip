@@ -175,23 +175,22 @@ def _progress_bar(template: str, offset: float, total: float, width: int, height
     ``t`` on that swatch starts at 0 for the scene; ``offset`` is where the scene sits in the clip.
     Street runs from x=0 across the frame. Editorial starts at x=60 and stops at x=1020.
     """
-    if template not in {'street', 'editorial'} or total <= 0 or width <= 0 or height <= 0:
+    if total <= 0 or width <= 0 or height <= 0:
+        return ''
+    from backend.services.studio.templates import registry as template_registry
+    if not template_registry.is_html_template(template):
+        return ''
+    bar_spec = template_registry.get(template).base.progress_bar
+    if not bar_spec or not bar_spec.enabled:
         return ''
     off = f'{max(0.0, float(offset)):.3f}'
     dur = f'{max(float(total), 0.001):.3f}'
-    if template == 'street':
-        span = max(2, int(width))
-        bar_h = 12
-        x = 0
-        y = max(0, height - bar_h)
-        color = '0xD7FF3A'
-    else:
-        span = min(960, max(2, int(width) - 120))
-        # Even height: yuva420p rejects 2x1 on ffmpeg 6.1 (CI) with "Picture size 2x0".
-        bar_h = 2
-        x = 60 if width >= 120 else 0
-        y = max(0, height - 94)
-        color = '0xF4EFE6@0.8'
+    bar_h = max(2, int(bar_spec.height) - (int(bar_spec.height) % 2))
+    inset_x = int(bar_spec.inset_x)
+    x = inset_x if width >= 2 * inset_x + 2 else 0
+    span = max(2, int(width) - 2 * x)
+    y = max(0, height - int(bar_spec.y_from_bottom))
+    color = bar_spec.color
     # Even widths: the composite blends in yuv420, where chroma is shared by pixel pairs.
     grown = f'max(2\\,min({span}\\,2*trunc({span}*(t+{off})/{dur}/2)))'
     return (
@@ -210,40 +209,47 @@ def _still(source: str) -> str:
     return f"{source},trim=end_frame=1,format=yuva420p,loop=loop=-1:size=1:start=0"
 
 
-def _editorial_scrim(width: int, height: int) -> str:
-    """Lower 1000px wash, matching the template gradient, outside the captured overlay.
-
-    Stops: transparent at the top, 38% at 38% of the height, 78% at the bottom. Color ``#0C0A08``.
-    ``geq`` per pixel per frame costs about a second of video per second of clip. The wash does
-    not move, so it is one frame, converted to yuva420p once and looped.
-    """
-    scrim_h = min(1000, height)
+def _scrim_filter(width: int, height: int, scrim_spec) -> str:
+    """Declarative bottom wash composited once and looped."""
+    if not scrim_spec or not scrim_spec.enabled:
+        return ''
+    scrim_h = min(int(scrim_spec.height), height)
     if scrim_h < 2 or width < 2:
         return ''
     top = max(0, height - scrim_h)
+    mid_pct = max(1, min(99, int(round(float(scrim_spec.mid_stop) * 100))))
+    mid_a = int(round(float(scrim_spec.mid_alpha) * 100))
+    bot_a = int(round(float(scrim_spec.bottom_alpha) * 100))
+    delta_a = bot_a - mid_a
     # Commas inside geq belong to the expression, so they are escaped for the filtergraph.
     alpha = (
-        "if(lt(Y\\,H*38/100)\\,255*Y/H\\,"
-        "255*(38/100+40/100*(Y-H*38/100)/(H*62/100)))"
+        f"if(lt(Y\\,H*{mid_pct}/100)\\,255*{mid_a}/{mid_pct}*Y/H\\,"
+        f"255*({mid_a}/100+{delta_a}/100*(Y-H*{mid_pct}/100)/(H*{100 - mid_pct}/100)))"
     )
-    wash = f"color=c=0x0C0A08:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'"
+    wash = f"color=c={scrim_spec.color}:s={width}x{scrim_h}:r=1:d=1,format=yuva444p,geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{alpha}'"
     return (
         f"{_still(wash)}[scrim];"
-        # The wash is one looped frame. shortest stops it when the picture ends, so it cannot
-        # hold the composite open. The captured overlay below is the one that must not cut the scene.
         f"[graded][scrim]overlay=0:{top}:format=yuv420:shortest=1:eof_action=repeat[based];"
     )
 
 
+def _editorial_scrim(width: int, height: int) -> str:
+    """Backwards-compatible helper for the default editorial scrim."""
+    from backend.services.studio.templates.spec import ScrimSpec
+    return _scrim_filter(width, height, ScrimSpec(enabled=True))
+
+
 def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str, *, template: str = '', offset: float = 0.0, total: float = 0.0) -> tuple[str, str]:
-    """Grade the base, wash the editorial scrim, place the overlay, then the progress bar.
+    """Grade the base, wash any declarative scrim, place the overlay, then any progress bar.
 
     Every blend is yuv420, the format of the graded picture and of the encode. ``format=auto``
     with a yuva444p layer made ffmpeg convert the looped scrim and the bar on every output frame;
     that and a per-pixel ``colorbalance`` doubled the editorial composite against classic.
     The captured overlay is converted once per captured frame (only caption changes), not per output frame.
     """
-    scrim = _editorial_scrim(width, height) if template == 'editorial' else ''
+    from backend.services.studio.templates import registry as template_registry
+    scrim_spec = template_registry.get(template).base.scrim if template_registry.is_html_template(template) else None
+    scrim = _scrim_filter(width, height, scrim_spec) if scrim_spec else ''
     base = '[based]' if scrim else '[graded]'
     graph = (
         f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
@@ -264,8 +270,26 @@ def overlay_frame_count(duration: float, fps: int = 30) -> int:
     return max(1, int(round(max(0.1, float(duration)) * fps)))
 
 
+def _template_fingerprint(template: str) -> str:
+    """Hash the template's page + spec bytes so hot-updates invalidate stale overlay caches."""
+    try:
+        from backend.services.studio.templates import registry as template_registry
+        folder = template_registry.resolve_dir(template)
+    except Exception:
+        return ''
+    h = hashlib.sha256()
+    for name in ('template.yaml', 'index.html', 'style.css', 'template.js'):
+        path = folder / name
+        if path.is_file():
+            h.update(name.encode())
+            h.update(b'\0')
+            h.update(path.read_bytes())
+            h.update(b'\0')
+    return h.hexdigest()[:12]
+
+
 def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: int) -> Path:
-    """One file per template, painted fill and length. The name is a hash, not the caption.
+    """One file per template revision, painted fill and length. The name is a hash, not the caption.
 
     Length is part of the key. paint_fill drops the cover title, so two captions-off clips of
     one style can share a painted fill once the hook stops growing. The composite repeats
@@ -274,7 +298,8 @@ def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: in
     """
     from backend.services.studio.store import directory
     blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
-    digest = hashlib.sha256(f'{template}|{int(frames)}|{blob}'.encode()).hexdigest()[:20]
+    fp = _template_fingerprint(template)
+    digest = hashlib.sha256(f'{template}|{fp}|{int(frames)}|{blob}'.encode()).hexdigest()[:20]
     folder = directory(project_id) / 'output' / 'studio' / 'overlays'
     folder.mkdir(parents=True, exist_ok=True)
     return folder / f'{digest}.mkv'
@@ -517,11 +542,11 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
     from playwright.async_api import async_playwright
 
     from backend.services.packaging_runtime import launch_kwargs
-    from backend.services.studio.templates.registry import ASSET_ROOT, get
+    from backend.services.studio.templates.registry import get, resolve_dir
 
     out_dir = _capture_out_dir.get()
     width, height = get(template).canvas.overlay_px
-    page_url = (ASSET_ROOT / template / 'index.html').as_uri()
+    page_url = (resolve_dir(template) / 'index.html').as_uri()
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(**launch_kwargs())
         try:
@@ -611,10 +636,11 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     """
     from backend.services.studio.overlay_fill import build_fill, paint_fill
     from backend.services.studio.template_choice import blocking_reason
-    from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
+    from backend.services.studio.templates import registry as template_registry
 
     started_wall = time.monotonic()
-    requested = template if template in HTML_TEMPLATE_IDS else 'classic'
+    is_html = template_registry.is_html_template(template)
+    requested = template if is_html else 'classic'
 
     def finish(job: OverlayJob) -> OverlayJob:
         return _stamp(job, started_wall)
@@ -622,7 +648,7 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
     reason = blocking_reason(features, runtime_ready=True if capture else None)
     if reason:
         return finish(_downgrade(reason, requested=requested))
-    if template not in HTML_TEMPLATE_IDS:
+    if not is_html:
         return finish(_downgrade('flag_off', requested=requested))
     fps = 30
     frames = overlay_frame_count(duration, fps)

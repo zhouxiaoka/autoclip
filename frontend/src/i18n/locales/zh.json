@@ -2440,5 +2440,12 @@
   "请求头": "请求头",
   "请求头值": "请求头值",
   "值": "值",
-  "添加常用请求头": "添加常用请求头"
+  "添加常用请求头": "添加常用请求头",
+  "editing_style.sync_catalog": "检查新模板",
+  "editing_style.syncing": "同步中…",
+  "editing_style.install": "下载安装",
+  "editing_style.installing": "安装中…",
+  "editing_style.update": "更新",
+  "editing_style.remote_badge": "新上线",
+  "editing_style.install_failed": "模板同步或安装失败，请稍后重试"
 }

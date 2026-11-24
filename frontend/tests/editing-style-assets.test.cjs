@@ -20,8 +20,9 @@ test('every style poster and preview (webm + mp4) is a local bundled asset', () 
 
 test('picker keeps a static poster under the video and hides the video on load error', () => {
   const picker = read('features/studio/EditingStylePicker.tsx')
-  assert.ok(picker.includes('<img src={STYLE_POSTERS[id]}'))
-  assert.ok(picker.includes('poster={STYLE_POSTERS[id]}'))
+  assert.ok(picker.includes('posterForTemplate(id, item)'))
+  assert.ok(picker.includes('<img src={poster}'))
+  assert.ok(picker.includes('poster={poster}'))
   const onError = picker.slice(picker.indexOf('onError='), picker.indexOf('onPlaying='))
   assert.ok(onError.includes("classList.remove('is-playing')"))
   assert.ok(onError.includes('trackTemplatePreviewFailed'))

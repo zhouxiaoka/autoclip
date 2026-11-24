@@ -439,17 +439,16 @@ def cancel_job(project_id: str) -> Dict[str, Any]:
 
 
 def list_styles() -> Dict[str, Any]:
-    """Editing styles the produce/template parameter accepts. No extra knobs."""
+    """Editing styles the produce/template parameter accepts. Includes installed templates."""
     if not _v2_enabled():
         return _disabled()
-    catalog = (
-        {'id': 'editorial', 'name': '杂志风'},
-        {'id': 'street', 'name': '街头快剪'},
-        {'id': 'news', 'name': '新闻'},
-        {'id': 'cinema', 'name': '电影'},
-        {'id': 'classic', 'name': '经典'},
-    )
-    return {'ok': True, 'styles': list(catalog)}
+    from backend.services.studio.templates import registry as template_registry
+    styles = [
+        {'id': item.spec.id, 'name': item.spec.name.zh}
+        for item in template_registry.list_loaded()
+    ]
+    styles.append({'id': 'classic', 'name': '经典'})
+    return {'ok': True, 'styles': styles}
 
 
 def _sync_v2_tools() -> None:

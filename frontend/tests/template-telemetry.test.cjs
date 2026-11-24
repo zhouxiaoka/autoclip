@@ -60,4 +60,13 @@ test('override event helper keeps enums and drops free text', () => {
   assert.equal(events[0].props.to_template, 'street')
   assert.equal(events[0].props.stage, 'pre_import')
   assert.equal(JSON.stringify(events[0].props).includes('nope'), false)
+  // Dynamic hot-installed template slugs pass through while free text / paths remain blocked.
+  const dyn = workflow.safeStudioProperties({
+    template: 'interview_card', requested_template: 'interview_card', from_template: 'editorial', to_template: 'interview_card',
+  })
+  assert.equal(dyn.template, 'interview_card')
+  assert.equal(dyn.to_template, 'interview_card')
+  const bad = workflow.safeStudioProperties({ template: '/Users/secret/path', to_template: '包含中文的标题' })
+  assert.equal(bad.template, undefined)
+  assert.equal(bad.to_template, undefined)
 })

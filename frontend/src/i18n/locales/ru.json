@@ -2440,5 +2440,12 @@
   "请求头": "Заголовки запроса",
   "请求头值": "Значение заголовка",
   "值": "Значение",
-  "添加常用请求头": "Добавить типовой заголовок"
+  "添加常用请求头": "Добавить типовой заголовок",
+  "editing_style.sync_catalog": "Проверить новые шаблоны",
+  "editing_style.syncing": "Синхронизация…",
+  "editing_style.install": "Установить",
+  "editing_style.installing": "Установка…",
+  "editing_style.update": "Обновить",
+  "editing_style.remote_badge": "Новый",
+  "editing_style.install_failed": "Не удалось синхронизировать или установить шаблон."
 }

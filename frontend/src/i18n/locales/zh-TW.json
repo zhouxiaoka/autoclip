@@ -2440,5 +2440,12 @@
   "请求头格式无效：请填写不重复的名称和字符串值。": "請求標頭格式無效：請填寫不重複的名稱與字串值。",
   "附加请求参数（JSON）": "附加請求參數（JSON）",
   "高级请求设置": "進階請求設定",
-  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "預設不傳送 reasoning_effort；支援的取值由服務商決定。"
+  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "預設不傳送 reasoning_effort；支援的取值由服務商決定。",
+  "editing_style.sync_catalog": "檢查新範本",
+  "editing_style.syncing": "同步中…",
+  "editing_style.install": "下載安裝",
+  "editing_style.installing": "安裝中…",
+  "editing_style.update": "更新",
+  "editing_style.remote_badge": "新上線",
+  "editing_style.install_failed": "範本同步或安裝失敗，請稍後再試"
 }

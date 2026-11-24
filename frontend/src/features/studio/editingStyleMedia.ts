@@ -3,9 +3,10 @@ import streetPoster from '../../assets/editing-style/street.poster.webp'
 import newsPoster from '../../assets/editing-style/news.poster.webp'
 import cinemaPoster from '../../assets/editing-style/cinema.poster.webp'
 import classicPoster from '../../assets/editing-style/classic.poster.webp'
-import type { EditingStyle } from './editingStyle'
+import type { BuiltinTemplateChoice, EditingStyle } from './editingStyle'
+import { resolveTemplateAssetUrl, type TemplateCatalogItem } from './templateCatalogClient'
 
-export const STYLE_POSTERS: Record<EditingStyle, string> = {
+export const STYLE_POSTERS: Record<BuiltinTemplateChoice, string> = {
   editorial: editorialPoster,
   street: streetPoster,
   news: newsPoster,
@@ -15,7 +16,7 @@ export const STYLE_POSTERS: Record<EditingStyle, string> = {
 
 type PreviewUrls = { webm: string; mp4: string }
 
-const loaders: Record<EditingStyle, () => Promise<PreviewUrls>> = {
+const loaders: Record<BuiltinTemplateChoice, () => Promise<PreviewUrls>> = {
   editorial: async () => ({
     webm: (await import('../../assets/editing-style/editorial.preview.webm?url')).default,
     mp4: (await import('../../assets/editing-style/editorial.preview.mp4?url')).default,
@@ -38,13 +39,31 @@ const loaders: Record<EditingStyle, () => Promise<PreviewUrls>> = {
   }),
 }
 
-const cache = new Map<EditingStyle, Promise<PreviewUrls>>()
+const cache = new Map<string, Promise<PreviewUrls>>()
 
-/** Fetch one style's silent preview. Callers decide the order. */
-export function loadStylePreview(id: EditingStyle): Promise<PreviewUrls> {
+export function posterForTemplate(id: EditingStyle, item?: TemplateCatalogItem): string {
+  const remoteOrLocal = resolveTemplateAssetUrl(item?.poster_url)
+  if (remoteOrLocal) return remoteOrLocal
+  return STYLE_POSTERS[id as BuiltinTemplateChoice] || classicPoster
+}
+
+/** Fetch one style's silent preview. Supports built-in bundled assets and dynamic template URLs. */
+export function loadStylePreview(id: EditingStyle, item?: TemplateCatalogItem): Promise<PreviewUrls> {
+  const dynamicMp4 = resolveTemplateAssetUrl(item?.preview_mp4_url)
+  const dynamicWebm = resolveTemplateAssetUrl(item?.preview_webm_url)
+  if (dynamicMp4 || dynamicWebm) {
+    return Promise.resolve({
+      webm: dynamicWebm || dynamicMp4 || '',
+      mp4: dynamicMp4 || dynamicWebm || '',
+    })
+  }
+  const loader = loaders[id as BuiltinTemplateChoice]
+  if (!loader) {
+    return Promise.reject(new Error(`no preview for ${id}`))
+  }
   let pending = cache.get(id)
   if (!pending) {
-    pending = loaders[id]()
+    pending = loader()
     cache.set(id, pending)
   }
   return pending

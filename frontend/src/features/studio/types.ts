@@ -115,7 +115,7 @@ export interface GenerationState {
   quota_precheck?: 'skipped' | 'ok' | 'exhausted' | 'unavailable'
   /** Consecutive failed attempts after the last success, and whether the last two share an error_code. */
   repeat_failure?: { count: number; same_code: boolean }
-  html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
+  html_template?: string
   recommended_template?: 'editorial' | 'street' | 'classic'
   accepted_recommendation?: boolean
 }
@@ -181,7 +181,7 @@ export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
-  html_template?: 'editorial' | 'street' | 'news' | 'cinema' | 'classic'
+  html_template?: string
   source_window?: SourceWindow | null
 }
 

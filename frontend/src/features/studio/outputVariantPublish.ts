@@ -24,7 +24,7 @@ export function outputVariantPublishTarget(search: string) {
 export function outputAnalytics(variant: OutputVariant, draft?: Draft, job?: RenderJob, recommendation?: Pick<VariantProperties, 'recommended_template' | 'accepted_recommendation'>): VariantProperties {
   const packaging = draft?.packaging
   const rendered = job?.result?.template_render?.template
-  const template = rendered === 'editorial' || rendered === 'street' || rendered === 'news' || rendered === 'cinema' || rendered === 'classic' ? rendered : packaging?.template
+  const template = rendered && (rendered === 'classic' || /^[a-z][a-z0-9_-]{1,31}$/.test(rendered)) ? rendered : packaging?.template
   return {
     strategy_id: variant.strategy_id, framing: variant.framing, template,
     packaging_style: packaging ? packaging.style || (packaging.template === 'podcast_en' ? 'pop' : 'classic') : undefined,

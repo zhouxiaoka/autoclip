@@ -2440,5 +2440,12 @@
   "请求头": "요청 헤더",
   "请求头值": "헤더 값",
   "值": "값",
-  "添加常用请求头": "자주 쓰는 헤더 추가"
+  "添加常用请求头": "자주 쓰는 헤더 추가",
+  "editing_style.sync_catalog": "새 템플릿 확인",
+  "editing_style.syncing": "동기화 중…",
+  "editing_style.install": "설치",
+  "editing_style.installing": "설치 중…",
+  "editing_style.update": "업데이트",
+  "editing_style.remote_badge": "신규",
+  "editing_style.install_failed": "템플릿 동기화 또는 설치에 실패했습니다."
 }

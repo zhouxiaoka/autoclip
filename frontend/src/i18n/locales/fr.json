@@ -2440,5 +2440,12 @@
   "请求头": "En-têtes de requête",
   "请求头值": "Valeur de l’en-tête",
   "值": "Valeur",
-  "添加常用请求头": "Ajouter un en-tête courant"
+  "添加常用请求头": "Ajouter un en-tête courant",
+  "editing_style.sync_catalog": "Vérifier les nouveaux modèles",
+  "editing_style.syncing": "Synchronisation…",
+  "editing_style.install": "Installer",
+  "editing_style.installing": "Installation…",
+  "editing_style.update": "Mettre à jour",
+  "editing_style.remote_badge": "Nouveau",
+  "editing_style.install_failed": "Échec de la synchronisation ou de l’installation du modèle."
 }

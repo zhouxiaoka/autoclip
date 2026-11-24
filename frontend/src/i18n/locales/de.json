@@ -2440,5 +2440,12 @@
   "请求头格式无效：请填写不重复的名称和字符串值。": "Ungültige Header: eindeutige Namen und String-Werte verwenden.",
   "附加请求参数（JSON）": "Zusätzliche Anfrageparameter (JSON)",
   "高级请求设置": "Erweiterte Anfrageeinstellungen",
-  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "Standardmäßig wird reasoning_effort nicht gesendet; unterstützte Werte hängen vom Anbieter ab."
+  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "Standardmäßig wird reasoning_effort nicht gesendet; unterstützte Werte hängen vom Anbieter ab.",
+  "editing_style.sync_catalog": "Neue Vorlagen prüfen",
+  "editing_style.syncing": "Synchronisierung…",
+  "editing_style.install": "Installieren",
+  "editing_style.installing": "Wird installiert…",
+  "editing_style.update": "Aktualisieren",
+  "editing_style.remote_badge": "Neu",
+  "editing_style.install_failed": "Vorlage konnte nicht synchronisiert oder installiert werden."
 }

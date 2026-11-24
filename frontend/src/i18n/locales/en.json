@@ -2440,5 +2440,12 @@
   "请求头": "Request headers",
   "请求头值": "Header value",
   "值": "Value",
-  "添加常用请求头": "Add common header"
+  "添加常用请求头": "Add common header",
+  "editing_style.sync_catalog": "Check new templates",
+  "editing_style.syncing": "Syncing…",
+  "editing_style.install": "Install",
+  "editing_style.installing": "Installing…",
+  "editing_style.update": "Update",
+  "editing_style.remote_badge": "New",
+  "editing_style.install_failed": "Could not sync or install template. Please try again."
 }

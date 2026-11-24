@@ -2440,5 +2440,12 @@
   "请求头": "リクエストヘッダー",
   "请求头值": "ヘッダー値",
   "值": "値",
-  "添加常用请求头": "よく使うヘッダーを追加"
+  "添加常用请求头": "よく使うヘッダーを追加",
+  "editing_style.sync_catalog": "新しいテンプレートを確認",
+  "editing_style.syncing": "同期中…",
+  "editing_style.install": "インストール",
+  "editing_style.installing": "インストール中…",
+  "editing_style.update": "更新",
+  "editing_style.remote_badge": "新着",
+  "editing_style.install_failed": "テンプレートの同期またはインストールに失敗しました。"
 }

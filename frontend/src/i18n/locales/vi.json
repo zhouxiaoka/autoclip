@@ -2440,5 +2440,12 @@
   "请求头格式无效：请填写不重复的名称和字符串值。": "Header không hợp lệ: dùng tên không trùng và giá trị chuỗi.",
   "附加请求参数（JSON）": "Tham số yêu cầu bổ sung (JSON)",
   "高级请求设置": "Cài đặt yêu cầu nâng cao",
-  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "Mặc định không gửi reasoning_effort; các giá trị hỗ trợ tùy thuộc nhà cung cấp."
+  "默认不发送 reasoning_effort；支持的取值由服务商决定。": "Mặc định không gửi reasoning_effort; các giá trị hỗ trợ tùy thuộc nhà cung cấp.",
+  "editing_style.sync_catalog": "Kiểm tra mẫu mới",
+  "editing_style.syncing": "Đang đồng bộ…",
+  "editing_style.install": "Cài đặt",
+  "editing_style.installing": "Đang cài đặt…",
+  "editing_style.update": "Cập nhật",
+  "editing_style.remote_badge": "Mới",
+  "editing_style.install_failed": "Không thể đồng bộ hoặc cài đặt mẫu. Vui lòng thử lại."
 }
