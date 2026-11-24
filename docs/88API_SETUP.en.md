@@ -1,6 +1,6 @@
 # Use 88API with AutoClip
 
-[简体中文](88API_SETUP.md) · [Back to README](../README-EN.md)
+[简体中文](88API_SETUP.md) · [Back to README](../README.md)
 
 88API Token Platform sponsors AutoClip and provides OpenAI-compatible APIs for analysis and cover images.
 
@@ -55,4 +55,4 @@ autoclip run video.mp4 --provider api88 --model "exact account model ID"
 
 Required content is sent to the selected service and billed to your platform account. Keep API keys out of screenshots and public reports.
 
-[Back to README](../README-EN.md)
+[Back to README](../README.md)

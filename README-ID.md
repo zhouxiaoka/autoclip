@@ -21,9 +21,11 @@ Aplikasi ini gratis; model cloud dikenai biaya sesuai pemakaian. Buka editor kap
 
 **[Situs Web](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Unduh versi desktop](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Pustaka kasus](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Riset](docs/research/2026-10-what-drives-views/article-en.md) · [Mulai cepat](#quick-start) · [Dokumentasi](#documentation) · [Laporkan masalah](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · **Bahasa Indonesia** · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · **Bahasa Indonesia** · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
+
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[Rilis terbaru](https://github.com/zhouxiaoka/autoclip/releases/latest)** adalah versi yang dilaporkan oleh `autoclip --version`, dengan pembaruan serentak untuk desktop, CLI, dan MCP. Lihat [catatan perubahan](CHANGELOG.md) untuk perbaikan output cepat, paginasi takarir (subtitle), pembingkaian pembicara, dan antrean video berdurasi panjang. Harap tingkatkan instalasi versi lama.
 
@@ -217,6 +219,35 @@ Tidak tersedia build desktop untuk Intel Mac. Intel Mac dan Linux menggunakan Do
 
 [Panduan instalasi lengkap](docs/USER_INSTALLATION_GUIDE.en.md) · [Pemecahan masalah](docs/FAQ.en.md)
 
+**CLI / MCP (Claude Code, Codex, OpenCode & skrip)**
+
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+<details>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
+
+</details>
+
+
 **Docker / Web**
 
 ```bash
@@ -227,61 +258,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-Buka [antarmuka web](http://localhost:3000). [Dokumentasi API](http://localhost:8000/docs) tersedia setelah backend berjalan. Lihat [panduan Docker](docs/DOCKER.en.md).
-
-Di Linux, jika bind mount gagal karena izin akses, perbaiki kepemilikan direktori terlebih dahulu:
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-Untuk IP LAN atau domain kustom, tambahkan alamat frontend ke `AUTOCLIP_ALLOWED_ORIGINS` di `.env` (dipisahkan koma).
-
-**CLI / MCP**
-
-Memerlukan Python 3.10+ (disarankan 3.11), dengan FFmpeg dan FFprobe di PATH; CLI lokal tidak memerlukan Redis. Unduh [ZIP resmi CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/latest), ekstrak, dan jalankan di direktori tersebut:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-Tanpa ZIP, instal dengan satu perintah. Instalasi dari salinan kode sumber hasil clone tetap tersedia:
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-Perintah di atas untuk macOS / Linux. Di Windows, buat environment dengan `py -m venv venv` dan aktifkan dengan `.\venv\Scripts\Activate.ps1`, lalu gunakan perintah instalasi `python -m pip` yang sama.
-
-Simpan pengaturan model terlebih dahulu: gunakan ulang pengaturan desktop, atau konfigurasi direktori data Anda sendiri dari contoh tanpa kunci di dalam ZIP. Lihat [panduan CLI / MCP](docs/CLI_AND_MCP.md) (Mandarin). `produce` tidak menggunakan opsi override `run --provider` yang lama. Sertakan `--srt` untuk melewati transkripsi.
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-Klien MCP akan menjalankan server. Untuk debugging mandiri, jalankan `autoclip mcp` di terminal terpisah; pengguna OpenCode dapat menulis konfigurasi klien dengan `autoclip mcp install opencode`.
-
-Ganti `PROJECT_ID` dengan ID proyek yang dikembalikan oleh proses produksi. MCP menggunakan `start_quick_output` / `get_quick_output_status`; atur `command` klien ke path absolut `autoclip` di virtualenv dan `args` ke `["mcp"]`. Perintah lama `run` / `export` dan alat pemotongan tetap tersedia. Lihat [CLI / MCP](docs/CLI_AND_MCP.md) (Mandarin), [OpenCode](docs/OPENCODE.en.md), dan [Agent skill](skills/autoclip/SKILL.md) (Mandarin).
-
-Listing stdio lokal Smithery menggunakan bundel MCPB. Dari root repositori, jalankan `python scripts/pack_mcpb.py`. Artefaknya adalah `dist/autoclip-mcp.mcpb` dan tidak di-commit. Publikasikan dengan `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp` menggunakan login milik pengelola sendiri. Repositori ini tidak menyimpan kunci API. Langkah lengkapnya ada di [CLI / MCP](docs/CLI_AND_MCP.md) (Mandarin).
-
+Buka antarmuka web di `http://localhost:3000` (dokumentasi API di `http://localhost:8000/docs`). Lihat [Panduan Docker](docs/DOCKER.en.md) untuk izin volume dan domain kustom.
 ## Pengaturan model
 
 | Opsi | Pengaturan |

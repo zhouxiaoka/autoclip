@@ -21,9 +21,11 @@
 
 **[Сайт](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Скачать десктоп](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Кейсы](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Исследование](docs/research/2026-10-what-drives-views/article-en.md) · [Быстрый старт](#быстрый-старт) · [Документация](#документация) · [Ошибка](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · **Русский** · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · **Русский** · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
+
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[Актуальный релиз](https://github.com/zhouxiaoka/autoclip/releases/latest)** — это то, что показывает `autoclip --version`, вместе с desktop, CLI и MCP. Автовыпуск, разбивка субтитров, кадрирование и очередь длинных видео описаны в [истории изменений](CHANGELOG.md). Обновите старые версии.
 
@@ -215,6 +217,35 @@ Intel Mac / Linux могут использовать Docker или CLI. Дес�
 
 [Установка](docs/USER_INSTALLATION_GUIDE.en.md) · [Неполадки](docs/FAQ.en.md)
 
+**CLI / MCP (Claude Code, Codex, OpenCode и скрипты)**
+
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+<details>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
+
+</details>
+
+
 **Docker / Web**
 
 ```bash
@@ -225,59 +256,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-Откройте [веб-интерфейс](http://localhost:3000). [API](http://localhost:8000/docs) доступна после старта бэкенда. [Гид по Docker](docs/DOCKER.en.md).
-
-В Linux при ошибке прав на bind сначала исправьте владельца:
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-Для LAN IP или своего домена добавьте адрес frontend в `AUTOCLIP_ALLOWED_ORIGINS` в `.env` (через запятую).
-
-**CLI / MCP**
-
-Python 3.10+ (лучше 3.11), FFmpeg и FFprobe в PATH; Redis не нужен. Скачайте [официальный ZIP CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/latest), распакуйте и выполните в этом каталоге:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-Без ZIP установите одной командой. Установка из клонированных исходников по-прежнему доступна:
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-Команды выше для macOS / Linux. В Windows создайте среду через `py -m venv venv`, активируйте `.\venv\Scripts\Activate.ps1`, затем выполните те же команды `python -m pip`.
-
-Сначала сохраните настройки модели: используйте desktop или свой каталог по примеру без ключей из ZIP. [CLI / MCP](docs/CLI_AND_MCP.md) (кит.). `produce` не использует временную настройку `run --provider`. `--srt` пропускает транскрипцию.
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-Сервер запускает клиент MCP. Для отдельной отладки выполните `autoclip mcp` в другом терминале; OpenCode настраивается через `autoclip mcp install opencode`.
-
-Замените `PROJECT_ID` полученным ID. MCP: `start_quick_output` / `get_quick_output_status`; `command` — абсолютный путь к `autoclip` в venv, `args` — `["mcp"]`. Старые `run` / `export` и инструменты доступны. [CLI / MCP](docs/CLI_AND_MCP.md) (кит.), [OpenCode](docs/OPENCODE.en.md), [Agent skill](skills/autoclip/SKILL.md) (кит.).
-
+Откройте веб-интерфейс по адресу `http://localhost:3000` (документация API: `http://localhost:8000/docs`). Подробнее о правах томов и доменах — в [руководстве по Docker](docs/DOCKER.en.md).
 ## Модели
 
 | Способ | Настройка |

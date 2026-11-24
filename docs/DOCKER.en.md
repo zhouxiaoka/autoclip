@@ -1,6 +1,6 @@
 # Docker deployment and troubleshooting
 
-[简体中文](../DOCKER.md) · [README](../README-EN.md) · [FAQ](FAQ.en.md)
+[简体中文](../DOCKER.md) · [README](../README.md) · [FAQ](FAQ.en.md)
 
 Use Docker for Linux, Intel Mac, servers, or a web interface. Install Docker and Docker Compose v2; the commands use `docker compose`. Allow additional disk space for footage, models, caches, and exports.
 

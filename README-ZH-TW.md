@@ -21,9 +21,11 @@
 
 **[官網](https://zhouxiaoka.github.io/autoclip_intro/)** · **[下載桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [案例庫](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [研究](docs/research/2026-10-what-drives-views/article-zh.md) · [快速開始](#快速開始) · [文件](#文件) · [問題回報](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · **繁體中文** · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](README.md) · [简体中文](README-ZH.md) · **繁體中文** · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
+
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[最新正式版](https://github.com/zhouxiaoka/autoclip/releases/latest)**，桌面版、CLI 與 MCP 同步更新。版本以 `autoclip --version` 與 MCP `get_version` 為準。一鍵出片、字幕分頁、人物取景與長影片佇列修復詳見 [更新日誌](CHANGELOG.md)。舊版使用者請升級。
 
@@ -215,6 +217,35 @@ Intel Mac 目前沒有桌面安裝包，與 Linux 一樣請使用 Docker 或 CLI
 
 [完整安裝與首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到問題？](docs/FAQ.md)
 
+**CLI / MCP（Claude Code、Codex、OpenCode 與腳本）**
+
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+<details>
+<summary>离线 Wheel、源码安装与 MCPB 打包</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+如需本地构建 MCPB 包而不发布，运行 `python scripts/pack_mcpb.py`（不自动执行 `smithery mcp publish`）。
+
+</details>
+
+
 **Docker / Web 部署**
 
 ```bash
@@ -225,61 +256,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-開啟 [Web 介面](http://localhost:3000)；[API 文件](http://localhost:8000/docs) 在後端啟動後即可使用。部署細節請見 [Docker 指南](DOCKER.md)。
-
-Linux 上若繫結目錄出現權限錯誤，請先修正資料目錄的擁有權限再啟動：
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-從區域網路 IP 或自訂網域開啟時，請在 `.env` 的 `AUTOCLIP_ALLOWED_ORIGINS` 填入前端網址（可用逗號分隔）。
-
-**CLI / MCP**
-
-需要 Python 3.10+（建議 3.11），且 FFmpeg 與 FFprobe 在 PATH 中可用；本機 CLI 不需要 Redis。下載 [正式 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/latest)，解壓縮後在該目錄執行：
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-不下載 ZIP 時，可以直接一行安裝。從原始碼安裝仍可作為備選：
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-以上指令適用於 macOS / Linux。Windows 請使用 `py -m venv venv` 建立環境、`.\venv\Scripts\Activate.ps1` 啟用；隨後使用相同的 `python -m pip` 安裝指令。
-
-請先儲存模型設定：可沿用桌面版設定；獨立使用時請依 ZIP 中的無金鑰範例設定自己的資料目錄，詳見 [CLI / MCP 指南](docs/CLI_AND_MCP.md)。`produce` 不使用舊 `run --provider` 的臨時覆寫。已有字幕可使用 `--srt` 跳過轉錄。
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-MCP 服務由用戶端啟動。需要單獨除錯時，請在另一個終端機執行 `autoclip mcp`；使用 OpenCode 可執行 `autoclip mcp install opencode` 寫入用戶端設定。
-
-將 `PROJECT_ID` 替換為製作結果中的專案 ID。MCP 新入口為 `start_quick_output` / `get_quick_output_status`；用戶端 `command` 指向虛擬環境中的 `autoclip` 絕對路徑，`args` 為 `["mcp"]`。舊版 `run` / `export` 與舊版切片工具繼續相容。詳見 [CLI / MCP](docs/CLI_AND_MCP.md)、[OpenCode 接入](docs/OPENCODE.md) 與 [Agent skill](skills/autoclip/SKILL.md)。
-
-Smithery 本機 stdio 使用 MCPB：在儲存庫根目錄執行 `python scripts/pack_mcpb.py`，產物為 `dist/autoclip-mcp.mcpb`（不提交）。發佈指令為 `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp`，需要維護者本人的登入驗證，儲存庫不儲存 API key。步驟詳見 [CLI / MCP](docs/CLI_AND_MCP.md)。
-
+開啟 Web UI：`http://localhost:3000`（後端 API 文件：`http://localhost:8000/docs`）。掛載權限與自訂網域設定見 [Docker 指南](DOCKER.md)。
 ## 模型設定
 
 | 方式        | 設定                                                             |

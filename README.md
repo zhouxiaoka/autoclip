@@ -2,155 +2,240 @@
 
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="72" height="72">
+<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="76" height="76">
 
 # AutoClip
 
-### 一个链接，一键出片
+### Turn any video, link, or live stream into ready-to-post clips.
 
-开源，在你的电脑上剪辑与渲染。贴一个链接，选好平台，生成 <b>视频、封面和发布文案</b>，<br>
-适配抖音、小红书、TikTok、Reels、YouTube Shorts、B 站与 YouTube。<br>
-软件免费，云端模型按量计费；需要调整时可进入编辑器。
+Open-source, local-first AI clipping for **podcasts, interviews, and gaming streams** — with smart reframing, captions, covers, and titles built in.
+
+<br>
 
 <p>
-  <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
-  <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square" alt="GitHub stars"></a>
-  <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square&color=4F46E5" alt="GitHub release" height="20"></a>&nbsp;
+  <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square&color=FFD700&logo=github&logoColor=white&label=Stars" alt="GitHub stars" height="20"></a>&nbsp;
+  <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square&color=10B981" alt="Downloads" height="20"></a>&nbsp;
+  <img src="https://img.shields.io/badge/Languages-13-0EA5E9?style=flat-square" alt="13 Languages" height="20">&nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT" height="20"></a>
 </p>
 
-<a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+<br>
 
-**[官网](https://zhouxiaoka.github.io/autoclip_intro/)** · **[下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [案例库](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [研究](docs/research/2026-10-what-drives-views/article-zh.md) · [快速开始](#快速开始) · [文档](#文档) · [问题反馈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+<p>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+</p>
 
-**简体中文** · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+<br>
+
+<p>
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/"><strong>Website</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><strong>Download</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/features/game-streams/"><strong>Live Replays (v1.6)</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/cases/?lang=en"><strong>Showcase</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="#quick-start"><strong>Quick Start</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="#documentation"><strong>Docs</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/zhouxiaoka/autoclip/issues/new/choose"><strong>Issues</strong></a>
+</p>
+
+<p>
+  <strong>English</strong> · <a href="README-ZH.md">简体中文</a> · <a href="README-ZH-TW.md">繁體中文</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-ES.md">Español</a> · <a href="README-PT.md">Português</a> · <a href="README-RU.md">Русский</a> · <a href="README-FR.md">Français</a> · <a href="README-ID.md">Bahasa Indonesia</a> · <a href="README-TR.md">Türkçe</a> · <a href="README-VI.md">Tiếng Việt</a> · <a href="README-DE.md">Deutsch</a>
+</p>
+
+<br>
+
+<p>
+  ⭐ <em>Free, MIT-licensed, zero subscriptions — everything cuts and renders on your machine. Star the repo if you find it useful!</em>
+</p>
 
 </div>
 
-**[最新正式版](https://github.com/zhouxiaoka/autoclip/releases/latest)**，桌面、CLI 与 MCP 同步更新。版本以 `autoclip --version` 和 MCP `get_version` 为准。一键出片、字幕分页、人物取景与长视频队列修复见 [更新日志](CHANGELOG.md)。旧版用户请升级。
+---
 
-## 真实成片
+## Overview
 
-点击截图或「播放」直接观看完整成片；下方语言指成片字幕语言。这里精选 6 条，展开可看另外 10 条。
+Drop in a link, local video, or **live stream replay** — AutoClip finds the best moments, tracks the speaker, burns in captions, generates covers, and exports ready-to-post clips for TikTok, Shorts, Reels, YouTube, Douyin, Xiaohongshu, and Bilibili.
 
-### 竖版 · 访谈式与满屏播客式
+**Local-first by design:** cutting and rendering run directly on your computer with no upload queues and no monthly fee. Bring your own API key or run 100% offline with **Ollama / LM Studio + Whisper / SenseVoice**.
+
+![AutoClip v1.6 Live Stream Replays Walkthrough](docs/images/v1.6/autoclip-v1.6-demo.gif)
+
+<p align="center"><em>Home → 6 Live Replay sources → OBS WebSocket setup → Twitch import → Finished clip with captions &amp; one-click publish.</em></p>
+
+---
+
+## What's New in v1.6
+
+| Feature | Details |
+| :--- | :--- |
+| **6 Live Replay Sources** | Dedicated **Live Replay** tab supporting **OBS Studio, Twitch, YouTube, Kick, Discord, and local recordings**. |
+| **OBS Auto-Capture** | Connect OBS WebSocket (`4455`), trim losslessly (`-c copy`), and auto-queue clips right after you end stream. |
+| **Game Highlights** | Generalized highlight detection supporting **8s+** standalone plays with tighter vision/OCR budgets. |
+| **One-Click Repurpose** | Unified playable clip cards — switch target platforms in one click without losing previous exports. |
+| **13 Languages** | Full desktop UI, tray menus, and docs in 13 languages (`+ zh-TW, de, id, tr, vi`) plus Arabic RTL captions. |
+
+<details>
+<summary>📸 Inside the App (5 screenshots)</summary>
+
+<table width="100%">
+<tr>
+<td align="center" valign="top" width="50%">
+<img src="docs/images/v1.6/en-01-home.jpg" alt="Home screen with Link, File, and Live Replay tabs"><br>
+<em>Home screen — Link, File, and Live Replay</em>
+</td>
+<td align="center" valign="top" width="50%">
+<img src="docs/images/v1.6/en-02-replays-obs.jpg" alt="Live Replay 6-source picker"><br>
+<em>Live Replay — 6 replay sources</em>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%">
+<img src="docs/images/v1.6/en-03-replays-obs-settings.jpg" alt="Inline OBS Studio WebSocket connection settings"><br>
+<em>Inline OBS Studio WebSocket settings</em>
+</td>
+<td align="center" valign="top" width="50%">
+<img src="docs/images/v1.6/en-04-replays-twitch.jpg" alt="Twitch replay import"><br>
+<em>Twitch import &amp; local recording picker</em>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" colspan="2">
+<img src="docs/images/v1.6/en-05-result-card.jpg" width="75%" alt="Finished clip with Twitch source attribution"><br>
+<em>Finished clip — source attribution, 9:16 crop, captions, and one-click Download / Publish / Redo</em>
+</td>
+</tr>
+</table>
+
+</details>
+
+---
+
+## Examples
+
+Click any thumbnail or **▶ Play** to watch full clips rendered by AutoClip. Language labels indicate burned-in subtitle language.
+
+### Vertical · Interview &amp; Podcast
 
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates"></a><br>
 <strong>Bill Gates</strong><br>
-访谈式 · 抖音 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ 播放 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">原片</a>
+Interview · Douyin · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ Play 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate"></a><br>
 <strong>AI Experts Debate</strong><br>
-访谈式 · Shorts · 英文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ 播放 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">原片</a>
+Interview · Shorts · EN<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ Play 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins"></a><br>
 <strong>Tony Robbins</strong><br>
-满屏播客 · 抖音 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ 播放 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">原片</a>
+Podcast · Douyin · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ Play 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
-<strong>Andrew Garfield × Amy Poehler</strong><br>
-满屏播客 · Shorts · 英文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ 播放 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">原片</a>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler"></a><br>
+<strong>Garfield × Poehler</strong><br>
+Podcast · Shorts · EN<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ Play 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">Source</a>
 </td>
 </tr>
 </table>
 
-### 横版 · 保留原画幅
+### Landscape · Original Aspect Ratio
 
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
-<strong>佟丽娅 × 鲁豫</strong><br>
-原画幅 · B 站 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ 播放 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">原片</a>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="Tong Liya × Lu Yu"></a><br>
+<strong>佟丽娅 × 鲁豫</strong> · 16:9 · Bilibili · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ Play 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">Source</a>
 </td>
 <td align="center" valign="top" width="50%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
-<strong>Sam Altman</strong><br>
-原画幅 · B 站 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ 播放 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">原片</a>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman"></a><br>
+<strong>Sam Altman</strong> · 16:9 · Bilibili · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ Play 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">Source</a>
 </td>
 </tr>
 </table>
 
 <details>
-<summary>查看更多 10 条真实成片</summary>
+<summary>See 10 more clips</summary>
 
 <table width="100%">
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann"></a><br>
 <strong>Adam Neumann</strong><br>
-满屏播客 · TikTok · 英文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ 播放 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">原片</a>
+Podcast · TikTok · EN<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ Play 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="Xiao Qi × Lu Yu"></a><br>
 <strong>小奇 × 鲁豫</strong><br>
-访谈式 · 抖音 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ 播放 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">原片</a>
+Interview · Douyin · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ Play 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="Guo Keyu × Lu Yu"></a><br>
 <strong>郭柯宇 × 鲁豫</strong><br>
-访谈式 · 抖音 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ 播放 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">原片</a>
+Interview · Douyin · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ Play 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe"></a><br>
 <strong>Willem Dafoe</strong><br>
-满屏播客 · TikTok · 英文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ 播放 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">原片</a>
+Podcast · TikTok · EN<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ Play 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">Source</a>
 </td>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × Luo Yonghao"></a><br>
 <strong>TIM × 罗永浩</strong><br>
-访谈式 · 抖音 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ 播放 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">原片</a>
+Interview · Douyin · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ Play 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang"></a><br>
 <strong>Jensen Huang</strong><br>
-访谈式 · 小红书 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ 播放 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">原片</a>
+Interview · Xiaohongshu · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ Play 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy"></a><br>
 <strong>Andrej Karpathy</strong><br>
-访谈式 · 抖音 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ 播放 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">原片</a>
+Interview · Douyin · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ Play 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro"></a><br>
 <strong>A20 Pro</strong><br>
-访谈式 · 小红书 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ 播放 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">原片</a>
+Interview · Xiaohongshu · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ Play 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">Source</a>
 </td>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone"></a><br>
 <strong>Sylvester Stallone</strong><br>
-访谈式 · 抖音 · 中文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ 播放 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">原片</a>
+Interview · Douyin · ZH<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ Play 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">Source</a>
 </td>
 <td align="center" valign="top" width="25%">
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast"></a><br>
 <strong>MrBeast</strong><br>
-满屏播客 · TikTok · 英文<br>
-<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ 播放 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">原片</a>
+Podcast · TikTok · EN<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ Play 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">Source</a>
 </td>
 <td></td>
 <td></td>
@@ -159,65 +244,58 @@
 
 </details>
 
-视频、封面与发布文案见 **[官网案例库 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**，欢迎[投稿你的成片](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)。原片版权归原作者，仅作效果展示。
+Browse 16+ clips, covers, and post copy in the **[Showcase →](https://zhouxiaoka.github.io/autoclip_intro/cases/?lang=en)**, or [share your own clips](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell). Source copyrights remain with their original creators.
 
-## 能做什么
+---
 
-### 贴链接就出片
+<a id="quick-start"></a>
 
-选好平台，按平台的画幅与时长要求自动生成。每个平台按评分自动生成至多 10 条合格片段，其余列为备选，点「生成这条」再制作。每条都带封面、标题、简介、话题和 ZIP 发布包。
+## Quick Start
 
-### 成片自己会包装
+| Use case | Recommended setup | Requirements |
+| :--- | :--- | :--- |
+| **Desktop app (easiest)** | Download `.dmg` / `-setup.exe` from [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) | Apple Silicon macOS or Windows 10/11 x64 (Python &amp; FFmpeg bundled) |
+| **AI agents / CLI / MCP** | `uvx autoclip-mcp` or `npx skills add zhouxiaoka/autoclip` | Python 3.10+ (3.11 recommended) &amp; FFmpeg |
+| **Self-hosted / Linux / Intel Mac** | `docker compose up -d --build` | Docker &amp; Compose v2 |
 
-抖音 / 小红书默认访谈式，TikTok / Reels / Shorts 默认满屏播客式；竖版也可自行选择两种版式。字幕和文案语言仍按平台，B 站 / YouTube 为横版。画面跟随说话人，无人镜头保留完整画面。自动品牌片尾默认开启，可在设置中关闭；复制发布文案不附 AutoClip 署名。
+### 1. Desktop App
 
-### 还在你的电脑上
+1. Download the latest installer from **[GitHub Releases](https://github.com/zhouxiaoka/autoclip/releases/latest)** (`aarch64.dmg` for Apple Silicon macOS, `x64-setup.exe` for Windows). Portable Python and FFmpeg are bundled.
+2. Open **Settings**, pick a cloud provider (or start Ollama / LM Studio), test the connection, and save — or click **Try the built-in example** with no API key.
+3. Paste a video link, drop a file, or switch to **Live Replay** to connect OBS or import a stream recording. Pick your platforms and click **Generate**.
 
-剪辑、取景与渲染在本机完成。分析模型自选，字幕可用作者字幕、本地 Whisper / SenseVoice 或已配置的云端转写。CLI / MCP 与桌面共用同一条一键出片链路。
+> Installers are built publicly on GitHub Actions (`Desktop Build`) with `build-provenance.json` SHA-256 verification. Code signing and Apple notarization are tracked in [#119](https://github.com/zhouxiaoka/autoclip/issues/119).
 
-## 真实素材的耗时与费用
+### 2. CLI &amp; MCP (Claude Code, Codex, OpenCode &amp; scripts)
 
-以下是开发期间三条不同素材的实测，不是同一输入的速度对照。费用按当时 qwen-plus 的文字模型用量估算，不含云端语音识别、AI 生图或投稿服务费用；实际账单以所选服务商为准。
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
 
-| 版本 | 原片 | 出片 | 文字模型费用估算（人民币） |
-| --- | --- | ---: | ---: |
-| **新版 · 有字幕** | Jensen · 1h43m（英 → 小红书） | **7.5 分钟 / 10 条** | **¥0.09** |
-| 新版 · 无字幕 | TIM × 罗永浩 · 2h52m（中 → 抖音） | 29.5 分钟 / 10 条 | ¥0.20 |
-| 旧版 | MrBeast · 2h06m（英 → TikTok） | 65 分钟 | ¥0.64 |
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
 
 <details>
-<summary>测试条件与记录</summary>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
 
-2026-10-01，同一台 Apple Silicon Mac。前两条为新链路、自动生成 10 条；旧链路生成 33 条，素材与输出数量不同。Jensen 使用作者字幕，TIM 使用本地 Whisper base。
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 
-已有作者字幕时跳过转写；没有字幕时可选本地或云端转写。追加平台和制作备选会增加处理时间与用量。完整阶段记录与估算口径见 [成本与时间](docs/COST_PER_VIDEO.md)。
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
 
 </details>
 
-## 模型与数据由你选择
 
-剪辑和渲染在你的电脑上完成。使用云端分析会发送相关字幕与文案；画面理解或参考帧生图会发送所需抽样画面，云端转写会发送音频。使用本地分析与本地转写时不需要对应云端 API。成片只有选择投稿后才上传到已连接的平台；匿名统计与错误报告可在设置中关闭。详见 [隐私说明](docs/PRIVACY.md)。
-
-## 快速开始
-
-| 你的使用场景            | 建议方式          | 准备事项                              |
-| ----------------- | ------------- | --------------------------------- |
-| 在电脑上出片            | **桌面版**       | macOS Apple Silicon 或 Windows x64 |
-| 自建 Web 服务 / Linux | **Docker**    | Docker 与 Compose v2               |
-| 批量处理 / 接入 Agent   | **CLI / MCP** | Python 3.10+（建议 3.11）与 FFmpeg     |
-
-### 桌面版
-
-1. **下载安装**：在 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 下载。macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。安装包自带 Python 和 FFmpeg。macOS 15 及以上首次打开：双击一次，若被拦截则到「系统设置 → 隐私与安全性 → 仍要打开」（[Apple 说明](https://developer.apple.com/news/?id=saqachfa)）。较旧的 macOS 可右键应用 →「打开」。Windows 若出现 SmartScreen，点「更多信息 → 仍要运行」。
-2. **配置模型**：在设置里选择服务商、填写 API Key，选择可用的分析模型，测试连接并保存；本地模型先在 Ollama / LM Studio 启动服务并加载模型。
-3. **先看示例，再贴自己的视频**：首页还没有项目时，点「用示例项目看看效果」，不需要 API Key，示例在安装包内。之后用自己的访谈或播客，可选择竖版版式。没有字幕、本地 Whisper 装不上或太慢时，打开「设置 → 默认模型 → 语音转字幕」，改用百炼云端转写（`qwen-audio-3.1-asr-flash`，大约 0.1 元/小时音频，具体以阿里云账单为准）。音频会上传到云端。导入被拦住时，点「改用云端转写」。若安装本地转写，第一次要下载约 220 MB，国内网络约 15 分钟。
-4. **检查并下载**：预览自动成片，检查字幕、取景与内容完整性，再下载发布包或连接账号投稿；需要更多片段时生成备选。
-
-Intel Mac 目前没有桌面安装包，与 Linux 一样使用 Docker 或 CLI。桌面安装包目前未购置代码签名 / Apple 公证（计划见 [#119](https://github.com/zhouxiaoka/autoclip/issues/119)），新版本可能触发 SmartScreen 或杀软误报；所有安装包均由公开 GitHub Actions `Desktop Build` 构建，可在 Release 附件 `build-provenance.json` 核对 SHA-256，或改用 Docker / 源码运行。安装要求见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)。
-
-[完整安装与首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到问题？](docs/FAQ.md)
-
-**Docker / Web 部署**
+### 3. Docker / Web
 
 ```bash
 git clone https://github.com/zhouxiaoka/autoclip.git
@@ -227,74 +305,22 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-打开 [Web 界面](http://localhost:3000)；[API 文档](http://localhost:8000/docs) 在后端启动后可用。部署细节见 [Docker 指南](DOCKER.md)。
+Open the web UI at `http://localhost:3000` (API docs at `http://localhost:8000/docs`). See [Docker Guide](docs/DOCKER.en.md) for bind-mount permissions and custom origins.
 
-Linux 上若绑定目录出现权限错误，先修正数据目录的归属再启动：
+---
 
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
+## Benchmarks
 
-从局域网 IP 或自定义域名打开时，在 `.env` 的 `AUTOCLIP_ALLOWED_ORIGINS` 填入前端地址（可逗号分隔）。
+Measured on an Apple Silicon Mac (LLM cost estimated with `qwen-plus`; excludes cloud ASR and AI image generation; check your provider bill for exact usage):
 
-**CLI / MCP**
+| Input | Source | Time &amp; Output | Est. LLM Cost |
+| :--- | :--- | ---: | ---: |
+| **With existing subtitles** | Jensen Huang · 1h 43m (EN → Xiaohongshu) | **7.5 min / 10 clips** | **¥0.09** |
+| **No subtitles (local Whisper)** | TIM × Luo Yonghao · 2h 52m (ZH → Douyin) | 29.5 min / 10 clips | ¥0.20 |
 
-需要 Python 3.10+（建议 3.11），FFmpeg 与 FFprobe 在 PATH 中可用；本地 CLI 不需要 Redis。下载 [正式 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/latest)，解压后在该目录执行：
+---
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-不下载 ZIP 时，可以直接一行安装。从源码安装仍可作为备选：
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-以上命令用于 macOS / Linux。Windows 用 `py -m venv venv` 创建环境、`.\venv\Scripts\Activate.ps1` 激活；随后使用相同的 `python -m pip` 安装命令。
-
-先保存模型配置：可复用桌面设置；独立使用时按 ZIP 的无密钥示例配置自己的数据目录，详见 [CLI / MCP 指南](docs/CLI_AND_MCP.md)。`produce` 不使用旧 `run --provider` 的临时覆盖。已有字幕可用 `--srt` 跳过转写。
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-MCP 服务由客户端启动。需要单独调试时，在另一个终端运行 `autoclip mcp`；使用 OpenCode 可执行 `autoclip mcp install opencode` 写入客户端配置。
-
-把 `PROJECT_ID` 换成制作结果中的项目 ID。MCP 新入口为 `start_quick_output` / `get_quick_output_status`；客户端 `command` 指向虚拟环境中的 `autoclip` 绝对路径，`args` 为 `["mcp"]`。旧 `run` / `export` 和旧切片工具继续兼容。详见 [CLI / MCP](docs/CLI_AND_MCP.md)、[OpenCode 接入](docs/OPENCODE.md) 与 [Agent skill](skills/autoclip/SKILL.md)。
-
-Smithery 本地 stdio 用 MCPB：在仓库根目录执行 `python scripts/pack_mcpb.py`，产物是 `dist/autoclip-mcp.mcpb`（不提交）。发布命令是 `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp`，需要维护者自己的登录，仓库不保存 API key。步骤见 [CLI / MCP](docs/CLI_AND_MCP.md)。
-
-## 模型配置
-
-| 方式        | 配置                                                             |
-| --------- | -------------------------------------------------------------- |
-| 云端 API    | 在设置中选择服务商，填写自己的 API Key。OpenAI 兼容服务还可配置 Base URL。              |
-| Ollama | 默认地址 `http://localhost:11434/v1`；先拉取并启动本地模型，再选择服务实际提供的模型，无需 API Key。 |
-| LM Studio | 加载模型并启动 Local Server，默认地址 `http://localhost:1234/v1`。          |
-
-Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要改为容器可访问的宿主机地址。
-
-[模型配置指南](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [本地模型与容器配置](docs/CLI_AND_MCP.md)
-
-## 特别感谢 ❤️
+## Sponsor ❤️
 
 <table>
   <tr>
@@ -303,73 +329,77 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
       <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a>
     </td>
     <td>
-      感谢 <strong>APIMart</strong> 赞助了本项目！<strong>APIMart</strong> 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 <strong>$0.006/张</strong>，1 美元可出图 <strong>160+</strong> 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费，通过此<a href="https://go.apimart.ai/tw-autoclip">注册链接</a>注册即可开用。
+      Thanks to <strong>APIMart</strong> for sponsoring AutoClip! <strong>APIMart</strong> is a low-cost API platform for AI image &amp; video generation — GPT-Image-2 from <strong>$0.006/image</strong> (<strong>160+</strong> images per dollar). One async API covers both image and video: submit a task, get an ID, fetch results via polling or callback. Batch tens of thousands of images without timeouts and switch models without changing code. Pay-as-you-go with no monthly fee — <a href="https://go.apimart.ai/tw-autoclip">sign up here</a>.
     </td>
   </tr>
-  </table>
+</table>
 
-## 推荐链接
+## Cloud Transcription (Alibaba Cloud)
 
-这是作者推荐链接，不是上面的赞助。
+*Affiliate link (separate from the sponsor above):* sign up on Alibaba Cloud, create an API key in the Bailian console, and enable Bailian cloud ASR under **Settings → Default models → Speech to subtitles**.
 
-用它注册阿里云或领取优惠，再到百炼控制台创建 API Key，即可在「设置 → 默认模型 → 语音转字幕」使用百炼云端转写。音频会上传到云端。
+1. [Alibaba Cloud signup](https://www.aliyun.com/benefit?userCode=qmyj6jch) (affiliate link)
+2. [Bailian console](https://bailian.console.aliyun.com/) — create your API key
 
-1. [作者推荐链接](https://www.aliyun.com/benefit?userCode=qmyj6jch)：注册或领优惠。
-2. [百炼控制台](https://bailian.console.aliyun.com/)：创建 API Key。
+---
 
-## 常见问题
+## FAQ
 
 <details>
-<summary>需要付费或 API Key 吗？</summary>
+<summary>Is AutoClip free? Do I need an API key?</summary>
 
-软件免费、MIT 开源。云端分析、转写与 AI 生图按所选服务商计费，需自己的凭据；自动设计封面默认不调用付费生图。Ollama / LM Studio 本地分析不需要云端 Key，但需相应硬件。直接投稿还需自己的 B 站或 [Upload-Post](https://www.upload-post.com) 账号。
+Yes — AutoClip is free and MIT-licensed. Cloud analysis, transcription, and AI covers use your own API keys at provider rates (local cover layout is free by default). Ollama and LM Studio require no cloud key. Direct publishing uses your own Bilibili or [Upload-Post](https://www.upload-post.com) account.
 
 </details>
 
 <details>
-<summary>我的视频会上传吗？</summary>
+<summary>Does my video get uploaded to the cloud?</summary>
 
-剪辑和渲染在你的电脑上完成。使用云端分析会发送相关字幕与文案；画面理解或参考帧生图会发送所需抽样画面，云端转写会发送音频。使用本地分析与本地转写时不需要对应云端 API。成片只有选择投稿后才上传到已连接的平台；匿名统计与错误报告可在设置中关闭。详见 [隐私说明](docs/PRIVACY.md)。
-
-</details>
-
-<details>
-<summary>什么视频效果最好？</summary>
-
-访谈、播客、课程和口播是主要验证场景，有作者字幕时最快。缺字幕可用本地或云端转写；游戏录屏、口播较少的素材可启用画面识别并选择支持图片的模型，仍需检查实际选段。
+Cutting and rendering run locally. Cloud analysis only sends transcript text; vision models only receive sampled frames; cloud ASR uploads audio. Running local LLMs + Whisper / SenseVoice keeps everything offline. Analytics and crash reports can be turned off in Settings. See [Privacy](docs/PRIVACY.en.md).
 
 </details>
 
 <details>
-<summary>为什么没有生成片段？</summary>
+<summary>What kind of videos work best?</summary>
 
-先看具体失败阶段：字幕/转写是否成功、模型连接、FFmpeg 与磁盘是否正常，以及候选是否满足目标平台规则。YouTube 长视频要求完整片段至少 180 秒，短素材可选 Shorts 或 B 站。仍失败请附 `autoclip --version` 的版本号、系统、素材时长、模型和脱敏日志，见 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。
+Podcasts, interviews, talks, courses, and gaming live stream replays (OBS / Twitch / YouTube / Kick / Discord). Sources with existing subtitles are fastest; otherwise use local Whisper / SenseVoice or cloud ASR. For gameplay or low-dialogue streams, enable a vision-capable model.
 
 </details>
 
-[完整排错指南](docs/FAQ.md) · [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)
+<details>
+<summary>Why weren't any clips generated?</summary>
 
-## 文档
+Check the failed stage: subtitles/transcription, model connection, FFmpeg, disk space, or platform length limits (YouTube long-form requires ≥180s; use Shorts, TikTok, or Bilibili for shorter clips). If it still fails, open an issue with `autoclip --version`, OS, model, and redacted logs, or check [Known Issues (#96)](https://github.com/zhouxiaoka/autoclip/issues/96).
 
-| 你想了解      | 文档                                                                                                                                    |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 安装与首次出片   | [安装指南](docs/USER_INSTALLATION_GUIDE.md)                                                                                               |
-| 自建服务与自动化  | [Docker 部署](DOCKER.md) · [CLI / MCP](docs/CLI_AND_MCP.md) · [Agent skill](skills/autoclip/SKILL.md) · [OpenCode 接入](docs/OPENCODE.md) |
-| 配置模型与排错   | [模型配置](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](docs/FAQ.md)                                                                        |
-| 版本、路线图与隐私 | [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md) · [社区看板](docs/COMMUNITY_BOARD.md) · [隐私说明](docs/PRIVACY.md)                                  |
-| 研究笔记       | [选对瞬间，而不是堆特效](docs/research/2026-10-what-drives-views/article-zh.md) · [English](docs/research/2026-10-what-drives-views/article-en.md) |
-| 参与开发与翻译   | [贡献指南](CONTRIBUTING.md) · [翻译维护](docs/i18n.md)                                                                                        |
+</details>
 
-## 参与贡献
+[Troubleshooting](docs/FAQ.en.md) · [Known Issues](https://github.com/zhouxiaoka/autoclip/issues/96)
 
-欢迎提交修复、出片样例、使用反馈和翻译改进。如果 AutoClip 帮到了你，欢迎给项目一个 Star。
+---
 
-- **提问与交流**：[GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) · [分享想法](https://github.com/zhouxiaoka/autoclip/discussions/129)
-- **报告故障**：使用 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose)，附上系统、版本、所选模型、复现步骤与已脱敏日志
-- **合作联系**：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+<a id="documentation"></a>
 
-个人维护，回复时间不固定，不提供即时客服或一对一部署服务。
+## Documentation
+
+| Topic | Guide |
+| :--- | :--- |
+| Install &amp; first clips | [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
+| Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [CLI &amp; MCP](docs/CLI_AND_MCP.md) (ZH) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
+| Models &amp; troubleshooting | [Multi-LLM Setup](docs/MULTI_LLM_PROVIDER_GUIDE.md) (ZH) · [FAQ](docs/FAQ.en.md) |
+| Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |
+| Research | [Pick the Moment, Not the Effect](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
+| Contributing &amp; i18n | [Contributing](CONTRIBUTING.md) (ZH) · [Translation Guide](docs/i18n.md) (ZH) |
+
+## Contribute
+
+PRs, bug reports, sample clips, and translations are welcome. If AutoClip saves you time, a ⭐ star helps!
+
+- **Community:** [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [First-Clip Q&amp;A](https://github.com/zhouxiaoka/autoclip/discussions/128) · [Feature Ideas](https://github.com/zhouxiaoka/autoclip/discussions/129)
+- **Bug reports:** use the [issue template](https://github.com/zhouxiaoka/autoclip/issues/new/choose) with OS, version, model, repro steps, and redacted logs
+- **Partnerships:** [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
+AutoClip is maintained solo — please expect async replies (no live or 1-on-1 setup support).
 
 ![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)
 
-感谢 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper、FunASR，以及所有贡献者。项目采用 [MIT License](LICENSE)。
+Built with FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper, and FunASR. [MIT License](LICENSE).

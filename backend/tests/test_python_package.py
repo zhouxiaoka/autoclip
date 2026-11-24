@@ -84,7 +84,7 @@ def test_docs_advertise_the_one_line_install_commands():
     surfaces = [
         ROOT / 'README.md',
         ROOT / 'README-ZH-TW.md',
-        ROOT / 'README-EN.md',
+        ROOT / 'README-ZH.md',
         ROOT / 'README-JA.md',
         ROOT / 'README-KO.md',
         ROOT / 'README-ES.md',

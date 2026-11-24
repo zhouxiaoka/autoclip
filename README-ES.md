@@ -21,9 +21,11 @@ La app es gratis; los modelos cloud cobran por uso. Puedes ajustar el resultado 
 
 **[Sitio](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Descargar escritorio](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Casos](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Investigación](docs/research/2026-10-what-drives-views/article-en.md) · [Inicio rápido](#inicio-rápido) · [Documentación](#documentación) · [Incidencia](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · **Español** · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · **Español** · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
+
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[La última versión](https://github.com/zhouxiaoka/autoclip/releases/latest)** es la que muestra `autoclip --version`, con escritorio, CLI y MCP actualizados. El [registro de cambios](CHANGELOG.md) detalla la producción automática, paginación de subtítulos, encuadre y cola de vídeos largos. Actualiza versiones anteriores.
 
@@ -215,6 +217,35 @@ Intel Mac / Linux pueden usar Docker o CLI. Los instaladores de escritorio aún 
 
 [Guía de instalación](docs/USER_INSTALLATION_GUIDE.en.md) · [Problemas](docs/FAQ.en.md)
 
+**CLI / MCP (Claude Code, Codex, OpenCode y scripts)**
+
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+<details>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
+
+</details>
+
+
 **Docker / Web**
 
 ```bash
@@ -225,59 +256,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-Abre la [UI web](http://localhost:3000). La [API](http://localhost:8000/docs) está al arrancar el backend. [Guía Docker](docs/DOCKER.en.md).
-
-En Linux, si el montaje falla por permisos, corrige el dueño primero:
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-Para IP LAN o dominio propio, añade la dirección del frontend a `AUTOCLIP_ALLOWED_ORIGINS` en `.env` (separada por comas).
-
-**CLI / MCP**
-
-Python 3.10+ (3.11 recomendado), FFmpeg y FFprobe en PATH; no hace falta Redis. Descarga el [ZIP oficial CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/latest), descomprímelo y ejecuta desde ese directorio:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-Sin el ZIP, instala con un comando. Instalar desde el código clonado sigue disponible:
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-Los comandos anteriores son para macOS / Linux. En Windows, crea con `py -m venv venv` y activa con `.\venv\Scripts\Activate.ps1`; después usa los mismos comandos `python -m pip`.
-
-Guarda primero la configuración del modelo: reutiliza la del escritorio o configura tu directorio con el ejemplo sin claves del ZIP. [Guía CLI / MCP](docs/CLI_AND_MCP.md) (chino). `produce` no usa la modificación temporal de `run --provider`. `--srt` evita transcribir.
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-El cliente MCP inicia el servidor. Para depurar por separado, ejecuta `autoclip mcp` en otro terminal; OpenCode puede configurarse con `autoclip mcp install opencode`.
-
-Sustituye `PROJECT_ID` por el ID devuelto. MCP usa `start_quick_output` / `get_quick_output_status`; `command` debe ser la ruta absoluta de `autoclip` en el venv y `args`, `["mcp"]`. Siguen disponibles `run` / `export` y herramientas anteriores. [CLI / MCP](docs/CLI_AND_MCP.md) (chino), [OpenCode](docs/OPENCODE.en.md), [Agent skill](skills/autoclip/SKILL.md) (chino).
-
+Abre la interfaz web en `http://localhost:3000` (documentación de la API en `http://localhost:8000/docs`). Consulta la [guía de Docker](docs/DOCKER.en.md) para permisos de volúmenes y dominios propios.
 ## Modelos
 
 | Opción | Configuración |
