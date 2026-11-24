@@ -21,9 +21,11 @@
 
 **[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/)** · **[데스크톱 받기](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [사례](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [연구](docs/research/2026-10-what-drives-views/article-en.md) · [빠른 시작](#빠른-시작) · [문서](#문서) · [이슈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
+
+![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[최신 정식 릴리스](https://github.com/zhouxiaoka/autoclip/releases/latest)**. 버전은 `autoclip --version`이 보여 주는 값입니다. 데스크톱·CLI·MCP를 함께 업데이트했습니다. 자동 제작, 자막 페이지 분할, 인물 구도, 긴 영상 대기열 수정은 [변경 기록](CHANGELOG.md)을 확인하고 이전 버전에서 업그레이드하세요.
 
@@ -215,6 +217,17 @@ Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 데스크�
 
 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md) · [문제 해결](docs/FAQ.en.md)
 
+**CLI / MCP (Claude Code, Codex, OpenCode 및 스크립트)**
+
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
 **Docker / Web**
 
 ```bash
@@ -225,59 +238,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-[웹 UI](http://localhost:3000)를 엽니다. [API 문서](http://localhost:8000/docs)는 백엔드 기동 후. [Docker 가이드](docs/DOCKER.en.md).
-
-Linux에서 바인드 권한 오류가 나면 소유권을 먼저 고칩니다.
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-LAN IP나 자체 도메인으로 접속하면 `.env`의 `AUTOCLIP_ALLOWED_ORIGINS`에 프런트엔드 주소를 쉼표로 구분해 추가하세요.
-
-**CLI / MCP**
-
-Python 3.10+(3.11 권장), PATH의 FFmpeg와 FFprobe가 필요합니다. Redis는 필요 없습니다. [정식 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/latest)을 풀고 해당 디렉터리에서 실행하세요:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-ZIP 없이 설치할 때는 다음 명령으로 설치할 수 있습니다. 클론한 소스에서 설치하는 방법도 그대로 사용할 수 있습니다:
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-위 명령은 macOS / Linux용입니다. Windows는 `py -m venv venv`로 만들고 `.\venv\Scripts\Activate.ps1`로 활성화한 뒤 같은 `python -m pip` 설치 명령을 실행하세요.
-
-먼저 모델 설정을 저장하세요. 데스크톱 설정을 공유하거나 ZIP의 키 없는 예제로 전용 데이터 디렉터리를 설정합니다. [CLI / MCP](docs/CLI_AND_MCP.md)(중국어). `produce`는 이전 `run --provider` 임시 설정을 쓰지 않습니다. `--srt`로 전사를 생략할 수 있습니다.
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-MCP 클라이언트가 서버를 시작합니다. 별도 디버깅은 다른 터미널에서 `autoclip mcp`; OpenCode 설정은 `autoclip mcp install opencode`로 작성할 수 있습니다.
-
-`PROJECT_ID`는 제작 결과의 ID로 바꾸세요. MCP는 `start_quick_output` / `get_quick_output_status`. 클라이언트 `command`는 가상환경 `autoclip` 절대 경로, `args`는 `["mcp"]`. 이전 `run` / `export`와 클립 도구도 유지됩니다. [CLI / MCP](docs/CLI_AND_MCP.md)(중국어)·[OpenCode](docs/OPENCODE.en.md)·[Agent skill](skills/autoclip/SKILL.md)(중국어).
-
+브라우저에서 `http://localhost:3000`을 엽니다(API 문서: `http://localhost:8000/docs`). 바인드 마운트 권한과 커스텀 도메인 설정은 [Docker 가이드](docs/DOCKER.en.md)를 참고하세요.
 ## 모델 설정
 
 | 방식 | 설정 |

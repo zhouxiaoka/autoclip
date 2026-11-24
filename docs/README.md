@@ -1,6 +1,6 @@
 # AutoClip 文档中心
 
-[项目首页与八语 README](../README.md) · [English README](../README-EN.md)
+[English README](../README.md) · [简体中文 README](../README-ZH.md)
 
 ## 研究
 

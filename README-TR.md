@@ -21,9 +21,11 @@ Uygulama ücretsizdir; bulut modeller kullanıma göre ücretlendirilir. Ayarlam
 
 **[Web sitesi](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Masaüstü sürümünü indir](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Örnek kütüphanesi](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Araştırma](docs/research/2026-10-what-drives-views/article-en.md) · [Hızlı başlangıç](#quick-start) · [Belgeler](#documentation) · [Sorun bildir](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · **Türkçe** · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · **Türkçe** · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
+
+![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[En son sürüm](https://github.com/zhouxiaoka/autoclip/releases/latest)**, `autoclip --version` çıktısında görünen sürümdür; masaüstü, CLI ve MCP birlikte güncellenir. Hızlı çıktı, altyazı sayfalama, konuşmacı kadrajı ve uzun video kuyruğu düzeltmeleri için [değişiklik günlüğüne](CHANGELOG.md) bakın. Eski kurulumları lütfen güncelleyin.
 
@@ -217,6 +219,17 @@ Intel Mac için masaüstü sürümü yoktur. Intel Mac ve Linux için Docker vey
 
 [Tam kurulum kılavuzu](docs/USER_INSTALLATION_GUIDE.en.md) · [Sorun giderme](docs/FAQ.en.md)
 
+**CLI / MCP (Claude Code, Codex, OpenCode ve betikler)**
+
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
 **Docker / Web**
 
 ```bash
@@ -227,61 +240,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-[Web arayüzünü](http://localhost:3000) açın. Backend başladıktan sonra [API belgeleri](http://localhost:8000/docs) erişilebilir olur. [Docker kılavuzuna](docs/DOCKER.en.md) bakın.
-
-Linux'ta bind mount işlemleri izin hatasıyla başarısız olursa önce sahipliği düzeltin:
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-Yerel ağ IP'si veya özel alan adı kullanıyorsanız, `.env` içindeki `AUTOCLIP_ALLOWED_ORIGINS` değerine frontend adresini ekleyin (virgülle ayırarak).
-
-**CLI / MCP**
-
-Python 3.10+ (3.11 önerilir) gerekir; FFmpeg ve FFprobe PATH üzerinde olmalıdır. Yerel CLI için Redis gerekmez. [Resmi CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/latest) dosyasını indirin, açın ve o dizinde şunları çalıştırın:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-ZIP olmadan tek komutla da kurabilirsiniz. Klonlanmış kaynak deposundan kurulum da kullanılabilir:
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-Yukarıdaki komutlar macOS / Linux içindir. Windows'ta `py -m venv venv` ile oluşturup `.\venv\Scripts\Activate.ps1` ile etkinleştirin, ardından aynı `python -m pip` kurulum komutlarını kullanın.
-
-Önce model ayarlarını kaydedin: masaüstü ayarlarını yeniden kullanın veya ZIP içindeki anahtarsız örnekten kendi veri dizininizi yapılandırın. [CLI / MCP kılavuzuna](docs/CLI_AND_MCP.md) bakın (Çince). `produce` komutu eski `run --provider` geçersiz kılmasını kullanmaz. Transkripsiyonu atlamak için `--srt` verin.
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-MCP sunucusunu MCP istemcisi başlatır. Bağımsız hata ayıklama için ayrı bir terminalde `autoclip mcp` çalıştırın; OpenCode kullanıcıları istemci yapılandırmasını `autoclip mcp install opencode` ile yazabilir.
-
-`PROJECT_ID` yerine üretimin döndürdüğü proje kimliğini yazın. MCP, `start_quick_output` / `get_quick_output_status` araçlarını kullanır; istemcideki `command` değerini sanal ortamdaki `autoclip` dosyasının mutlak yoluna, `args` değerini ise `["mcp"]` olarak ayarlayın. Eski `run` / `export` ve kırpma araçları kullanılabilir durumdadır. [CLI / MCP](docs/CLI_AND_MCP.md) (Çince), [OpenCode](docs/OPENCODE.en.md) ve [Ajan becerisi](skills/autoclip/SKILL.md) (Çince) sayfalarına bakın.
-
-Smithery'nin yerel stdio listesi bir MCPB paketi kullanır. Depo kök dizininde `python scripts/pack_mcpb.py` komutunu çalıştırın. Çıktı `dist/autoclip-mcp.mcpb` dosyasıdır ve depoya eklenmez. Yayınlamak için bakımcının kendi hesabıyla `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp` komutunu çalıştırın. Depoda API anahtarı saklanmaz. Adımlar [CLI / MCP](docs/CLI_AND_MCP.md) sayfasındadır (Çince).
-
+Web arayüzünü `http://localhost:3000` adresinde açın (API belgeleri: `http://localhost:8000/docs`). Bağlama izinleri ve özel alan adları için [Docker Kılavuzu](docs/DOCKER.en.md) sayfasına bakın.
 ## Model kurulumu
 
 | Seçenek | Kurulum |

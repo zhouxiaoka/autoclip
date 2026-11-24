@@ -21,9 +21,11 @@ dành cho Douyin, Xiaohongshu, TikTok, Reels, YouTube Shorts, Bilibili hoặc Yo
 
 **[Trang web](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Tải bản desktop](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Thư viện ví dụ](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Nghiên cứu](docs/research/2026-10-what-drives-views/article-en.md) · [Bắt đầu nhanh](#quick-start) · [Tài liệu](#documentation) · [Báo lỗi](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · **Tiếng Việt** · [Deutsch](README-DE.md)
+[English](README.md) · [简体中文](README-ZH.md) · [繁體中文](README-ZH-TW.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · **Tiếng Việt** · [Deutsch](README-DE.md)
 
 </div>
+
+![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[Phiên bản phát hành mới nhất](https://github.com/zhouxiaoka/autoclip/releases/latest)** là phiên bản mà `autoclip --version` hiển thị, với desktop, CLI và MCP được cập nhật đồng bộ. Xem [nhật ký thay đổi](CHANGELOG.md) để biết các bản sửa lỗi về xuất nhanh, phân trang phụ đề, căn khung hình người nói và hàng đợi video dài. Vui lòng nâng cấp các bản cài đặt cũ.
 
@@ -217,6 +219,17 @@ Hiện chưa có bản cài đặt desktop cho Intel Mac. Người dùng Intel M
 
 [Hướng dẫn cài đặt đầy đủ](docs/USER_INSTALLATION_GUIDE.en.md) · [Xử lý sự cố](docs/FAQ.en.md)
 
+**CLI / MCP (Claude Code, Codex, OpenCode & tập lệnh)**
+
+```bash
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
 **Docker / Web**
 
 ```bash
@@ -227,61 +240,7 @@ mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-Mở [giao diện web](http://localhost:3000). [Tài liệu API](http://localhost:8000/docs) sẽ khả dụng sau khi backend khởi động. Xem thêm [hướng dẫn Docker](docs/DOCKER.en.md).
-
-Trên Linux, nếu bind mount gặp lỗi quyền truy cập, hãy sửa quyền sở hữu trước:
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-Đối với IP mạng LAN hoặc tên miền tùy chỉnh, hãy thêm địa chỉ frontend vào `AUTOCLIP_ALLOWED_ORIGINS` trong tệp `.env` (phân tách bằng dấu phẩy).
-
-**CLI / MCP**
-
-Yêu cầu Python 3.10+ (khuyến nghị 3.11), cùng FFmpeg và FFprobe đã nằm trong PATH; chạy CLI cục bộ không cần Redis. Tải [gói ZIP CLI / MCP chính thức](https://github.com/zhouxiaoka/autoclip/releases/latest), giải nén và chạy trong thư mục đó:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
-```
-
-Nếu không dùng tệp ZIP, bạn có thể cài đặt chỉ bằng một câu lệnh. Cách cài đặt từ mã nguồn đã clone vẫn được hỗ trợ:
-
-```bash
-# 一行安装
-uvx autoclip-mcp
-npx skills add zhouxiaoka/autoclip
-```
-
-```bash
-# 备选：在已克隆的仓库根目录从源码安装
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .
-autoclip --version
-```
-
-Các lệnh trên dành cho macOS / Linux. Trên Windows, hãy tạo môi trường ảo bằng `py -m venv venv` và kích hoạt với `.\venv\Scripts\Activate.ps1`, sau đó sử dụng cùng các lệnh cài đặt `python -m pip`.
-
-Hãy lưu cấu hình mô hình trước: dùng lại cấu hình từ bản desktop, hoặc tự thiết lập thư mục dữ liệu riêng dựa trên ví dụ không cần khóa API trong gói ZIP. Xem [hướng dẫn CLI / MCP](docs/CLI_AND_MCP.md) (tiếng Trung). Lệnh `produce` không sử dụng tham số ghi đè `run --provider` cũ. Truyền thêm `--srt` để bỏ qua bước nhận dạng giọng nói.
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-Client MCP sẽ tự khởi chạy máy chủ. Để gỡ lỗi độc lập, hãy chạy `autoclip mcp` trong một terminal riêng; người dùng OpenCode có thể ghi cấu hình client bằng lệnh `autoclip mcp install opencode`.
-
-Thay `PROJECT_ID` bằng mã dự án được trả về từ quá trình tạo video. MCP sử dụng `start_quick_output` / `get_quick_output_status`; đặt `command` của client thành đường dẫn tuyệt đối tới `autoclip` trong virtualenv và `args` thành `["mcp"]`. Các lệnh `run` / `export` cũ và bộ công cụ cắt video trước đây vẫn khả dụng. Xem thêm [CLI / MCP](docs/CLI_AND_MCP.md) (tiếng Trung), [OpenCode](docs/OPENCODE.en.md) và [Agent skill](skills/autoclip/SKILL.md) (tiếng Trung).
-
-Danh sách stdio cục bộ của Smithery sử dụng gói MCPB. Từ thư mục gốc của repo, chạy `python scripts/pack_mcpb.py`. Tệp tạo ra là `dist/autoclip-mcp.mcpb` và không được commit lên repo. Xuất bản bằng lệnh `smithery mcp publish ./dist/autoclip-mcp.mcpb -n io.github.zhouxiaoka/autoclip-mcp` với tài khoản đăng nhập của người bảo trì. Kho lưu trữ này không lưu khóa API. Các bước chi tiết nằm trong [CLI / MCP](docs/CLI_AND_MCP.md) (tiếng Trung).
-
+Mở giao diện web tại `http://localhost:3000` (tài liệu API tại `http://localhost:8000/docs`). Xem [Hướng dẫn Docker](docs/DOCKER.en.md) để cấu hình quyền thư mục và tên miền tùy chỉnh.
 ## Thiết lập mô hình
 
 | Tùy chọn | Cách thiết lập |
