@@ -1,10 +1,22 @@
 """Golden layout contract: a caption screen never exceeds two lines (vertical outputs)."""
+import unicodedata
+
 import pytest
 
 from backend.services.studio import caption_layout as cl
 
 LONG_ZH = '这些年把同样的能量，带给了无数创始人，而且这种手把手的方式一直延续到今天，影响了整整一代人'
 LONG_EN = 'and brought exactly the same energy to a great many YC founders over the years, and that hands-on style shaped a whole generation'
+JAPANESE = {
+    'hiragana': 'これはとてもおもしろいはなしなのでさいごまでゆっくりきいてくださいとせんせいがいいました',
+    'katakana': 'コンピュータープログラミングトレーニングセンターインフォメーションデスクサービス',
+    'mixed': '今日は新しい動画編集ソフトの使い方について、最初から最後までゆっくり説明していきたいと思います。',
+}
+
+
+def cells(line):
+    """Full-width cells by Unicode East Asian Width, so the check does not lean on the module's own table."""
+    return sum(1 if unicodedata.east_asian_width(ch) in 'WF' else 0.55 for ch in line)
 
 
 @pytest.mark.parametrize('text, limit', [(LONG_ZH, 15), (LONG_EN, 16), ('Paul 以前常说', 15), ('短句', 15)])
@@ -91,3 +103,43 @@ def test_screens_share_time_by_width_and_keep_the_original_in_step():
     assert all(a < b for a, b, _, _ in screens)
     assert all(cl.line_count(original) <= 2 for *_, original in screens)
     assert ' '.join(o.replace('\\N', ' ') for *_, o in screens).split() == LONG_EN.split()
+
+
+@pytest.mark.parametrize('script', list(JAPANESE))
+@pytest.mark.parametrize('limit', [13, 15, 24])
+def test_japanese_lines_fit_the_width_and_keep_every_character(script, limit):
+    """Kana is as wide as kanji; Japanese has no spaces, so none may appear at a break."""
+    text = JAPANESE[script]
+    lines = cl.lines_for(text, limit)
+    assert ''.join(lines) == text
+    assert all(cells(line) <= limit + 1e-6 for line in lines)
+    pages = cl.page_lines(text, limit)
+    assert ''.join(pages) == text
+    assert all(cells(line) <= limit + 1e-6 for line in pages)
+
+
+@pytest.mark.parametrize('script', list(JAPANESE))
+def test_japanese_screens_stay_within_two_lines(script):
+    screens = cl.timed_screens(JAPANESE[script], 0, 8, 15)
+    assert len(screens) >= 2 and screens[0][0] == 0 and abs(screens[-1][1] - 8) < 1e-6
+    for _, _, screen, _ in screens:
+        assert cl.line_count(screen) <= 2
+        assert all(cells(line) <= 15 for line in screen.split('\\N'))
+
+
+def test_japanese_lines_do_not_open_on_small_kana_or_the_long_vowel_mark():
+    text = 'をきれいにとるコツをまとめてしょうかいしますコンピューターのがっこうへいきましょう'
+    for limit in range(8, 20):
+        for line in cl.lines_for(text, limit) + cl.page_lines(text, limit):
+            assert line[0] not in 'ょっー', (limit, line)
+            assert cells(line) <= limit
+
+
+def test_chinese_and_english_lines_keep_their_breaks():
+    assert cl.lines_for(LONG_ZH, 15) == [
+        '这些年把同样的能量，', '带给了无数创始人，', '而且这种手把手的', '方式一直延续到今天，', '影响了整整一代人']
+    assert cl.lines_for(LONG_EN, 16) == [
+        'and brought exactly the same', 'energy to a great many YC', 'founders over the years,',
+        'and that hands-on style', 'shaped a whole generation']
+    assert cl.lines_for('Paul 以前常说，这会周期性发生。', 8) == ['Paul 以前常说，', '这会周期性发生。']
+    assert cl.width(LONG_ZH) == 45 and abs(cl.width(LONG_EN) - 129 * 0.55) < 1e-6
