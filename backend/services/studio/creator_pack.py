@@ -81,6 +81,34 @@ DEFAULT_PACK: dict[str, Any] = {
             'event': [72, 1000, 720, 104],
             'ticker': [72, 1526, 828, 70],
         },
+        # Viral full-bleed short-form gaming layouts (90%+ video area, zero poster banners).
+        'viral_split': {
+            'game': [0, 730, 1080, 1190],
+            'camera': [0, 0, 1080, 730],
+            'brand': [40, 102, 240, 44],
+            'title': [130, 622, 820, 80],
+            'caption': [60, 700, 960, 120],
+            'event': [0, 1112, 1080, 176],
+            'ticker': None,
+        },
+        'viral_pip': {
+            'game': [0, 0, 1080, 1920],
+            'camera': [676, 128, 360, 360],
+            'brand': [40, 102, 240, 44],
+            'title': [48, 136, 580, 66],
+            'caption': [60, 1340, 960, 140],
+            'event': [0, 1112, 1080, 176],
+            'ticker': None,
+        },
+        'viral_full': {
+            'game': [0, 0, 1080, 1920],
+            'camera': None,
+            'brand': [44, 106, 240, 44],
+            'title': [120, 196, 840, 84],
+            'caption': [60, 1360, 960, 140],
+            'event': [0, 1112, 1080, 176],
+            'ticker': None,
+        },
     },
     'effects': {
         'coast-pass': {'enter': 6, 'hold': 42, 'exit': 12, 'cooldown': 90},
@@ -352,7 +380,12 @@ def resolve_render_plan(
     fallback_reason = ''
     if not cam_active:
         slots['camera'] = None
-        if resolved_layout_id in ('coast', 'split') and slots.get('caption'):
+        if resolved_layout_id == 'viral_split':
+            # No facecam -> expand game to 100% full-bleed vertical so there is never an empty top half.
+            slots['game'] = [0, 0, CANVAS_W, CANVAS_H]
+            slots['title'] = [120, 196, 840, 84]
+            slots['caption'] = [60, 1360, 960, 140]
+        elif resolved_layout_id in ('coast', 'split') and slots.get('caption'):
             # Widen caption to full safe width when camera is absent (implementation.md §5).
             cap = slots['caption']
             slots['caption'] = [72, cap[1], 828, cap[3]]
@@ -432,14 +465,37 @@ def build_base_video_graph(
     game_fx = f",hue=s='if({'+'.join(desat_terms)},0,1)'" if desat_terms else ''
 
     # Cover-fit source into the game slot (or contain for wide sources in short split slots).
+    # When an embedded webcam sits on the left or right edge of a single-track recording,
+    # exclude that edge strip from the game crop so the streamer never appears twice.
+    edge_crop = ''
+    if plan.camera_active and plan.camera_mode == 'embedded' and plan.camera_roi:
+        rx, _ry, rw, _rh = plan.camera_roi
+        if rx <= 0.12 and (rx + rw) <= 0.45:
+            x0 = min(0.46, rx + rw + 0.005)
+            w_frac = max(0.50, 1.0 - x0)
+            edge_crop = f"crop=w='max(2,trunc(iw*{w_frac:.4f}/2)*2)':h='ih':x='trunc(iw*{x0:.4f}/2)*2':y=0,"
+        elif (rx + rw) >= 0.88 and rx >= 0.55:
+            w_frac = max(0.50, rx - 0.005)
+            edge_crop = f"crop=w='max(2,trunc(iw*{w_frac:.4f}/2)*2)':h='ih':x=0:y=0,"
+
     src_ratio = (source_w / source_h) if (source_w > 0 and source_h > 0) else (16 / 9)
     slot_ratio = gw / gh
-    if plan.layout_id in ('split', 'desk') and src_ratio > slot_ratio * 1.15:
+    if plan.layout_id in ('split', 'desk') and not edge_crop and src_ratio > slot_ratio * 1.15:
         game_scale = f"scale={gw}:{gh}:force_original_aspect_ratio=decrease,pad={gw}:{gh}:(ow-iw)/2:(oh-ih)/2:color={matte_hex}"
     else:
-        game_scale = f"scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}"
+        game_scale = f"{edge_crop}scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}"
 
     matte = f"color=c={matte_hex}:s={CANVAS_W}x{CANVAS_H}:r={fps}:d={dur:.3f},format=yuv420p[matte]"
+
+    # Rounded-corner alpha mask for floating PiP camera window (viral_pip).
+    pip_round = ''
+    if plan.layout_id == 'viral_pip':
+        pip_round = (
+            ",format=yuva420p,"
+            "geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':"
+            "a='if(gt(abs(W/2-X),W/2-28)*gt(abs(H/2-Y),H/2-28),"
+            "if(lte(hypot(abs(W/2-X)-(W/2-28),abs(H/2-Y)-(H/2-28)),28),255,0),255)'"
+        )
 
     if plan.camera_active and plan.slots.get('camera'):
         cx, cy, cw, ch = (int(v) for v in plan.slots['camera'])
@@ -448,7 +504,7 @@ def build_base_video_graph(
             parts = [
                 matte,
                 f"{src_prep},{game_scale}{game_fx}[game]",
-                f"[{camera_input_index}:v]setpts=PTS-STARTPTS,fps={fps},setsar=1,scale={cw}:{ch}:force_original_aspect_ratio=increase,crop={cw}:{ch}[cam]",
+                f"[{camera_input_index}:v]setpts=PTS-STARTPTS,fps={fps},setsar=1,scale={cw}:{ch}:force_original_aspect_ratio=increase,crop={cw}:{ch}{pip_round}[cam]",
                 f"[matte][game]overlay={gx}:{gy}:shortest=1[with_game]",
                 f"[with_game][cam]overlay={cx}:{cy}:shortest=1[base]",
             ]
@@ -459,7 +515,7 @@ def build_base_video_graph(
                 matte,
                 f"{src_prep},split=2[src_g][src_c]",
                 f"[src_g]{game_scale}{game_fx}[game]",
-                f"[src_c]crop=w='max(2,trunc(iw*{rw:.4f}/2)*2)':h='max(2,trunc(ih*{rh:.4f}/2)*2)':x='trunc(iw*{rx:.4f}/2)*2':y='trunc(ih*{ry:.4f}/2)*2',scale={cw}:{ch}:force_original_aspect_ratio=increase,crop={cw}:{ch}[cam]",
+                f"[src_c]crop=w='max(2,trunc(iw*{rw:.4f}/2)*2)':h='max(2,trunc(ih*{rh:.4f}/2)*2)':x='trunc(iw*{rx:.4f}/2)*2':y='trunc(ih*{ry:.4f}/2)*2',scale={cw}:{ch}:force_original_aspect_ratio=increase,crop={cw}:{ch}{pip_round}[cam]",
                 f"[matte][game]overlay={gx}:{gy}:shortest=1[with_game]",
                 f"[with_game][cam]overlay={cx}:{cy}:shortest=1[base]",
             ]

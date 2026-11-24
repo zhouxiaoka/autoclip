@@ -1,6 +1,0 @@
-@font-face { font-family: "PackBlack"; src: url("./fonts/BarlowCondensed-Black.ttf") format("truetype"); }
-@font-face { font-family: "PackSlant"; src: url("./fonts/BarlowCondensed-BlackItalic.ttf") format("truetype"); }
-@font-face { font-family: "PackSerif"; src: url("./fonts/LiberationSerif-Italic.ttf") format("truetype"); }
-@font-face { font-family: "PackSans"; src: local("Noto Sans CJK SC"), local("Noto Sans SC Medium"), local("PingFang SC"); }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, #stage { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }

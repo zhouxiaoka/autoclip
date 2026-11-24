@@ -142,14 +142,41 @@ def test_build_base_video_graph_modes_and_impact_desat():
     assert 'hue=s=' not in rm_graph
 
 
+def test_viral_layouts_double_host_exclusion_and_fallback():
+    # Left-edge embedded webcam (e.g. IShowSpeed x=0..22.5%) is excluded from the game crop
+    plan = cp.resolve_render_plan(
+        theme_id='wasted',
+        layout_id='viral_split',
+        camera_mode='embedded',
+        camera_roi=[0.0, 0.358, 0.225, 0.273],
+        events=[{'id': 'c1', 'type': 'crash', 'frame': 30, 'source': 'manual'}],
+    )
+    graph, _ = cp.build_base_video_graph(plan, 1920, 1080, scene_start=0.0, scene_end=4.0)
+    game_part = [p for p in graph.split(';') if p.startswith('[src_g]')][0]
+    assert 'crop=w=' in game_part and "x='trunc(iw*0.2300/2)*2'" in game_part
+    assert 'scale=1080:1190:force_original_aspect_ratio=increase' in game_part
+
+    # viral_pip applies rounded-corner alpha mask to the 360x360 camera stream
+    pip_plan = cp.resolve_render_plan(
+        theme_id='vice-city-sunset', layout_id='viral_pip', camera_mode='separate',
+    )
+    pip_graph, _ = cp.build_base_video_graph(pip_plan, 1920, 1080, scene_start=0.0, scene_end=3.2, camera_input_index=2)
+    assert 'geq=lum=' in pip_graph and '[with_game][cam]overlay=676:128:shortest=1[base]' in pip_graph
+
+    # viral_split with no camera falls back to full-bleed 1080x1920 game (never an empty top half)
+    no_cam = cp.resolve_render_plan(theme_id='vice-city-sunset', layout_id='viral_split', camera_mode='none')
+    assert no_cam.camera_active is False
+    assert no_cam.slots['game'] == [0, 0, 1080, 1920]
+
+
 def test_gta_templates_load_and_build_fill(tmp_path: Path, monkeypatch):
     import shutil
     data_dir = tmp_path / 'data'
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(data_dir))
     for tid, expected_theme, expected_layout in (
-        ('gta_vice_sunset', 'vice-city-sunset', 'coast'),
-        ('gta_wasted', 'wasted', 'split'),
-        ('gta_leonida_news', 'leonida-news', 'desk'),
+        ('streamer_split', 'vice-city-sunset', 'viral_split'),
+        ('gta_wasted', 'wasted', 'viral_split'),
+        ('streamer_pip', 'vice-city-sunset', 'viral_pip'),
     ):
         shutil.copytree(CATALOG_ROOT / tid, data_dir / 'templates' / tid)
         spec = template_registry.load_folder(CATALOG_ROOT / tid)
@@ -157,7 +184,7 @@ def test_gta_templates_load_and_build_fill(tmp_path: Path, monkeypatch):
         assert spec.base.creator_pack.theme == expected_theme
         assert spec.base.creator_pack.default_layout == expected_layout
         fill = overlay_fill.build_fill(
-            {'title_lines': ['测试标题'], 'audience_language': 'zh', 'cues': [{'start': 0.0, 'end': 3.0, 'text': '测试台词'}]},
+            {'title_lines': ['WAIT FOR IT'], 'audience_language': 'en', 'cues': [{'start': 0.0, 'end': 3.0, 'text': 'NO WAY!'}]},
             3.0,
             template=tid,
             creator_pack_overrides={'host': 'KAI LIVE', 'camera_mode': 'none'},
