@@ -1470,7 +1470,7 @@ def _en_for_groups(english: list[dict], groups: list[list], timed: bool) -> list
     return out
 
 
-def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None, transcript=None) -> dict:
+def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None, transcript=None, creator_pack_overrides: dict | None = None) -> dict:
     """A JSON-safe fill. Word times are frame indexes on the clip, not source timestamps."""
     duration = max(0.0, float(duration))
     total = max(1, _frames(duration, fps))
@@ -1629,6 +1629,32 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     hosts = [person['name'] for person in people if person['name'] not in guest_names or host_role.search(person.get('role') or '')]
     guests = [person for person in people if person['name'] not in hosts]
     guest = guests[0] if len(guests) == 1 else None
+    translated = bool(source_language and audience_language and source_language != audience_language)
+    creator_pack_payload = None
+    if template and template_registry.is_html_template(template):
+        cp_spec = template_registry.get(template).base.creator_pack
+        if cp_spec is not None:
+            from backend.services.studio import creator_pack as cp_mod
+            ov = creator_pack_overrides if isinstance(creator_pack_overrides, dict) else {}
+            pack = cp_mod.load_pack(template_registry.resolve_dir(template))
+            default_host = (guest['name'] if guest else (people[0]['name'] if people else ''))
+            plan = cp_mod.resolve_render_plan(
+                theme_id=str(ov.get('theme') or cp_spec.theme),
+                layout_id=str(ov.get('layout') or cp_spec.default_layout),
+                duration_frames=total,
+                events=ov.get('events'),
+                camera_mode=str(ov.get('camera_mode') or 'none'),
+                camera_roi=ov.get('camera_roi'),
+                camera_enabled=bool(ov.get('camera', True)),
+                events_enabled=bool(ov.get('events_enabled', True)),
+                reduced_motion=bool(ov.get('reduced_motion', False)),
+                strength=float(ov.get('strength', 1.0)),
+                host=str(ov.get('host') or default_host),
+                location=str(ov.get('location') or str(_get(packaging, 'kicker', '') or '')),
+                ticker=str(ov.get('ticker') or issue),
+                pack=pack,
+            )
+            creator_pack_payload = plan.to_overlay_dict()
     return {
         'fps': fps,
         'T': duration,
@@ -1655,7 +1681,8 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         'audience_language': audience_language,
         'source_language': source_language,
         # True when the captions were translated from another language (drives disclosure lines).
-        'translated': bool(source_language and audience_language and source_language != audience_language),
+        'translated': translated,
+        **({'creator_pack': creator_pack_payload} if creator_pack_payload is not None else {}),
     }
 
 

@@ -418,7 +418,11 @@ def _cached_overlay_fits(path: Path, frames: int, fps: int) -> bool:
     probed = _overlay_duration(path)
     if probed is None:
         return False
-    return abs(probed - (frames / fps)) <= (2 / fps)
+    expected = frames / fps
+    # ffconcat repeats the final PNG without a duration line, which image2 probes at 25fps (+0.04..0.08s)
+    # when the last hold is a single animated frame; render.py cuts at -t duration, so small positive
+    # tail padding is safe while a shorter overlay is still rejected.
+    return (expected - (2 / fps)) <= probed <= (expected + (4 / fps))
 
 
 def report_overlay_failure(error: BaseException) -> None:
@@ -626,7 +630,7 @@ def load_project_transcript(project_id: str):
         return None
 
 
-def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None, word_timing=None) -> OverlayJob:
+def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None, word_timing=None, creator_pack_overrides: dict | None = None) -> OverlayJob:
     """Capture the overlay, or return a classic result. This does not raise.
 
     ``capture(frame_count, fps)`` is the test seam. Without it, Playwright runs
@@ -657,6 +661,7 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
         build_fill(
             packaging, duration, fps=fps, safe_area=safe_area, scenes=scenes, template=template,
             word_timing=timing, transcript=load_project_transcript(project_id),
+            creator_pack_overrides=creator_pack_overrides,
         ),
         packaging,
         template,

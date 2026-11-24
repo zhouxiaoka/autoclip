@@ -229,6 +229,7 @@ class Draft(BaseModel):
     parent_revision: int | None = Field(default=None, ge=1)
     # Frozen import choice for standalone drafts. Platform versions own their render settings.
     html_template: str | None = None
+    creator_pack: dict | None = None
     packaging: Packaging | None = None
     # (top, bottom) of burned captions as fractions of the frame height, blurred out before layout:
     # an English version of a source with Chinese captions in the picture.

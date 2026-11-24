@@ -125,6 +125,15 @@ class ProgressBarSpec(BaseModel):
         return int(value)
 
 
+class CreatorPackSpec(BaseModel):
+    """Declarative binding to a multi-theme/multi-layout Creator Pack (e.g. GTA VI)."""
+    model_config = ConfigDict(extra='forbid')
+    pack_id: str = Field(default='autoclip.gta-vi-creator', min_length=1, max_length=64)
+    theme: str = Field(default='auto', min_length=1, max_length=40)
+    default_layout: str = Field(default='auto', min_length=1, max_length=32)
+    default_effect: str | None = Field(default=None, max_length=32)
+
+
 class FitSpec(BaseModel):
     model_config = ConfigDict(extra='forbid')
     formats: dict[str, float]
@@ -207,6 +216,7 @@ class BaseSpec(BaseModel):
     # Lock the base picture layout under the overlay. 'auto' keeps the draft's own layout;
     # 'fit' centres a 16:9 source in the 1080x608 band (y 656..1264) for window/card templates.
     picture_layout: Literal['auto', 'crop', 'blur', 'fit'] = 'auto'
+    creator_pack: CreatorPackSpec | None = None
     scrim: ScrimSpec | None = None
     progress_bar: ProgressBarSpec | None = None
 

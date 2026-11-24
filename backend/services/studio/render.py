@@ -285,6 +285,7 @@ def _encode_draft(
                 project_id, html_template, overlay_packaging,
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
                 features=features, safe_area=safe_area, scenes=draft.scenes,
+                creator_pack_overrides=draft.creator_pack,
             )
         except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise
@@ -326,17 +327,52 @@ def _encode_draft(
                         spec = {'layout': draft.layout, 'w': w, 'h': h}
                         req = ExportRequest(project_id, draft.id, layout=draft.layout)
                         scene_overlay = overlay_path
+                        camera_video = None
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
-                            use_step_window = bool(overlay_spec and overlay_spec.base.step_window)
-                            locked = overlay_spec.base.picture_layout if overlay_spec else 'auto'
-                            picture_draft = draft if locked == 'auto' or locked == draft.layout else draft.model_copy(update={'layout': locked})
-                            if use_step_window and picture_draft.layout == 'crop':
-                                picture, label = packaging_render.street_picture(
-                                    picture_draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
+                            if overlay_spec and overlay_spec.base.creator_pack is not None:
+                                from backend.services.studio import creator_pack as cp_mod
+                                ov = draft.creator_pack if isinstance(draft.creator_pack, dict) else {}
+                                cp_spec = overlay_spec.base.creator_pack
+                                pack = cp_mod.load_pack(template_registry.resolve_dir(html_template))
+                                cam_mode = str(ov.get('camera_mode') or 'none')
+                                raw_cam_path = ov.get('camera_path')
+                                if cam_mode == 'separate' and isinstance(raw_cam_path, str) and raw_cam_path.strip():
+                                    cand_cam = Path(raw_cam_path)
+                                    if cand_cam.is_file():
+                                        camera_video = cand_cam
+                                    else:
+                                        cam_mode = 'none'
+                                elif cam_mode == 'separate':
+                                    cam_mode = 'none'
+                                plan = cp_mod.resolve_render_plan(
+                                    theme_id=str(ov.get('theme') or cp_spec.theme),
+                                    layout_id=str(ov.get('layout') or cp_spec.default_layout),
+                                    duration_frames=max(1, int(round(clip_total * 30))),
+                                    events=ov.get('events'),
+                                    camera_mode=cam_mode,
+                                    camera_roi=ov.get('camera_roi'),
+                                    camera_enabled=bool(ov.get('camera', True)),
+                                    events_enabled=bool(ov.get('events_enabled', True)),
+                                    reduced_motion=bool(ov.get('reduced_motion', False)),
+                                    strength=float(ov.get('strength', 1.0)),
+                                    pack=pack,
+                                )
+                                picture, label = cp_mod.build_base_video_graph(
+                                    plan, int(info.get('width') or 0), int(info.get('height') or 0),
+                                    scene_start=scene.start, scene_end=scene.end, scene_offset=offsets[i],
+                                    camera_input_index=2 if camera_video is not None else None,
                                 )
                             else:
-                                picture, label = packaging_render.picture_only(picture_draft, scene, w, h)
+                                use_step_window = bool(overlay_spec and overlay_spec.base.step_window)
+                                locked = overlay_spec.base.picture_layout if overlay_spec else 'auto'
+                                picture_draft = draft if locked == 'auto' or locked == draft.layout else draft.model_copy(update={'layout': locked})
+                                if use_step_window and picture_draft.layout == 'crop':
+                                    picture, label = packaging_render.street_picture(
+                                        picture_draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
+                                    )
+                                else:
+                                    picture, label = packaging_render.picture_only(picture_draft, scene, w, h)
                             # Street and editorial paint captions in the template safe zone.
                             # The cover owns the title; this overlay does not burn a headline.
                             tail, label = packaging_html.composite_tail(
@@ -367,11 +403,13 @@ def _encode_draft(
                         if scene_overlay:
                             # Overlay is the second input. Scene time is the output offset into that movie.
                             cmd += ['-ss', f'{max(0.0, offsets[i]):.3f}', '-i', str(scene_overlay)]
+                            if camera_video is not None:
+                                cmd += ['-ss', str(scene.start), '-i', str(camera_video)]
                         elif artwork:
                             cmd += ['-loop', '1', '-i', str(artwork)]
                         if backdrop:
                             cmd += ['-loop', '1', '-framerate', '30', '-i', str(backdrop)]
-                        silence_input = 1 + int(scene_overlay is not None) + int(artwork is not None) + int(backdrop is not None)
+                        silence_input = 1 + int(scene_overlay is not None) + int(camera_video is not None) + int(artwork is not None) + int(backdrop is not None)
                         if keep_audio:
                             cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
                         cmd += ['-t', str(duration)]

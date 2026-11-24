@@ -1,0 +1,52 @@
+id: gta_wasted
+version: 2
+name: {zh: "翻车回放", en: "Wasted Replay"}
+fit:
+  formats: {keynote_stage: 0.7, sit_down_interview: 0.5, street_interview: 0.6}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: window
+  face_y: 0.5
+  head_zone: [440, 1200]
+  zoom:
+    mode: creep
+    creep: 0.0
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.02:saturation=1.0"
+  creator_pack:
+    pack_id: autoclip.gta-vi-creator
+    theme: wasted
+    default_layout: split
+    default_effect: impact-hold
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 132, alt_top: 132}
+    subtitle: {top: 1350, max_rows: 2}
+  safe_area: douyin
+  limits: {emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: gta_wasted_3x4, from_overlay: true}
+caption_layout:
+  font_px: 46
+  inset_px: 96
+  source_limit: 56
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "事故回放与主播反应：纸白标尺刊头、黑白撞击定格、红色斜切事件牌与心电波形", en: "Crash replay & reaction split with paper header, B&W impact hold, and EKG waveform"}
+  tags: [gaming, gta, wasted, replay, split]
+  category: gaming
+  order: 72
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: fit
+qa: {}

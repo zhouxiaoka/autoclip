@@ -185,7 +185,10 @@ def test_sync_catalog_falls_back_across_mirrors(tmp_path, monkeypatch):
 def test_all_shipping_catalog_templates_pass_factory_verify():
     catalog_root = Path(__file__).resolve().parents[2] / 'templates-catalog'
     found = sorted(p.name for p in catalog_root.iterdir() if p.is_dir() and (p / 'template.yaml').is_file())
-    assert {'interview_card', 'xhs_note', 'podcast_dark'} <= set(found)
+    assert {
+        'interview_card', 'xhs_note', 'podcast_dark',
+        'gta_vice_sunset', 'gta_wasted', 'gta_leonida_news',
+    } <= set(found)
     for name in found:
         spec, info = template_factory.verify_folder(catalog_root / name)
         assert spec.id == name
