@@ -4,6 +4,7 @@ import { createHashRouter, RouterProvider } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import { theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import zhTW from 'antd/locale/zh_TW'
 import enUS from 'antd/locale/en_US'
 import jaJP from 'antd/locale/ja_JP'
 import koKR from 'antd/locale/ko_KR'
@@ -11,10 +12,15 @@ import esES from 'antd/locale/es_ES'
 import ptBR from 'antd/locale/pt_BR'
 import ruRU from 'antd/locale/ru_RU'
 import frFR from 'antd/locale/fr_FR'
+import idID from 'antd/locale/id_ID'
+import trTR from 'antd/locale/tr_TR'
+import viVN from 'antd/locale/vi_VN'
+import deDE from 'antd/locale/de_DE'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/zh-tw'
 import 'dayjs/locale/en'
 import 'dayjs/locale/ja'
 import 'dayjs/locale/ko'
@@ -22,6 +28,10 @@ import 'dayjs/locale/es'
 import 'dayjs/locale/pt-br'
 import 'dayjs/locale/ru'
 import 'dayjs/locale/fr'
+import 'dayjs/locale/id'
+import 'dayjs/locale/tr'
+import 'dayjs/locale/vi'
+import 'dayjs/locale/de'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
@@ -49,8 +59,8 @@ dayjs.extend(relativeTime)
 dayjs.extend(timezone)
 dayjs.extend(utc)
 
-const antdLocales = { zh: zhCN, en: enUS, ja: jaJP, ko: koKR, es: esES, pt: ptBR, ru: ruRU, fr: frFR }
-const dateLocales: Record<string, string> = { zh: 'zh-cn', pt: 'pt-br' }
+const antdLocales = { zh: zhCN, 'zh-TW': zhTW, en: enUS, ja: jaJP, ko: koKR, es: esES, pt: ptBR, ru: ruRU, fr: frFR, id: idID, tr: trTR, vi: viVN, de: deDE }
+const dateLocales: Record<string, string> = { zh: 'zh-cn', 'zh-TW': 'zh-tw', pt: 'pt-br' }
 const updateDateLocale = () => dayjs.locale(dateLocales[i18n.language] || i18n.language)
 updateDateLocale()
 i18n.on('languageChanged', updateDateLocale)

@@ -163,13 +163,36 @@
 }
 
 /* Cards show the result summary and actions. Full copy lives in the publish preview. */
+.studio-output-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .studio-output-card .ac-card-body {
-  gap: 8px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
   padding: 14px 16px 16px;
 }
 
 .studio-output-card .ac-card-title {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.studio-result-meta {
+  color: var(--ac-sub);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-output-progress {
@@ -228,6 +251,10 @@
   width: 100%;
 }
 
+.studio-output-card .ac-card-actions--with-edit {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px;
+}
+
 .studio-output-card .ac-card-actions > * {
   border: 1px solid var(--ac-line);
   border-radius: 8px;
@@ -237,6 +264,21 @@
   min-height: 34px;
   padding: 7px 6px;
   text-align: center;
+}
+
+.studio-output-card .ac-card-actions > .studio-card-edit-btn {
+  align-items: center;
+  color: var(--ac-sub);
+  display: inline-flex;
+  justify-content: center;
+  min-width: 34px;
+  padding: 0;
+  width: 34px;
+}
+
+.studio-output-card .ac-card-actions > .studio-card-edit-btn:hover {
+  border-color: var(--ac-muted);
+  color: var(--ac-ink);
 }
 
 .studio-output-card .ac-card-actions > .studio-reveal-link {
@@ -761,7 +803,7 @@
   .ac-welcome-sample { aspect-ratio: 1.78; }
 }
 
-.studio-result-grid { align-items: start; }
+.studio-result-grid { align-items: stretch; }
 .studio-publish-grid {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);

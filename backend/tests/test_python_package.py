@@ -83,6 +83,7 @@ def test_registry_metadata_matches_the_pypi_package():
 def test_docs_advertise_the_one_line_install_commands():
     surfaces = [
         ROOT / 'README.md',
+        ROOT / 'README-ZH-TW.md',
         ROOT / 'README-EN.md',
         ROOT / 'README-JA.md',
         ROOT / 'README-KO.md',
@@ -90,7 +91,10 @@ def test_docs_advertise_the_one_line_install_commands():
         ROOT / 'README-PT.md',
         ROOT / 'README-RU.md',
         ROOT / 'README-FR.md',
+        ROOT / 'README-ID.md',
         ROOT / 'README-TR.md',
+        ROOT / 'README-VI.md',
+        ROOT / 'README-DE.md',
         ROOT / 'docs' / 'CLI_AND_MCP.md',
         ROOT / 'skills' / 'autoclip' / 'SKILL.md',
     ]

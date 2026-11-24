@@ -69,7 +69,7 @@ test('measured high-tier providers rank ahead of sponsors, low tiers stay in hot
 })
 
 test('quality labels and caveats exist in all eight locales', () => {
-  const langs = ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']
+  const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
   const keys = [
     'settings.providers.quality.success.high',
     'settings.providers.quality.success.mid',

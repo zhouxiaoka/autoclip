@@ -83,7 +83,7 @@
 
 - 契约版本（暂定新契约 `business_schema_version=3`）、event_id、发生时间、观察时间。
 - app_version、environment（production/development/validation）、runtime（desktop/web）、entrypoint（ui；CLI/MCP 后续单独设计）、os。
-- flow 相关事件继承 `material_origin=user/sample/unknown`、`source_type=file/youtube/bilibili/other_url`；不能因字段缺失就默认为真实素材。
+- flow 相关事件继承 `material_origin=user/sample/unknown`、`source_type=file/twitch/youtube/bilibili/other_url`。Twitch 场次直导计入 twitch，手选本地录像计入 file。场次 ID 不进入事件属性。缺失的来源记为 unknown。
 - `observation_start_kind=fresh_install/existing_install/unknown`：fresh 需要应用本地首次运行证据；升级到新统计版本不算新安装，无法确认时 unknown。
 - 场景以用户自报为准；时长仅在分析等待/失败需要时采集粗区间。Provider 使用受控枚举，未识别自定义服务归 other，不上传 Base URL、任意模型字符串。
 

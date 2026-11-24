@@ -127,7 +127,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
     'react-router-dom': { useNavigate: () => () => {} },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'fragment' },
     '../../ui': { Btn: 'button', Segmented: 'segmented', Dialog: 'dialog', StatusDot: 'status' },
-    './PlatformPicker': { default: 'platform-picker' },
+    './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: 'platform-picker' },
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './api': {
       studioApi: {

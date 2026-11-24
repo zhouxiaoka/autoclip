@@ -21,7 +21,7 @@ Uygulama ücretsizdir; bulut modeller kullanıma göre ücretlendirilir. Ayarlam
 
 **[Web sitesi](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Masaüstü sürümünü indir](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Örnek kütüphanesi](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Araştırma](docs/research/2026-10-what-drives-views/article-en.md) · [Hızlı başlangıç](#quick-start) · [Belgeler](#documentation) · [Sorun bildir](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
-[简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · **Türkçe**
+[简体中文](README.md) · [繁體中文](README-ZH-TW.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · **Türkçe** · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
 
 </div>
 

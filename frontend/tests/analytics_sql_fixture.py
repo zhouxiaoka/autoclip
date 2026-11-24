@@ -180,6 +180,11 @@ process.stdout.write(JSON.stringify(events))
         rows = self.db.execute(queries('production_results.sql')[0]).fetchall()
         self.assertEqual([(row['devices'], row['people']) for row in rows], [(2, 1)])
 
+    def test_obs_terminal_is_counted_as_its_own_material_origin(self):
+        self.insert('obs-device', 'studio_generation_finished', 'success', material_origin='obs')
+        rows = self.db.execute(queries('production_results.sql')[0]).fetchall()
+        self.assertEqual([(row['material_origin'], row['devices']) for row in rows], [('obs', 1)])
+
     def test_frontend_fixture_emits_success_and_error(self):
         self.assertEqual({(row['event'], row['props']['outcome']) for row in self.frontend_events}, {
             (event, outcome) for event in ('studio_generation_finished', 'studio_export_finished')

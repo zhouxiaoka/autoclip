@@ -92,7 +92,7 @@ def test_rank_fallback_faceless_shot_uses_blur_instead_of_blind_crop(monkeypatch
     # Detector ran and returned no face track (scenes=None, framing='full_frame')
     monkeypatch.setattr(jobs, '_speaker_framing', lambda *_a, **_k: (None, 'full_frame'))
 
-    derived, variants, _ = jobs._initial_derive(
+    derived, variants, _, _ = jobs._initial_derive(
         'p-580-faceless', {}, 'video.mp4',
         {'features': {'pkg_templates_v1': True}, 'html_template': 'editorial', 'output_captions': False, 'portrait_style': 'auto'},
         ['douyin'], {'outro_enabled': False}, [],

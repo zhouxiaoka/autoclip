@@ -184,7 +184,7 @@ KEYS = (
 def test_new_hints_exist_in_all_eight_locales():
     from backend.services.whisper_model_manager import WHISPER_DOWNLOAD_USER_ERROR
     root_dir = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'i18n' / 'locales'
-    for lang in ('zh', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru'):
+    for lang in ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de'):
         catalog = json.loads((root_dir / f'{lang}.json').read_text(encoding='utf-8'))
         for key in KEYS + (WHISPER_DOWNLOAD_USER_ERROR,):
             assert catalog.get(key), (lang, key)

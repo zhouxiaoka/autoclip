@@ -39,7 +39,7 @@ def _derive(template, platforms):
     generation = {'features': {'pkg_templates_v1': True}, 'output_captions': False, 'portrait_style': 'auto'}
     if template:
         generation['html_template'] = template
-    drafts, variants, _events = jobs._initial_derive(
+    drafts, variants, _events, _coverage = jobs._initial_derive(
         'p-rank', {}, 'video.mp4', generation, list(platforms), {'outro_enabled': False}, [],
     )
     by_id = {draft['id']: draft for draft in drafts}

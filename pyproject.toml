@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autoclip-mcp"
-version = "1.5.9"
+version = "1.6.0"
 description = "AutoClip — AI 长视频自动切片：CLI 与 MCP server 入口"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,6 +34,7 @@ dependencies = [
   "Pillow==11.3.0",
   "yt-dlp[default]==2026.8.19",
   "pysrt==1.1.2",
+  "webrtcvad-wheels==2.0.14",
   "psutil==7.2.2",
   "pytz==2026.3.post1",
   "openai==3.8.0",

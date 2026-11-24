@@ -20,7 +20,7 @@ WHERE timestamp >= toDateTime({date_from}, 'UTC') AND timestamp < toDateTime({da
   AND person_id NOT IN COHORT {internal_cohort_id}
   AND properties.studio_schema_version = 2
   AND properties.analytics_environment = 'production'
-  AND properties.material_origin IN ('sample','user','unknown')
+  AND properties.material_origin IN ('sample','user','obs','unknown')
   AND ((event = 'studio_generation_finished' AND properties.outcome IN ('completed','success','partial'))
        OR (properties.artifact_id IS NOT NULL AND
            (event = 'studio_download_saved' OR
@@ -61,7 +61,7 @@ WITH sample_cohort AS (
     SELECT distinct_id, timestamp AS rendered_at FROM events
     WHERE event IN ('studio_export_finished','studio_generation_finished')
       AND properties.studio_schema_version = 2 AND properties.analytics_environment = 'production'
-      AND properties.material_origin = 'user'
+      AND properties.material_origin IN ('user', 'obs')
       AND (properties.outcome IN ('completed','success') OR
            (event = 'studio_generation_finished' AND properties.outcome = 'partial'
             AND toFloat(properties.completed_variant_count) > 0))

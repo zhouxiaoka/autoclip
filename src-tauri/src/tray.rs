@@ -9,12 +9,17 @@ struct TrayLabels([MenuItem<tauri::Wry>; 6]);
 fn labels(language: &str) -> [&'static str; 6] {
     match language {
         "zh" => ["显示主窗口", "隐藏主窗口", "启动后端服务", "停止后端服务", "重启后端服务", "退出应用"],
+        "zh-TW" => ["顯示主視窗", "隱藏主視窗", "啟動後端服務", "停止後端服務", "重啟後端服務", "結束應用程式"],
         "ja" => ["ウィンドウを表示", "ウィンドウを隠す", "サービスを開始", "サービスを停止", "サービスを再起動", "終了"],
         "ko" => ["창 표시", "창 숨기기", "서비스 시작", "서비스 중지", "서비스 다시 시작", "종료"],
         "es" => ["Mostrar ventana", "Ocultar ventana", "Iniciar servicio", "Detener servicio", "Reiniciar servicio", "Salir"],
         "pt" => ["Mostrar janela", "Ocultar janela", "Iniciar serviço", "Parar serviço", "Reiniciar serviço", "Sair"],
         "ru" => ["Показать окно", "Скрыть окно", "Запустить сервис", "Остановить сервис", "Перезапустить сервис", "Выйти"],
         "fr" => ["Afficher la fenêtre", "Masquer la fenêtre", "Démarrer le service", "Arrêter le service", "Redémarrer le service", "Quitter"],
+        "id" => ["Tampilkan jendela", "Sembunyikan jendela", "Mulai layanan", "Hentikan layanan", "Mulai ulang layanan", "Keluar"],
+        "tr" => ["Pencereyi göster", "Pencereyi gizle", "Hizmeti başlat", "Hizmeti durdur", "Hizmeti yeniden başlat", "Çıkış"],
+        "vi" => ["Hiện cửa sổ", "Ẩn cửa sổ", "Khởi động dịch vụ", "Dừng dịch vụ", "Khởi động lại dịch vụ", "Thoát"],
+        "de" => ["Fenster anzeigen", "Fenster ausblenden", "Dienst starten", "Dienst stoppen", "Dienst neu starten", "Beenden"],
         _ => ["Show window", "Hide window", "Start service", "Stop service", "Restart service", "Quit"],
     }
 }
