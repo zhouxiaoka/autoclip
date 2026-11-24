@@ -72,3 +72,34 @@ def test_python_fastapi_78_unrelated_attribute_error_still_propagates():
 
     with pytest.raises(AttributeError, match="unexpected bug"):
         list(llm_stream._lines(_BrokenResponse()))
+
+
+def test_python_fastapi_79_playwright_timeout_downgrades_as_over_budget_without_sentry_error(monkeypatch, tmp_path):
+    """PYTHON-FASTAPI-79: playwright._impl._errors.TimeoutError does not subclass builtin TimeoutError."""
+    from backend.services.studio import packaging_html
+
+    class _PlaywrightTimeoutError(Exception):
+        pass
+
+    _PlaywrightTimeoutError.__name__ = "TimeoutError"
+
+    reported = []
+    monkeypatch.setattr(packaging_html, "report_overlay_failure", lambda err: reported.append(err))
+    monkeypatch.setattr(packaging_html, "overlay_cache_path", lambda *a, **kw: tmp_path / "overlay.mkv")
+    monkeypatch.setattr(packaging_html, "load_project_word_timing", lambda _pid: [])
+    monkeypatch.setattr(packaging_html, "load_project_transcript", lambda _pid: [])
+
+    async def boom(_frames, _fps):
+        raise _PlaywrightTimeoutError("Page.screenshot: Timeout 30000ms exceeded.")
+
+    job = packaging_html.prepare_overlay(
+        project_id="p1",
+        packaging={"title": "Demo", "captions": []},
+        duration=2.0,
+        template="editorial",
+        features={"html_packaging": True},
+        capture=boom,
+    )
+    assert job.downgraded is True
+    assert job.downgrade_reason == "over_budget"
+    assert reported == []

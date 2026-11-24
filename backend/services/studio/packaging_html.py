@@ -703,6 +703,9 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
         report_overlay_failure(error)
         return finish(_downgrade('missing_runtime' if error.reason == 'runtime' else 'none', failure=error.reason, requested=template))
     except Exception as error:  # noqa: BLE001 - a capture failure must not fail the export
+        # Playwright's TimeoutError inherits from playwright.Error, not builtin TimeoutError.
+        if type(error).__name__ == 'TimeoutError' or remaining() <= 0:
+            return finish(_downgrade('over_budget', requested=template))
         report_overlay_failure(error)
         return finish(_downgrade('none', failure='capture', requested=template))
     if not _cached_overlay_fits(dest, frames, fps):
