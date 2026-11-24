@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 SCHEMA = "autoclip.sponsor-promo/v1"
 STATUSES = frozenset({"healthy", "fault", "out_of_service"})
-LOCALES = frozenset({"zh", "en", "ja", "ko", "es", "fr", "pt", "ru"})
+LOCALES = frozenset({"zh", "en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"})
 PAYLOAD_KEYS = frozenset({
     "schema", "sequence", "issued_at", "expires_at", "min_app", "max_app",
     "rollback_of", "sponsors",

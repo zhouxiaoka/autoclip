@@ -1039,6 +1039,16 @@ def write(project_id, data, *, restore=False):
     from backend.services.studio import attempts
     attempts.reconcile(data, now())
     pending = settle_attempt(data, kind='seal', previous=previous) if not restore else []
+    if pending:
+        from backend.services.obs.billing import is_obs
+        obs_origin = (
+            is_obs(project_id)
+            or data.get('material_origin') == 'obs'
+            or ((data.get('plan') or {}).get('overrides') or {}).get('replay_source') == 'obs'
+        )
+        if obs_origin:
+            for event in pending:
+                event['properties']['material_origin'] = 'obs'
     history = list(previous.get('analysis_history', []))
     for terminal, state in ((prior, previous), (analysis, data)):
         if terminal.get('run_id') and terminal.get('status') in ('awaiting_confirmation', 'completed', 'failed'):

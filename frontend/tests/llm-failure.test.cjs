@@ -17,7 +17,7 @@ test('invalid credentials use distinct localized copy even with a stale missing-
   assert.equal(classifyLlmKeyFailure(LEGACY, 'llm_auth_invalid'), false)
   const key = llmFailureText(LEGACY, 'llm_auth_invalid')
   assert.equal(key, 'API Key 无效或已过期，请到设置里更新后再试')
-  for (const locale of ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']) {
+  for (const locale of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
     const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, `../src/i18n/locales/${locale}.json`), 'utf8'))
     assert.ok(catalog[key], locale)
     if (locale !== 'zh') assert.notEqual(catalog[key], key)

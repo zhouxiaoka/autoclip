@@ -1,6 +1,6 @@
 # Use Infistar with AutoClip
 
-[简体中文](INFISTAR_SETUP.md) · [Back to README](../README-EN.md)
+[简体中文](INFISTAR_SETUP.md) · [Back to README](../README.md)
 
 Infistar sponsors AutoClip and can be configured through the existing OpenAI-compatible API option.
 

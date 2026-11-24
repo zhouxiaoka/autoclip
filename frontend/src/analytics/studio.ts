@@ -148,7 +148,7 @@ export async function observeStudioDownload<T>(action: () => Promise<T>, project
 }
 
 export function studioImportProperties(body: FormData): Record<string, unknown> {
-  let source_type = 'file'
+  let source_type = body.get?.('twitch_video_id') ? 'twitch' : 'file'
   const url = body.get?.('url')
   if (typeof url === 'string' && url) {
     source_type = 'other_url'

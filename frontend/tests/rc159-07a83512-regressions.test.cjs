@@ -144,8 +144,8 @@ function renderStudioResultsForRemake(project) {
   return { buttons, navigated, stashed, setRemakingCalls }
 }
 
-test('StudioResults opens in-place remake dialog for local-file projects and keeps URL flow for link projects', () => {
-  // Local-file project: must open in-place PlanEditDialog (setRemaking(true)), NEVER jump to blank '/'
+test('StudioResults opens in-place remake dialog for both local-file and link projects with unified 重做 copy', () => {
+  // Local-file project: opens in-place PlanEditDialog, NEVER jumps to '/'
   const local = renderStudioResultsForRemake({
     id: 'proj-local',
     name: 'qa684-20s',
@@ -154,14 +154,14 @@ test('StudioResults opens in-place remake dialog for local-file projects and kee
     source_file: 'qa684-20s.mp4',
     settings: { smart_import: { goal: 'content' } },
   })
-  const localBtn = local.buttons.find(b => b.children === '再做一版')
-  assert.ok(localBtn, 'local completed automatic project should expose 再做一版')
+  const localBtn = local.buttons.find(b => b.children === '重做')
+  assert.ok(localBtn, 'local completed automatic project should expose 重做')
   localBtn.onClick()
-  assert.deepEqual(local.setRemakingCalls, [true])
+  assert.equal(local.setRemakingCalls.length, 1)
   assert.deepEqual(local.navigated, [])
   assert.deepEqual(local.stashed, [])
 
-  // URL-imported project: stashes sourceUrl + navigates to '/'
+  // URL-imported project: ALSO stays in-place and opens the unified remake dialog
   const link = renderStudioResultsForRemake({
     id: 'proj-url',
     name: 'yt-clip',
@@ -169,20 +169,18 @@ test('StudioResults opens in-place remake dialog for local-file projects and kee
     source_url: 'https://www.youtube.com/watch?v=abc123',
     settings: { smart_import: { goal: 'content' } },
   })
-  const linkBtn = link.buttons.find(b => b.children === '再做一版')
-  assert.ok(linkBtn, 'URL completed automatic project should expose 再做一版')
+  const linkBtn = link.buttons.find(b => b.children === '重做')
+  assert.ok(linkBtn, 'URL completed automatic project should expose 重做')
   linkBtn.onClick()
-  assert.deepEqual(link.setRemakingCalls, [])
-  assert.deepEqual(link.navigated, ['/'])
-  assert.equal(link.stashed.length, 1)
-  assert.equal(link.stashed[0].sourceUrl, 'https://www.youtube.com/watch?v=abc123')
-  assert.deepEqual(JSON.parse(JSON.stringify(link.stashed[0].platforms)), ['xiaohongshu'])
+  assert.equal(link.setRemakingCalls.length, 1)
+  assert.deepEqual(link.navigated, [])
+  assert.deepEqual(link.stashed, [])
 
   // Header remake button respects running analysis lock (#627)
   const resultsSrc = read('src/features/studio/StudioResults.tsx')
   assert.match(
     resultsSrc,
-    /disabled=\{loading \|\| workspace\.analysis\?\.status === 'running'\} onClick=\{startAnotherPlatform\}>\{t\('再做一版'\)\}/,
+    /disabled=\{loading \|\| workspace\.analysis\?\.status === 'running'\} onClick=\{\(\) => openRemake\([^\n]+\)\}>\{t\('重做'\)\}/,
   )
 })
 

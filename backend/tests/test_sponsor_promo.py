@@ -732,7 +732,7 @@ def test_sign_script_refuses_a_private_key_inside_the_repo(tmp_path):
 
 def test_locale_routing_disjoint_defaults_and_localized_register_urls(monkeypatch, tmp_path, profiles):
     private, public = _keys()
-    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"]
     payload = _payload(sequence=15, sponsors=[
         {
             "id": "apimart",
@@ -801,7 +801,7 @@ def test_locale_routing_disjoint_defaults_and_localized_register_urls(monkeypatc
     ],
     [{"id": "apimart", "order": 1, "status": "healthy", "locales": []}],
     [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["zh", "zh"]}],
-    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["de"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["nl"]}],
     [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {"en": "https://evil.example/steal"}}],
     [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {}}],
 ])
@@ -820,7 +820,7 @@ def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tm
 def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_path, profiles):
     assert sponsor_promo.builtin_sponsor_hosts()["cometapi"] == "www.cometapi.com"
     private, public = _keys()
-    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"]
     good = _payload(sequence=30, sponsors=[
         {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
         {
@@ -851,7 +851,7 @@ def test_novita_and_poyo_are_trusted_for_overseas_promo(tmp_path, profiles):
     assert hosts["novita"] == "novita.ai"
     assert hosts["poyo"] == "poyo.ai"
     private, public = _keys()
-    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru"]
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"]
     good = _payload(sequence=32, sponsors=[
         {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
         {

@@ -22,6 +22,7 @@ import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feed
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented } from '../ui'
 import FlagOverrides, { flagOverridesVisible } from '../features/settings/FlagOverrides'
+import ObsSettings from '../features/settings/ObsSettings'
 import ImportPreferenceSettings from '../features/settings/ImportPreferenceSettings'
 
 type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
@@ -352,6 +353,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </div>
       </div>
       <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
+        {desktop && <ObsSettings />}
         <ImportPreferenceSettings />
         {flagOverridesVisible() && <FlagOverrides />}
       </div>

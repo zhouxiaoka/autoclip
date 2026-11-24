@@ -91,7 +91,7 @@ test('1.5.7 failed-state action per code: user-cause codes get 「去设置」, 
     }
   }
   // reasons + button copy in all 8 locales
-  for (const lang of ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh']) {
+  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     for (const key of ['去设置', '继续制作', '安装转写', ...new Set([...Object.values(settings), '当前令牌没有该模型的权限，请到服务商控制台勾选模型或更换分组。'])]) assert.ok(data[key], `${lang}: ${key}`)
   }

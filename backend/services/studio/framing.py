@@ -613,7 +613,8 @@ def _grab_shot(video: Path, abs_start: float, abs_end: float, times: list[float]
     cmd = [get_ffmpeg_path(), "-v", "error", *render_limits.input_args(),
            "-ss", f"{max(0.0, abs_start):.3f}", "-t", f"{length:.3f}", "-i", str(video),
            "-an", "-vf", f"fps={rate},select={pick},scale={FRAME_WIDTH}:-2",
-           "-fps_mode", "passthrough", "-q:v", "4", "-y", str(pattern)]
+           # Preserve small eye and nose landmarks used to follow a speaker across the shot.
+           "-fps_mode", "passthrough", "-q:v", "2", "-y", str(pattern)]
     cmd, priority = render_limits.low_priority(cmd)
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=max(30, length * 2), **priority)

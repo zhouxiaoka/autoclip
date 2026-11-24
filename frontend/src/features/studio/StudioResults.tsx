@@ -20,7 +20,7 @@ import { displayedProgress, studioRunProgress } from './studioProgress'
 import { recordSuccess } from './etaModel'
 import { settingsReturnUrl } from './settingsReturn'
 import { useWorkspace } from './useWorkspace'
-import { Scene, Draft } from './types'
+import { Scene, Draft, type OutputVariant } from './types'
 import ExportHistory from './ExportHistory'
 import PlanEditDialog from './PlanEditDialog'
 import PlanSummary from './PlanSummary'
@@ -33,7 +33,7 @@ import { workflow } from '../../analytics/observer'
 import { legacyEntrypointsHidden } from './legacyEntrypoints'
 import { clearCompletionBadge, subscribeCompletionNotice, type NoticeKind } from './noticeRuntime'
 import { noticeCopy } from './completionNotice'
-import { dismissMorePlatformBanner, morePlatformBannerSeen, stashReuseImport, suggestAnotherPlatform } from './platformMemory'
+import { dismissMorePlatformBanner, morePlatformBannerSeen, suggestAnotherPlatform } from './platformMemory'
 import { followOutputLeave } from './overrides'
 import FailureHint from '../diagnostics/FailureHint'
 import { nextLiveFailure } from '../diagnostics/failureHintPolicy'
@@ -41,13 +41,72 @@ import { nextLiveFailure } from '../diagnostics/failureHintPolicy'
 import './studio.css'
 import './quick-output.css'
 
+const REPLAY_SOURCE_LABELS: Record<string, string> = {
+  obs: 'OBS Studio',
+  twitch_archive: 'Twitch',
+  twitch_file: 'Twitch',
+  youtube_file: 'YouTube',
+  kick_file: 'Kick',
+  discord_file: 'Discord',
+}
+
+function GameplayReview({ projectId, variants, drafts }: { projectId: string; variants: OutputVariant[]; drafts: Draft[] }) {
+  const navigate = useNavigate()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [failedVideo, setFailedVideo] = useState('')
+  const playable = variants.filter(variant => variant.status === 'completed' && variant.render_job_id)
+  // Group variants by draft so Next/Previous moves between distinct highlight moments
+  // instead of making the user watch the same clip once per selected platform.
+  const groups: { draftId: string; items: OutputVariant[] }[] = []
+  for (const variant of playable) {
+    const group = groups.find(item => item.draftId === variant.draft_id)
+    if (group) group.items.push(variant)
+    else groups.push({ draftId: variant.draft_id, items: [variant] })
+  }
+  const groupIndex = groups.findIndex(group => group.items.some(item => item.id === selectedId))
+  const activeGroup = groups[groupIndex]
+  const selected = activeGroup?.items.find(item => item.id === selectedId)
+  const draft = selected && drafts.find(item => item.id === selected.draft_id)
+  const title = selected?.post?.title || draft?.title || t('精彩高光')
+  const sourceScenes = draft?.revision === selected?.draft_revision ? draft?.scenes : undefined
+  const choose = (id: string) => {
+    setFailedVideo('')
+    setSelectedId(id)
+  }
+  if (!groups.length) return null
+  return <>
+    <Btn size="sm" onClick={event => {
+      event.currentTarget.closest('.studio-results')?.querySelectorAll('video').forEach(video => video.pause())
+      choose(groups[0].items[0].id)
+    }}>{t('回看游戏高光')}</Btn>
+    {selected?.render_job_id && <Dialog open onClose={() => setSelectedId(null)} title={title}
+      description={`${groupIndex + 1} / ${groups.length} · ${platformLabel(selected.strategy_id)}`}
+      footer={<div className="studio-actions">
+        {groups.length > 1 && <>
+          <Btn disabled={groupIndex === 0} onClick={() => choose(groups[groupIndex - 1].items[0].id)}>{t('上一个切片')}</Btn>
+          <Btn disabled={groupIndex === groups.length - 1} onClick={() => choose(groups[groupIndex + 1].items[0].id)}>{t('下一个切片')}</Btn>
+        </>}
+        {draft && <Btn onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(selected.id)}`)}>{t('预览与修改')}</Btn>}
+      </div>}>
+      {activeGroup && activeGroup.items.length > 1 && <div className="studio-actions" style={{ marginBottom: 8 }}>
+        {activeGroup.items.map(variant => <Btn key={variant.id} size="sm" variant={variant.id === selected.id ? 'cta' : undefined}
+          onClick={() => choose(variant.id)}>{platformLabel(variant.strategy_id)}</Btn>)}
+      </div>}
+      <video key={selected.render_job_id} className="studio-source-video" controls playsInline preload="metadata"
+        aria-label={title} src={studioApi.video(projectId, selected.render_job_id)} onError={() => setFailedVideo(selected.id)} />
+      {failedVideo === selected.id && <p role="alert">{t('这个切片当前播放器无法解码，请下载后用系统播放器打开。')}</p>}
+      {!!sourceScenes?.length && <p className="studio-muted">{t('原片')} · {sourceScenes.map(scene => `${fmtDuration(scene.start)}–${fmtDuration(scene.end)}`).join(' / ')}</p>}
+    </Dialog>}
+  </>
+}
+
 export default function StudioResults({ project, children, onCreateCollection, onReload }: { project: Project; children: ReactNode; onCreateCollection: () => void; onReload: () => void }) {
   useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const resumeAfterSettings = new URLSearchParams(location.search || '').get('continue') === '1'
   const {workspace,error,loading,loaded,refresh} = useWorkspace(project.id)
-  const [remaking, setRemaking] = useState(false)
+  const [remaking, setRemaking] = useState<{ platforms?: string[] } | null>(null)
   const [history, setHistory] = useState(false)
   const [busy,setBusy] = useState('')
   const busyRef = useRef('')
@@ -251,30 +310,18 @@ export default function StudioResults({ project, children, onCreateCollection, o
     if (!genDone) return
     if (usedFirstWindow) setShowFullImportTip(true)
   }, [genDone, workspace.generation?.status, usedFirstWindow])
-  const alreadyPlatforms = workspace.generation?.requested_platforms || []
+  const alreadyPlatforms = [...new Set([...(workspace.generation?.requested_platforms || []), ...variants.map(v => v.strategy_id)])]
   const morePlatformId = suggestAnotherPlatform(getLocale(), alreadyPlatforms)
   const morePlatformLabel = morePlatformId === 'xiaohongshu' ? t('小红书')
     : morePlatformId === 'youtube_shorts' ? 'Shorts'
     : platformLabel(morePlatformId)
-  const startAnotherPlatform = () => {
+  const openRemake = (platforms?: string[]) => {
     dismissMorePlatformBanner()
     setBannerDismissed(true)
-    if (!project.source_url) {
-      setRemaking(true)
-      return
-    }
-    stashReuseImport({
-      platforms: [morePlatformId],
-      sourceUrl: project.source_url || undefined,
-      sourceMeta: {
-        source_url: project.source_url,
-        source_file: project.source_file,
-        video_path: project.video_path,
-        project_id: project.id,
-      },
-    })
-    navigate('/')
+    setRemaking({ platforms })
   }
+  const canRemake = loaded && workspace.analysis?.status !== 'awaiting_confirmation'
+    && (automatic ? genDone : (managed && (!hideLegacy || variants.length > 0)))
   return <div className="studio-results">
     <FailureHint active={liveFailure} project={project} />
     {doneNote && <p className="studio-done-note" role="status">{t(noticeCopy(doneNote))}</p>}
@@ -285,16 +332,17 @@ export default function StudioResults({ project, children, onCreateCollection, o
         <Btn size="sm" variant="text" onClick={() => setShowFullImportTip(false)}>{t('知道了')}</Btn>
       </div>
     </div>}
-    {remaking && <PlanEditDialog remake projectId={project.id} plan={workspace.plan} onClose={() => setRemaking(false)}
-      onSubmitted={() => { setRemaking(false); refresh() }} />}
+    {remaking && <PlanEditDialog remake projectId={project.id} plan={workspace.plan}
+      initialPlatforms={remaking.platforms} existingPlatforms={alreadyPlatforms}
+      onClose={() => setRemaking(null)}
+      onSubmitted={() => { setRemaking(null); refresh() }} />}
     {(managed || !!workspace.plan) && !automatic && workspace.analysis?.status === 'awaiting_confirmation' && workspace.plan &&
       <PlanSummary key={workspace.plan.id} projectId={project.id} plan={workspace.plan} remake
         status={workspace.analysis.status} onChanged={refresh} />}
     {automatic && workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}
-    {!(workspace.analysis?.status==='awaiting_confirmation' && !variants.length && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={resultCount} description={automatic ? generationDescription : showDraftList ? (sourceDuration != null ? t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) }) : undefined) : visual ? t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。") : t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions">
-        {managed && loaded && !automatic && (!hideLegacy || variants.length > 0) && workspace.analysis?.status !== 'awaiting_confirmation' &&
-          <Btn size="sm" disabled={loading || workspace.analysis?.status === 'running'} onClick={() => { noteLegacy('plan_adjust'); setRemaking(true) }}>{t('再做一版')}</Btn>}
-        {automatic && genDone && <Btn size="sm" disabled={loading || workspace.analysis?.status === 'running'} onClick={startAnotherPlatform}>{t('再做一版')}</Btn>}
+    {!(workspace.analysis?.status==='awaiting_confirmation' && !variants.length && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={resultCount} description={[REPLAY_SOURCE_LABELS[workspace.import_source || (workspace.material_origin === 'obs' ? 'obs' : '')], automatic ? generationDescription : showDraftList ? (sourceDuration != null ? t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) }) : undefined) : visual ? t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。") : t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")].filter(Boolean).join(' · ') || undefined} right={<div className="studio-actions">
+        {automatic && workspace.plan?.content_type === 'gameplay' && <GameplayReview key={project.id} projectId={project.id} variants={variants} drafts={workspace.drafts} />}
+        {canRemake && <Btn size="sm" disabled={loading || workspace.analysis?.status === 'running'} onClick={() => openRemake(alreadyPlatforms.length ? alreadyPlatforms : [morePlatformId])}>{t('重做')}</Btn>}
         <Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}{completedExportCount > 0 && <> <span className="ac-mono">{completedExportCount}</span></>}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>
       {progress && <div className="ac-empty studio-processing">
         <div className="studio-progress" role="progressbar" aria-busy={progress.indeterminate || undefined} aria-valuenow={progress.indeterminate ? undefined : progress.percent} aria-valuemin={progress.indeterminate ? undefined : 0} aria-valuemax={progress.indeterminate ? undefined : 100} aria-valuetext={t(progress.label)}>
@@ -341,13 +389,13 @@ export default function StudioResults({ project, children, onCreateCollection, o
     {showMorePlatform && genDone && <div className="studio-more-platform" role="status" data-testid="t1-more-platform">
       <p className="studio-muted">{morePlatformId === 'xiaohongshu' ? t('也可以再做一个小红书版本') : morePlatformId === 'youtube_shorts' ? t('也可以再做一个 Shorts 版本') : t('也可以再做一个{{platform}}版本', { platform: morePlatformLabel })}</p>
       <div className="studio-actions">
-        <Btn size="sm" variant="cta" onClick={startAnotherPlatform}>{t('用同一素材再做一个')}</Btn>
+        <Btn size="sm" variant="cta" onClick={() => openRemake([morePlatformId])}>{t('重做')}</Btn>
         <Btn size="sm" variant="text" onClick={() => { dismissMorePlatformBanner(); setBannerDismissed(true) }}>{t('知道了')}</Btn>
       </div>
     </div>}
     {actionError&&<p className="studio-error" role="alert">{actionError}</p>}
-    {(sourceCount > 0 || workspace.analysis?.coverage) && <details className="studio-details studio-source-details"><summary>{showDraftList ? t('来源片段') : visual ? t('高光片段') : t('来源片段')}{showDraftList && !!project.collections?.length && ` / ${t('合集')}`} <span className="ac-mono">{sourceCount}</span></summary>
-      {workspace.analysis?.coverage && <p className="studio-muted">{workspace.analysis.coverage.note} {t('全片初筛采样间隔约 {{seconds}} 秒。', { seconds: workspace.analysis.coverage.sample_interval.toFixed(1) })}</p>}
+    {(sourceCount > 0 || workspace.analysis?.coverage) && <details className="studio-details studio-source-details" open={workspace.events.length > 0 && !(variants.length || workspace.drafts.length)}><summary>{showDraftList ? t('来源片段') : visual ? t('高光片段') : t('来源片段')}{showDraftList && !!project.collections?.length && ` / ${t('合集')}`} <span className="ac-mono">{sourceCount}</span></summary>
+      {workspace.analysis?.coverage && <p className="studio-muted">{workspace.analysis.coverage.note}{typeof workspace.analysis.coverage.sample_interval === 'number' ? ` ${t('全片初筛采样间隔约 {{seconds}} 秒。', { seconds: workspace.analysis.coverage.sample_interval.toFixed(1) })}` : ''}</p>}
       {workspace.events.map(e=><div className="studio-source-row" key={e.id}><div><b>{e.label}</b><p className="studio-muted">{t('{{start}}–{{end}} 秒', { start: e.start.toFixed(1), end: e.end.toFixed(1) })} · {e.evidence}</p></div><div className="studio-actions"><Btn size="sm" onClick={()=>setPreview(e)}>{t("查看原片")}</Btn><Btn size="sm" disabled={!!busy} loading={busy===e.id} onClick={()=>act(e.id,async()=>{const d=await studioApi.eventDraft(project.id,e.id);navigate(`/project/${project.id}/studio/${d.id}`)})}>{t("用于新成片")}</Btn></div></div>)}
       {showDraftList && loaded && legacyCount > 0 && <div className="ac-grid-3 studio-result-grid studio-source-grid">{children}</div>}
       {!showDraftList && project.clips?.map(c=><div className="studio-source-row" key={c.id}><div><b>{c.generated_title||c.title}</b><p className="studio-muted">{c.start_time}–{c.end_time}</p></div><Btn size="sm" disabled={!!busy} loading={busy===c.id} onClick={()=>createLegacy(c)}>{t("用于新成片")}</Btn></div>)}

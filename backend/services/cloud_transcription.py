@@ -171,6 +171,16 @@ def _sse_failure(event: dict) -> CloudTranscriptionError:
 
 
 def request_chunk(client, connection, model, audio, language):
+    from backend.services.obs import billing
+    if billing.is_obs():
+        import hashlib
+        base = chat_endpoint(connection, model)['base_url']
+        return billing.run('audio', base, model, [language, audio.name, hashlib.sha256(audio.read_bytes()).hexdigest()],
+                           lambda: _send_chunk(client, connection, model, audio, language))
+    return _send_chunk(client, connection, model, audio, language)
+
+
+def _send_chunk(client, connection, model, audio, language):
     route = adapter(connection.provider, model)
     endpoint = chat_endpoint(connection, model)
     headers = {'Authorization': 'Bearer ' + endpoint['api_key']} if endpoint['api_key'] else {}
@@ -296,7 +306,8 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
                 from concurrent.futures import ThreadPoolExecutor
                 pool = ThreadPoolExecutor(max_workers=UPLOAD_WORKERS, thread_name_prefix='asr-chunk')
                 try:
-                    for part in pool.map(one, chunks):
+                    from backend.core.llm_usage import run_in_context
+                    for part in pool.map(run_in_context(one), chunks):
                         segments.extend(part)
                 finally:
                     # On a failure, chunks not yet sent are dropped instead of spending more quota.

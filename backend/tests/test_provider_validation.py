@@ -669,7 +669,7 @@ def test_e6_local_service_down_hint_exists_in_all_eight_locales():
     from backend.services.provider_validation import LOCAL_SERVICE_DOWN_HINT_KEY
 
     root = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'i18n' / 'locales'
-    langs = ('zh', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru')
+    langs = ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de')
     catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in langs}
     assert catalogs['zh'][LOCAL_SERVICE_DOWN_HINT_KEY] == LOCAL_SERVICE_DOWN_HINT_KEY
     for lang in langs:
@@ -928,7 +928,7 @@ def test_model_not_listed_warning_exists_in_all_eight_locales():
     from backend.services.provider_validation import MODEL_NOT_LISTED_WARNING
 
     root = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'i18n' / 'locales'
-    langs = ('zh', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru')
+    langs = ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de')
     catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in langs}
     assert catalogs['zh'][MODEL_NOT_LISTED_WARNING] == MODEL_NOT_LISTED_WARNING
     for lang in langs:

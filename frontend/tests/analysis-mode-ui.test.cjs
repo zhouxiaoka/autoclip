@@ -39,14 +39,14 @@ test('confirm sends explicit route with selected outputs',async()=>{
  assert.equal(x.calls[0][4],'visual');assert.deepEqual(x.calls[0][2],['highlight'])
 })
 
-test('another version uses confirmed output settings and requires a separate production confirmation', async () => {
+test('unified redo dialog submits platform auto-start in-place while manual plan edit keeps confirmation flow', async () => {
   const React = require('react')
   const { renderToStaticMarkup } = require('react-dom/server')
   const calls = []
-  let options, submit, cancel, cancelled = 0, submitted = 0
+  let pickedPlatforms, submit, cancel, cancelled = 0, submitted = 0
   const Dialog = ({ children, footer }) => React.createElement('div', null, children, footer)
   const Btn = ({ children, onClick }) => {
-    if (children === '生成新方案') submit = onClick
+    if (children === '开始重做' || children === '生成新方案') submit = onClick
     if (children === '取消') cancel = onClick
     return null
   }
@@ -54,9 +54,10 @@ test('another version uses confirmed output settings and requires a separate pro
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     'react-i18next': { useTranslation: () => ({ t: s => s }) },
     '../../ui': { Dialog, Btn },
-    './ImportPreferences': { default: ({ value }) => { options = value; return null } },
-    './types': { defaultImportOptions: { goal: 'auto', instruction: '' } },
-    './api': { studioApi: { correctPlan: async (id, body) => calls.push({ id, body }) } },
+    './ImportPreferences': { default: () => null },
+    './PlatformPicker': { default: ({ value }) => { pickedPlatforms = value; return null } },
+    './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' }, languages: [{ value: 'source', label: '原语言' }, { value: 'en', label: 'English' }] },
+    './api': { studioApi: { correctPlan: async (id, body) => calls.push({ id, body }) }, errorText: String },
   }).default
   const plan = {
     selected_goals: ['highlight'],
@@ -64,17 +65,18 @@ test('another version uses confirmed output settings and requires a separate pro
     confirmed_preferences: { goal: 'highlight', duration: 18, aspect: 'original', language: 'en' },
     goal_preferences: { highlight: { aspect: 'portrait' } },
   }
-  renderToStaticMarkup(React.createElement(component, { projectId: 'p', plan, remake: true,
-    onClose: () => cancelled++, onSubmitted: () => submitted++ }))
+  renderToStaticMarkup(React.createElement(component, {
+    projectId: 'p', plan, remake: true, initialPlatforms: ['xiaohongshu'], existingPlatforms: ['douyin'],
+    onClose: () => cancelled++, onSubmitted: () => submitted++,
+  }))
   cancel()
   assert.equal(cancelled, 1)
   assert.equal(calls.length, 0)
-  assert.equal(options.duration, 18)
-  assert.equal(options.aspect, 'portrait')
+  assert.deepEqual(JSON.parse(JSON.stringify(pickedPlatforms)), ['xiaohongshu'])
   await submit()
   assert.equal(submitted, 1)
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{ id: 'p', body: {
-    goal: 'highlight', instruction: '', auto_start: false, source_window: { start: 0, end: 90 },
-    duration: 18, aspect: 'portrait', language: 'en',
+    goal: 'auto', instruction: '', auto_start: true, platforms: ['xiaohongshu'], source_window: { start: 0, end: 90 },
+    duration: 18, aspect: null, language: 'en',
   } }])
 })

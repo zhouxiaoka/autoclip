@@ -249,7 +249,7 @@ test('catalog host helper never returns a full URL', () => {
 })
 
 test('every catalog name and hint used in the UI exists in all eight locales', () => {
-  const langs = ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']
+  const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
   const locales = Object.fromEntries(langs.map(lang => [
     lang,
     JSON.parse(fs.readFileSync(path.join(__dirname, '../src/i18n/locales', `${lang}.json`), 'utf8')),
