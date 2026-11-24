@@ -178,7 +178,8 @@ def _scope(connection):
     from backend.services.ai_model_settings import chat_endpoint
     endpoint = chat_endpoint(connection, '')
     # Credentials never leave the provider, and are never stored in this cache.
-    identity = '\0'.join((connection.provider, endpoint['base_url'], endpoint['api_key']))
+    identity = '\0'.join((connection.provider, endpoint['base_url'], endpoint['api_key'],
+                          json.dumps(endpoint.get('http_headers') or {}, sort_keys=True)))
     return 'connection:v4:' + hashlib.sha256(identity.encode()).hexdigest()
 
 
@@ -561,7 +562,7 @@ async def _discover_from_provider(connection, refresh=False):
     endpoint = chat_endpoint(connection, '')
     public = await _infistar_public(refresh) if _is_infistar(connection) else None
     local = connection.provider in {'ollama', 'lmstudio'} or (connection.base_url and is_local_url(connection.base_url))
-    if not endpoint['api_key'] and not local:
+    if not endpoint['api_key'] and not endpoint.get('http_headers') and not local:
         if public:
             raw = public['models']
             updated_at = public['updated_at']
@@ -591,7 +592,8 @@ async def _discover_from_provider(connection, refresh=False):
                 token = payload.get('nextPageToken')
                 if not token:
                     return raw
-        headers = {'Authorization': 'Bearer ' + endpoint['api_key']} if endpoint['api_key'] else {}
+        from backend.core.custom_request_options import merge_headers
+        headers = merge_headers({'Authorization': 'Bearer ' + endpoint['api_key']} if endpoint['api_key'] else {}, endpoint.get('http_headers'))
         params = {'expand': 'category'} if connection.provider == 'apimart' else None
         payload = await model_catalog._http_get_json(endpoint['base_url'] + '/models', headers=headers,
                                                       params=params,

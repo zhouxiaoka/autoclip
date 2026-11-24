@@ -107,7 +107,8 @@ export const Dialog: React.FC<{
   description?: React.ReactNode
   footer?: React.ReactNode
   children?: React.ReactNode
-}> = ({ open, onClose, title, description, footer, children }) => {
+  className?: string
+}> = ({ open, onClose, title, description, footer, children, className = '' }) => {
   const dialogRef = React.useRef<HTMLDivElement>(null)
   const titleId = React.useId()
   const closeRef = React.useRef(onClose)
@@ -120,6 +121,9 @@ export const Dialog: React.FC<{
     ) || []).filter(element => element.getClientRects().length > 0)
     ;(focusable()[0] || dialogRef.current)?.focus()
     const onKey = (e: KeyboardEvent) => {
+      // A nested settings dialog owns Escape/Tab; its parent must stay open.
+      const dialogs = document.querySelectorAll('.ac-dialog[aria-modal="true"]')
+      if (dialogs[dialogs.length - 1] !== dialogRef.current) return
       const dropdownOpen = !!document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
       if (e.key === 'Escape' && !dropdownOpen) closeRef.current()
       if (e.key !== 'Tab' || dropdownOpen) return
@@ -146,7 +150,7 @@ export const Dialog: React.FC<{
   return createPortal(
     <ConfigProvider theme={{ token: { zIndexPopupBase: 1300 } }}>
       <div className="ac-dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-        <div ref={dialogRef} className="ac-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+        <div ref={dialogRef} className={`ac-dialog${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
           <h3 id={titleId}>{title}</h3>
           {description && <p>{description}</p>}
           <div style={{ marginTop: 18 }}>{children}</div>

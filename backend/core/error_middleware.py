@@ -169,7 +169,7 @@ async def http_exception_handler_safe(request: Request, exc: HTTPException) -> J
 _SECRET_KEYS = frozenset({
     "api_key", "apikey", "api-key", "access_token", "access-token",
     "authorization", "password", "secret", "secret_key", "token",
-    "x-api-key", "x-goog-api-key",
+    "x-api-key", "x-goog-api-key", "http_headers", "extra_body", "_http_headers_text", "_extra_body_text",
 })
 
 
@@ -222,6 +222,8 @@ def validation_message(error: dict) -> str:
     for prefix in _PYDANTIC_PREFIXES:
         if msg.startswith(prefix):
             msg = msg[len(prefix):]
+    if any(str(part) in {"http_headers", "extra_body"} for part in loc):
+        return "自定义请求设置格式不对，请检查 JSON 和保留字段"
     if _loc_is_secret(loc):
         if kind == "string_too_long":
             return "密钥太长，请检查是否粘贴错了"

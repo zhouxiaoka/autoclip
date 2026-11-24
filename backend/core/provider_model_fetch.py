@@ -398,18 +398,21 @@ def fetch_provider_models(
     protocol: Optional[str] = None,
     auth: Optional[str] = None,
     http: Optional[HttpGet] = None,
+    extra_headers: Optional[Mapping[str, str]] = None,
     timeout: float = MODELS_TIMEOUT_SEC,
 ) -> AccountModelList:
     """GET ``{base}/models`` with protocol headers, pagination, and layered errors."""
     resolved_protocol = resolve_protocol(provider, protocol)
     resolved_auth = resolve_auth(provider, auth)
     host = _host(base_url)
-    preflight = _preflight(base_url, resolved_protocol, resolved_auth, api_key)
+    from backend.core.custom_request_options import CustomRequestOptions, merge_headers
+    custom = CustomRequestOptions(http_headers=extra_headers).http_headers
+    preflight = _preflight(base_url, resolved_protocol, 'none' if custom and not api_key else resolved_auth, api_key)
     if preflight:
         return _failed(preflight, host)
 
     getter = http or _default_http_get
-    headers = _headers(resolved_protocol, api_key, resolved_auth)
+    headers = merge_headers(_headers(resolved_protocol, api_key, resolved_auth), custom)
     url = _models_url(base_url, resolved_protocol)
     if resolved_protocol == "anthropic-messages":
         url = _with_query(url, limit=ANTHROPIC_PAGE_SIZE)
@@ -529,6 +532,7 @@ def list_account_models(
     protocol: Optional[str] = None,
     auth: Optional[str] = None,
     http: Optional[HttpGet] = None,
+    extra_headers: Optional[Mapping[str, str]] = None,
 ) -> AccountModelList:
     """Public entry: fetch, intersect with preset candidates, backfill order."""
     return fetch_provider_models(
@@ -538,6 +542,7 @@ def list_account_models(
         protocol=protocol,
         auth=auth,
         http=http,
+        **({'extra_headers': extra_headers} if extra_headers else {}),
     )
 
 
@@ -547,9 +552,11 @@ def get_models(
     provider: str = "compatible",
     *,
     http: Optional[HttpGet] = None,
+    extra_headers: Optional[Mapping[str, str]] = None,
 ) -> tuple[list[str], Optional[ClassifiedUpstreamError], AccountModelList]:
     """Drop-in for settings validation: ``(ids, error, full_result)``."""
-    result = list_account_models(base_url=base, api_key=api_key, provider=provider, http=http)
+    result = list_account_models(base_url=base, api_key=api_key, provider=provider, http=http,
+                                 **({'extra_headers': extra_headers} if extra_headers else {}))
     if not result.ok:
         classified = _as_classified(result.error_type or UpstreamErrorType.UNKNOWN)
         if result.hint_key:

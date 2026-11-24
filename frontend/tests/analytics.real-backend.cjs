@@ -35,6 +35,7 @@ function load(name, mocks = {}, globals = {}) {
         const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../../backend/core/event_catalog.json'), 'utf8'))
         return { default: data, __esModule: true }
       }
+      if (id === './requestOptions') return loadTs('requestOptions.ts')
       if (id === './errorText') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'))
       if (id === './runtime') return load('runtime', {}, globals)
       if (id === '../utils/apiConfig') {
@@ -1505,4 +1506,25 @@ test('a launch-frozen distinct id does not overwrite a newer backend id', async 
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(identity, [])
   assert.equal(ph.isAnalyticsEnabled(), true)
+})
+
+
+test('advanced request draft secrets never enter provider-save telemetry', async () => {
+  const s = setup()
+  const initial = modelFixture()
+  initial.connections[0].provider = 'compatible'
+  initial.connections[0]._http_headers_text = '{"X-Workspace":"fixture-private-header"}'
+  initial.connections[0]._extra_body_text = '{"provider_options":{"private":"fixture-private-body"}}'
+  initial.connections[0].reasoning_effort = 'high'
+  const render = settingsHook(s, {
+    discover: async () => ({models:[],source:'catalog',preview:true}),
+    test: async () => ({success:true, result:'ok'}),
+    save: async value => ({...value,saved:true}),
+  }, initial)
+  await render().load()
+  assert.equal((await render().save()).ok, true)
+  const telemetry = JSON.stringify(s.events)
+  for (const value of ['fixture-private-header', 'fixture-private-body', '_http_headers_text', '_extra_body_text']) {
+    assert.equal(telemetry.includes(value), false)
+  }
 })

@@ -227,8 +227,9 @@ def _html_or_classify(status: int, text: str, content_type: str) -> ClassifiedUp
     return None
 
 
-def _get_models(base: str, api_key: str, provider: str = 'compatible'):
-    models, error, fetched = fetch_account_models(base, api_key, provider)
+def _get_models(base: str, api_key: str, provider: str = 'compatible', *, options=None):
+    models, error, fetched = fetch_account_models(base, api_key, provider,
+        **({'extra_headers': options['http_headers']} if options and options.get('http_headers') else {}))
     return models, error, fetched
 
 
@@ -272,6 +273,13 @@ def _non_stream_completion(payload: Any) -> bool:
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         return False
     return bool(_completion_text(choices[0].get('message')))
+
+
+def _chat_headers(api_key: str, options=None):
+    from backend.core.custom_request_options import merge_headers
+    custom = (options or {}).get('http_headers')
+    auth = {'Authorization': 'Bearer ' + (api_key or 'EMPTY')} if api_key or not custom else {}
+    return merge_headers({**auth, 'Content-Type': 'application/json'}, custom)
 
 
 def _has_reasoning_output(payload: Any) -> bool:
@@ -325,7 +333,7 @@ def _sse_completion_text(text: str) -> str:
     return ''.join(parts).strip()
 
 
-def _probe(base: str, api_key: str, model: str, provider: str = 'compatible') -> Optional[ClassifiedUpstreamError]:
+def _probe(base: str, api_key: str, model: str, provider: str = 'compatible', *, options=None) -> Optional[ClassifiedUpstreamError]:
     import httpx
     from backend.core.llm_providers import (
         asks_for_max_completion_tokens,
@@ -336,15 +344,16 @@ def _probe(base: str, api_key: str, model: str, provider: str = 'compatible') ->
     )
     from backend.core.upstream_errors import symbolic_error_code
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
-    payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
+    from backend.core.custom_request_options import apply_chat_options
+    payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, apply_chat_options({
         'model': model,
         'messages': [{'role': 'user', 'content': 'ok'}],
         'max_tokens': tokens,
-    })))
+    }, options or {}))))
     # Hosts such as APIMart default to text/event-stream unless this is false.
     payload['stream'] = False
     url = base.rstrip('/') + '/chat/completions'
-    headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+    headers = _chat_headers(api_key, options)
     from backend.core import gemini_transport
     native = gemini_transport.is_official_gemini(provider, base)
     if native:
@@ -539,7 +548,9 @@ def _validate_resolved(
     if resolved.provider == 'compatible' and not base:
         return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     api_key = resolved.api_key or ''
-    models, models_error, fetched = _get_models(base, api_key, resolved.provider)
+    from backend.core.custom_request_options import request_options
+    options = request_options(resolved)
+    models, models_error, fetched = _get_models(base, api_key, resolved.provider, **({'options': options} if options else {}))
     list_known = models_error is None
     advisory = _custom_or_local_compat(resolved, base)
     if models_error and advisory and _models_unsupported(models_error, fetched):
@@ -574,7 +585,7 @@ def _validate_resolved(
     warning = ''
     if list_known and not fetched.truncated and advisory and selected not in models:
         warning = MODEL_NOT_LISTED_WARNING
-    probe_error = _probe(base, api_key, selected, provider=resolved.provider)
+    probe_error = _probe(base, api_key, selected, provider=resolved.provider, **({'options': options} if options else {}))
     if probe_error:
         return _failed(probe_error, base, hint, models, **extras,
                        http_status=getattr(probe_error, 'http_status', None),
@@ -616,6 +627,7 @@ def fetch_list_for_connection(connection: ai_models.Connection, *, http=None) ->
         api_key=resolved.api_key or '',
         provider=resolved.provider,
         http=http,
+        **({'extra_headers': resolved.http_headers} if resolved.http_headers else {}),
     )
 
 
@@ -722,7 +734,7 @@ def _response_format_400(text: str) -> bool:
     return any(token in blob for token in ('response_format', 'json_object', 'structured output', 'structured_output'))
 
 
-def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: str = 'compatible') -> dict:
+def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: str = 'compatible', *, options=None) -> dict:
     """One chat completion for the trial. Returns timing + classification flags."""
     import time
     import httpx
@@ -734,16 +746,17 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
         token_param_kwargs,
     )
 
-    payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, {
+    from backend.core.custom_request_options import apply_chat_options
+    payload = http_chat_body(token_param_kwargs(model, base, guarded_chat_kwargs(base, apply_chat_options({
         'model': model,
         'messages': [{'role': 'user', 'content': full_input}],
         'max_tokens': TRIAL_MAX_TOKENS,
-    })))
+    }, options or {}))))
     payload['stream'] = False
     # Prefer JSON object mode when the gateway understands it; ignore 400 and retry once without.
     payload['response_format'] = {'type': 'json_object'}
     url = base.rstrip('/') + '/chat/completions'
-    headers = {'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'}
+    headers = _chat_headers(api_key, options)
     from backend.core import gemini_transport
     native = gemini_transport.is_official_gemini(provider, base)
     if native:
@@ -809,6 +822,7 @@ def trial_run(
     language: str = 'zh',
     sleep=None,
     provider: str = 'compatible',
+    options=None,
 ) -> dict:
     """Send the sample SRT through the real outline prompt three times (1s apart).
 
@@ -825,7 +839,7 @@ def trial_run(
     full_input = f"{prompt}\n\n输入内容：\n{_json.dumps({'text': plain}, ensure_ascii=False)}"
     attempts: list[dict] = []
     for index in range(TRIAL_ATTEMPTS):
-        attempts.append(_trial_once(base, api_key, model, full_input, provider=provider))
+        attempts.append(_trial_once(base, api_key, model, full_input, provider=provider, **({'options': options} if options else {})))
         if index + 1 < TRIAL_ATTEMPTS:
             sleeper(TRIAL_GAP_SEC)
     latencies = [a['ms'] for a in attempts]
@@ -896,7 +910,9 @@ def validate_connection_with_probe(
         return result
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']
-    trial = trial_run(base, resolved.api_key or '', model.strip(), language=language, provider=resolved.provider)
+    from backend.core.custom_request_options import request_options
+    options = request_options(resolved)
+    trial = trial_run(base, resolved.api_key or '', model.strip(), language=language, provider=resolved.provider, **({'options': options} if options else {}))
     result.probe_kind = 'trial'
     result.trial_context_ok = trial['trial_context_ok']
     result.trial_rate_limited = trial['trial_rate_limited']

@@ -90,6 +90,7 @@ test('catalog, detail and import card drop promotion together and keep the provi
     './sponsorPromoState': state,
   }).default
   const Detail = loadTs('ProviderDetail.tsx', {
+    './CustomRequestOptions': { default: () => null },
     react: { ...React, useRef: current => ({ current }) },
     '../../i18n': i18n,
     '../../ui': ui,

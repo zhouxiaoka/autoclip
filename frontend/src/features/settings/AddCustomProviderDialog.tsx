@@ -4,6 +4,8 @@ import { t } from '../../i18n'
 import { Btn, Dialog, Row } from '../../ui'
 import { beginExperience } from '../../analytics/experience'
 import { modelSettingsApi } from './modelSettingsApi'
+import CustomRequestOptions from './CustomRequestOptions'
+import { requestOptionsIssue } from './requestOptions'
 import {
   MODEL_TYPES,
   addManualModel,
@@ -36,6 +38,7 @@ const ISSUE_COPY = {
   models: '请至少启用一个模型',
   model_id: '请输入模型 ID',
   duplicate: '该模型 ID 已在列表中。',
+  request_options: '自定义请求设置无效，请检查 JSON 和保留字段。',
 } as const
 
 /**
@@ -75,7 +78,7 @@ export default function AddCustomProviderDialog({
   }
   const close = () => { if (!matchingRef.current) { reset(); onClose() } }
 
-  const editCredentials = (patch: Partial<Pick<CustomProviderDraft, 'base_url' | 'api_key'>>) => {
+  const editCredentials = (patch: Partial<CustomProviderDraft>) => {
     if (!Object.entries(patch).some(([key, value]) => draft[key as keyof typeof patch] !== value)) return
     fetchGen.current += 1
     setFetching(false)
@@ -86,6 +89,10 @@ export default function AddCustomProviderDialog({
   }
 
   const fetchModels = async () => {
+    if (requestOptionsIssue(draft)) {
+      setNote(t(ISSUE_COPY.request_options))
+      return
+    }
     if (draftUrlIssue(draft.base_url)) {
       setNote(t(ISSUE_COPY.url))
       return
@@ -168,6 +175,7 @@ export default function AddCustomProviderDialog({
           onChange={e => editCredentials({ api_key: e.target.value })}
           onBlur={e => editCredentials({ api_key: e.target.value.trim() })} />
       </Row>
+      <CustomRequestOptions value={draft} onEdit={editCredentials} />
       <Row wide stack label={t('服务商名称')}>
         <input className="ac-input" aria-label={t('服务商名称')} value={draft.name}
           placeholder={t('可选')}

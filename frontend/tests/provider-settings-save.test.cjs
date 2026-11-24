@@ -331,3 +331,108 @@ test('testing a catalog connection after editing its base_url reuses the same co
     [id, 'https://gateway.example/final/v1', 'trial'],
   ])
 })
+
+test('a delayed save keeps later Header edits dirty and advances the server baseline for the next PUT', async () => {
+  const initial = whisperSettings()
+  initial.revision = 2
+  initial.connections[0] = { ...initial.connections[0], provider: 'compatible', base_url: 'https://fixture.invalid/v1', api_key: '', has_key: false, has_http_headers: false }
+  const writes = []
+  let release, notifications = 0
+  const reply = body => ({ ...body, revision: writes.length + 2, saved: true,
+    connections: body.connections.map(c => { const { http_headers, ...publicRow } = c; return { ...publicRow, api_key: null, has_key: false, has_http_headers: !!http_headers && Object.keys(http_headers).length > 0,
+      ...(writes.length === 1 ? { validation_status: 'failed', validation_error_type: 'invalid_key', failed_model_checks: [{ purpose: 'analysis', model: 'qwen-plus' }] } : {}) } }),
+  })
+  const wireApi = loadTs('modelSettingsApi.ts', {
+    '../../services/api': { default: { put: async (_url, body) => {
+      writes.push(structuredClone(body))
+      if (writes.length === 1) return new Promise(resolve => { release = () => resolve(reply(body)) })
+      return reply(body)
+    } } }, '../../utils/apiConfig': {},
+  }).modelSettingsApi
+  const render = settingsHook(initial, { save: wireApi.save }, false, undefined, () => { notifications++ })
+  await render().load()
+  render().update({ chunk_size: 6000 })
+  const saving = render().save()
+  assert.equal(writes.length, 1)
+  let store = render()
+  store.editConnection(store.settings.connections[0], { _http_headers_text: '{"X-Workspace":"fixture-late-header"}' })
+  assert.equal(render().dirty, true)
+  release()
+  assert.equal((await saving).ok, true)
+  store = render()
+  assert.equal(store.settings.connections[0]._http_headers_text, '{"X-Workspace":"fixture-late-header"}')
+  assert.equal(store.settings.revision, 3)
+  assert.equal(store.settings.connections[0].validation_status, 'unchecked')
+  assert.equal(store.settings.connections[0].validation_error_type, '')
+  assert.deepEqual(JSON.parse(JSON.stringify(store.settings.connections[0].failed_model_checks)), [])
+  assert.equal(store.dirty, true)
+  assert.equal(notifications, 0)
+  assert.equal((await store.save()).ok, true)
+  assert.equal(writes[1].revision, 3)
+  assert.deepEqual(writes[1].connections[0].http_headers, { 'X-Workspace': 'fixture-late-header' })
+  assert.deepEqual(writes[1].edited_fields, ['connections'])
+  assert.equal(writes[1].connections[0].validation_status, 'unchecked')
+  assert.equal(writes[1].connections[0].validation_error_type, '')
+  assert.deepEqual(writes[1].connections[0].failed_model_checks, [])
+  assert.equal(render().dirty, false)
+  assert.equal(render().settings.revision, 4)
+  assert.equal(notifications, 1)
+})
+
+test('concurrent endpoint drift retains the original Header draft and blocks traffic until an explicit reload', async () => {
+  const initial = whisperSettings()
+  initial.connections[0] = { ...initial.connections[0], provider: 'compatible', base_url: 'https://original-fixture.invalid/v1', api_key: '', has_key: false }
+  let server = structuredClone(initial), release, puts = 0
+  const discoveries = []
+  const render = settingsHook(initial, {
+    get: async () => structuredClone(server),
+    discover: async connection => { discoveries.push(structuredClone(connection)); return { models: [], source: 'catalog', preview: true } },
+    save: async body => { puts++; return new Promise(resolve => { release = () => {
+      server = { ...body, revision: 5, connections: body.connections.map(c => ({ ...c, base_url: 'https://different-fixture.invalid/v1' })) }
+      resolve(server)
+    } }) },
+  })
+  await render().load()
+  discoveries.length = 0
+  render().update({ chunk_size: 6000 })
+  const saving = render().save()
+  let store = render()
+  store.editConnection(store.settings.connections[0], { _http_headers_text: '{"X-Workspace":"fixture-original-only"}' })
+  render()
+  release()
+  await saving
+  store = render()
+  assert.equal(store.settings.connections[0].base_url, initial.connections[0].base_url)
+  assert.equal(store.settings.connections[0]._request_scope_conflict, true)
+  assert.equal(store.settings.connections[0]._http_headers_text, '{"X-Workspace":"fixture-original-only"}')
+  assert.equal(store.dirty, true)
+  assert.equal(store.conflicted, true)
+  assert.equal((await store.save()).ok, false)
+  await store.discover(store.settings.connections[0])
+  assert.equal(discoveries.length, 0)
+  assert.equal(puts, 1)
+  await store.load()
+  store = render()
+  assert.equal(store.settings.connections[0].base_url, 'https://different-fixture.invalid/v1')
+  assert.equal(store.settings.connections[0]._request_scope_conflict, undefined)
+  assert.equal(store.settings.connections[0]._http_headers_text, undefined)
+  assert.equal(store.conflicted, false)
+  assert.equal(store.dirty, false)
+  assert.ok(discoveries.every(c => c._http_headers_text !== '{"X-Workspace":"fixture-original-only"}'))
+})
+
+test('Header-only catalog quick/trial actions reach the wire API using only their selected account', async () => {
+  const initial = whisperSettings()
+  initial.connections[0] = { ...initial.connections[0], provider: 'compatible', base_url: 'https://openrouter.ai/api/v1', api_key: null, has_key: false, has_http_headers: true }
+  const calls = []
+  const api = loadTs('modelSettingsApi.ts', {
+    '../../services/api': { default: { post: async (_url, body) => { calls.push(structuredClone(body)); return { ok: true, result: 'ok', normalized_base_url: body.connection.base_url } } } },
+    '../../utils/apiConfig': {},
+  }).modelSettingsApi
+  const render = settingsHook(initial, { test: api.test })
+  await render().load()
+  for (const kind of ['quick', 'trial']) await render().testCatalogProvider('openrouter', render().settings.connections[0], kind)
+  assert.equal(calls.length, 2)
+  assert.ok(calls.every(call => call.connection.id === 'ds' && call.connection.api_key === null))
+  assert.ok(calls.every(call => !('has_http_headers' in call.connection)))
+})

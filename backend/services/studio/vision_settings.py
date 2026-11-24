@@ -22,12 +22,13 @@ from typing import Literal
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from backend.core.path_utils import get_data_directory
+from backend.core.custom_request_options import CustomRequestOptions
 
 _lock = threading.RLock()
 VisionMode = Literal['text_model', 'custom']
 
 
-class VisionSettingsInput(BaseModel):
+class VisionSettingsInput(CustomRequestOptions):
     mode: VisionMode = 'custom'
     base_url: str = Field(default='', max_length=1000)
     model: str = Field(default='', max_length=200)
@@ -158,8 +159,20 @@ def merge(body: VisionSettingsInput):
     previous = _saved() or _environment() or {}
     if body.mode == 'text_model':
         return {'mode': 'text_model', 'timeout': body.timeout, 'verified': previous.get('verified')}
-    value = body.model_dump(exclude={'api_key', 'clear_key'})
-    old_key = previous.get('api_key', '') if previous.get('mode', 'custom') == 'custom' else ''
+    value = body.model_dump(exclude={'api_key', 'clear_key', 'http_headers', 'reasoning_effort', 'extra_body'})
+    from backend.core.custom_request_options import request_options
+    value.update(request_options(body))
+    old_custom = previous.get('mode', 'custom') == 'custom'
+    old_key = previous.get('api_key', '') if old_custom else ''
+    old_headers = (previous.get('http_headers') or {}) if old_custom else {}
+    previous_base = (previous.get('base_url') or '').strip().rstrip('/').removesuffix('/chat/completions')
+    changed_address = old_custom and previous_base != body.base_url
+    if changed_address and old_key and body.api_key is None and not body.clear_key:
+        raise UserFacingError('服务地址已改变，请重新填写 API Key')
+    if body.http_headers is None and old_headers:
+        if changed_address:
+            raise UserFacingError('服务地址已改变，请重新填写 HTTP Headers')
+        value['http_headers'] = dict(old_headers)
     value['api_key'] = '' if body.clear_key else body.api_key if body.api_key is not None else old_key
     value['verified'] = previous.get('verified')
     return value

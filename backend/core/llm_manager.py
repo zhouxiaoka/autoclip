@@ -220,6 +220,7 @@ class LLMManager:
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
         route_identity: Dict[str, Any] = {}
+        custom_request_options = {}
         from backend.services import ai_model_settings as ai
         try:
             configured = ai.load()
@@ -230,7 +231,9 @@ class LLMManager:
             connection = ai.connection_for(configured, binding)
             endpoint = ai.chat_endpoint(connection, binding.model)
             from backend.services.studio.failure_identity import connection_identity
+            from backend.core.custom_request_options import request_options
             route_identity = connection_identity(connection, binding.model)
+            custom_request_options = request_options(endpoint)
             source = getattr(binding, 'model_source', None) or getattr(binding, 'source', None)
             if source not in ('preset', 'user'):
                 source = 'user'
@@ -242,6 +245,7 @@ class LLMManager:
                                     min_score_threshold=configured.min_score_threshold,
                                     max_clips_per_collection=configured.max_clips_per_collection)
         self._route_identity = route_identity  # kept off settings: settings.json is saved verbatim
+        self._custom_request_options = custom_request_options  # header secrets must stay out of legacy settings
         # Failed loads must remain retryable; never mark a broken assignment as loaded.
         self._settings_mtime = self._current_settings_mtime()
         self._settings_hash = self._current_settings_hash()
@@ -387,8 +391,10 @@ class LLMManager:
         """提供商构造参数：OpenAI 兼容接口的 base_url；通义千问国际站也复用同一个字段（走兼容模式）"""
         if provider_type == ProviderType.OPENAI:
             base_url = (self.settings.get("openai_base_url") or "").strip()
-            if base_url:
-                return {"base_url": base_url}
+            from backend.core.custom_request_options import request_options
+            options = request_options(getattr(self, '_custom_request_options', None) or {})
+            if base_url or options:
+                return {**({'base_url': base_url} if base_url else {}), **options}
         if provider_type == ProviderType.DASHSCOPE:
             base_url = (self.settings.get("dashscope_base_url") or "").strip()
             if base_url:
@@ -510,6 +516,8 @@ class LLMManager:
             or ""
         )
         key = str(getattr(provider, "api_key", "") or "")
+        if getattr(provider, "kwargs", {}).get("http_headers"):
+            key = str(getattr(provider, "_configured_api_key", key) or "")
         catalog = analysis_catalog(
             identity=route.identity if isinstance(route.identity, dict) else {},
             base_url=base,
@@ -561,10 +569,12 @@ class LLMManager:
         if not consume_chunk_call():
             raise error
         catalog, base, key = self._analysis_endpoint(route)
+        headers = getattr(route.provider, 'kwargs', {}).get('http_headers')
+        auth_options = {'extra_headers': headers} if headers else {}
         failed = sent or asked
         alt = resolve_available_analysis_model(
             base_url=base, api_key=key, provider=catalog,
-            failed_model=failed, exclude=(asked, sent),
+            failed_model=failed, exclude=(asked, sent), **auth_options,
         )
         if not alt or alt == failed:
             raise error
@@ -574,7 +584,7 @@ class LLMManager:
         except Exception:
             raise
         else:
-            remember_model(catalog, base, key, asked, alt, purpose="analysis")
+            remember_model(catalog, base, key, asked, alt, purpose="analysis", **auth_options)
             return response, chosen
         finally:
             llm_telemetry.reset_retry_count(token)
@@ -603,8 +613,10 @@ class LLMManager:
         saved = str(info.get("model") or getattr(provider, "model_name", "") or "").strip()
         asked = str(override).strip() if isinstance(override, str) and str(override).strip() else saved
         catalog, base, key = self._analysis_endpoint(route)
+        headers = getattr(provider, 'kwargs', {}).get('http_headers')
+        auth_options = {'extra_headers': headers} if headers else {}
         allow_substitute = route.settings.get("model_source") != "user"
-        cached = remembered_model(catalog, base, key, asked, purpose="analysis") if asked and allow_substitute else None
+        cached = remembered_model(catalog, base, key, asked, purpose="analysis", **auth_options) if asked and allow_substitute else None
         if cached:
             override = cached
         sent = cached or asked
