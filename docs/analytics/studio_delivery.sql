@@ -10,7 +10,7 @@ FROM events
 WHERE timestamp >= now() - INTERVAL 7 DAY
   AND properties.studio_schema_version = 2
   AND properties.analytics_environment = 'production'
-  AND properties.material_origin IN ('sample', 'user', 'unknown')
+  AND properties.material_origin IN ('sample', 'user', 'obs', 'unknown')
   AND properties.artifact_id IS NOT NULL
   AND (event = 'studio_download_saved'
        OR (event IN ('studio_export_finished', 'social_publish_finished')

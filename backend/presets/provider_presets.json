@@ -10,6 +10,15 @@
     "api.88api.ai": "api88",
     "apimart.ai": "apimart",
     "api.apimart.ai": "apimart",
+    "cometapi.com": "cometapi",
+    "api.cometapi.com": "cometapi",
+    "www.cometapi.com": "cometapi",
+    "novita.ai": "novita",
+    "api.novita.ai": "novita",
+    "novita-ai": "novita",
+    "poyo.ai": "poyo",
+    "api.poyo.ai": "poyo",
+    "poyo-ai": "poyo",
     "deepseek-ai": "deepseek",
     "moonshot": "kimi",
     "moonshotai-cn": "kimi",
@@ -196,6 +205,132 @@
       },
       "auth": "api_key",
       "billing_probe": "new_api"
+    },
+    "cometapi": {
+      "display_name": "CometAPI",
+      "ui_name": "CometAPI",
+      "short_name": "CometAPI",
+      "catalog_label": "CometAPI",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.cometapi.com/v1",
+      "accepted_hosts": [
+        "api.cometapi.com"
+      ],
+      "capabilities": [
+        "language",
+        "image",
+        "video"
+      ],
+      "docs_url": "https://api.cometapi.com/",
+      "referral": "https://www.cometapi.com/?ref=kris",
+      "locked": true,
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "cometapi_api_key",
+      "placeholder": "sk-…",
+      "hint": "CometAPI 聚合网关。一个 Key 调用多款主流模型，接口地址已预设。",
+      "cloud_hint": "CometAPI 聚合网关。一个 Key 调用多款主流模型，接口地址已预设。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "deepseek-chat",
+          "gpt-4o-mini",
+          "gemini-2.5-flash"
+        ],
+        "vision": [
+          "gpt-4o-mini",
+          "gemini-2.5-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
+    },
+    "novita": {
+      "display_name": "Novita AI",
+      "ui_name": "Novita AI",
+      "short_name": "Novita AI",
+      "catalog_label": "Novita AI",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.novita.ai/v3/openai",
+      "accepted_hosts": [
+        "api.novita.ai"
+      ],
+      "capabilities": [
+        "language"
+      ],
+      "docs_url": "https://novita.ai/settings/key-management",
+      "referral": "https://novita.ai/?ref=nzvindf&utm_source=affiliate",
+      "locked": true,
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "novita_api_key",
+      "placeholder": "sk_…",
+      "hint": "Novita AI 推理平台。高性价比主流开源与闭源模型，接口地址已预设。",
+      "cloud_hint": "Novita AI 推理平台。高性价比主流开源与闭源模型，接口地址已预设。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "deepseek/deepseek-v3-0324",
+          "qwen/qwen-2.5-72b-instruct"
+        ],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
+    },
+    "poyo": {
+      "display_name": "PoYo AI",
+      "ui_name": "PoYo AI",
+      "short_name": "PoYo AI",
+      "catalog_label": "PoYo AI",
+      "group": "popular",
+      "protocol": "openai-completions",
+      "base_url": "https://api.poyo.ai/v1",
+      "accepted_hosts": [
+        "api.poyo.ai"
+      ],
+      "capabilities": [
+        "language",
+        "image",
+        "video"
+      ],
+      "docs_url": "https://poyo.ai/",
+      "referral": "https://poyo.ai/?affiliate_code=christ520482&open_signup=1",
+      "locked": true,
+      "default_model": "",
+      "catalog": [],
+      "catalog_image": [],
+      "openai_compat_remap": true,
+      "legacy_ui": true,
+      "api_key_setting": "poyo_api_key",
+      "placeholder": "sk-…",
+      "hint": "PoYo AI 聚合网关。一个 Key 调用语言、图像和视频模型，接口地址已预设。",
+      "cloud_hint": "PoYo AI 聚合网关。一个 Key 调用语言、图像和视频模型，接口地址已预设。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "deepseek-chat",
+          "gpt-4o-mini",
+          "gemini-2.5-flash"
+        ],
+        "vision": [
+          "gpt-4o-mini",
+          "gemini-2.5-flash"
+        ],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key"
     },
     "deepseek": {
       "display_name": "DeepSeek",
@@ -1224,19 +1359,23 @@
       "bailian.console.aliyun.com",
       "chat.deepseek.com",
       "chatgpt.com",
+      "cometapi.com",
       "console.cloud.google.com",
       "console.volcengine.com",
       "console.x.ai",
       "dashscope.console.aliyun.com",
       "deepseek.com",
       "makersuite.google.com",
+      "novita.ai",
       "openai.com",
       "platform.deepseek.com",
       "platform.moonshot.cn",
       "platform.openai.com",
+      "poyo.ai",
       "www.88api.ai",
       "www.aliyun.com",
       "www.apimart.ai",
+      "www.cometapi.com",
       "www.deepseek.com",
       "www.infistar.ai",
       "www.infistar.cc",

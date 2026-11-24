@@ -69,6 +69,13 @@ def create_app(mode: str = "web") -> FastAPI:
     
     # 设置应用状态
     app.state.mode = mode
+    if mode == "desktop":
+        from backend.api.v1.replay_channels import router as replay_router
+        app.include_router(replay_router, prefix="/api/v1/replay-channels")
+        from backend.api.v1.obs import router as obs_router
+        from backend.services.obs.listener import Monitor
+        app.state.obs = Monitor()
+        app.include_router(obs_router, prefix="/api/v1/obs")
     
     # 来源守卫在内、CORS 在外：预检由 CORS 应答，其他网页的写请求由守卫拦下。
     # 以前是 allow_origins=["*"] + allow_credentials，任意网页都能读设置里的 API Key。
@@ -132,7 +139,9 @@ def create_app(mode: str = "web") -> FastAPI:
         
         # 根据模式进行不同的初始化
         if mode == "desktop":
+            import asyncio
             from backend.services.diagnostics import queue, upload
+            from backend.services.replay_channels import maintain_twitch
             try:
                 queue.clean_unclaimed_excerpts()
             except (OSError, ValueError):
@@ -140,6 +149,8 @@ def create_app(mode: str = "web") -> FastAPI:
             if any(row.get("status") in queue.OPEN or row.get("status") == "delete_pending"
                    for row in queue.list_items()):
                 upload.wake()
+            app.state.replay_validation = asyncio.create_task(maintain_twitch())
+            app.state.obs.start()
             logger.info("桌面模式：使用本地队列和 SQLite")
         else:
             logger.info("Web 模式：使用 Redis/Celery")
@@ -150,6 +161,14 @@ def create_app(mode: str = "web") -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown_event():
         logger.info("正在关闭 AutoClip API 服务...")
+        if mode == "desktop":
+            import asyncio
+            from backend.services import replay_channels
+            app.state.replay_validation.cancel()
+            await asyncio.gather(app.state.replay_validation, return_exceptions=True)
+            for provider in replay_channels.locks:
+                await asyncio.to_thread(replay_channels.stop_attempt, provider)
+            await app.state.obs.stop()
         from backend.services import child_guard
         child_guard.kill_all()
         logger.info("WebSocket 网关服务已禁用")

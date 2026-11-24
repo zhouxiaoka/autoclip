@@ -10,7 +10,7 @@
 
 ## 文件状态
 - ✅ README.md
-- ✅ README-EN.md
+- ✅ README-ZH.md
 - ✅ .github/README.md
 
 ## 建议

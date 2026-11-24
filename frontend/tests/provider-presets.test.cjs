@@ -12,13 +12,13 @@ const HOSTS = [
   'infistar.cc', 'api.88api.ai', 'localhost:11434', 'localhost:1234',
 ]
 
-test('the shared JSON lists 40 providers in the four product groups', () => {
+test('the shared JSON lists 43 providers in the four product groups', () => {
   const groups = Object.values(catalog.providers).reduce((acc, row) => {
     acc[row.group] = (acc[row.group] || 0) + 1
     return acc
   }, {})
-  assert.equal(Object.keys(catalog.providers).length, 40)
-  assert.deepEqual(groups, { recommended: 1, popular: 11, local: 4, more: 24 })
+  assert.equal(Object.keys(catalog.providers).length, 43)
+  assert.deepEqual(groups, { recommended: 1, popular: 14, local: 4, more: 24 })
 })
 
 test('current settings dropdown still reads addresses and defaults from the JSON', () => {

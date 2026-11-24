@@ -5,19 +5,25 @@
  */
 import { FIRST_RUN_CHOICES, FIRST_RUN_DEFAULT } from './firstRunGuidance'
 import { PROVIDERS } from './providers'
-import { TRUSTED_REGISTER_HOSTS } from './sponsorPromoState'
+import {
+  TRUSTED_REGISTER_HOSTS,
+  readPromoLocale,
+  type LocalePromoSlice,
+} from './sponsorPromoState'
 
 const STATUSES = new Set(['healthy', 'fault', 'out_of_service'])
+const SUPPORTED_LOCALES = new Set(['zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru', 'id', 'tr', 'vi', 'de'])
 
-const PROMO_CHOICES = ['apimart', 'api88', 'infistar', 'other'] as const
-const NOTICE_IDS = ['apimart', 'api88', 'infistar'] as const
+const NOTICE_IDS = Object.keys(TRUSTED_REGISTER_HOSTS)
+const PROMO_CHOICES = [...NOTICE_IDS, 'other']
 
 export interface AppliedSponsorPromo {
-  choices: Array<(typeof PROMO_CHOICES)[number]>
-  defaultChoice: (typeof PROMO_CHOICES)[number]
+  choices: string[]
+  defaultChoice: string
   notices: Record<string, Record<string, string>>
   registerUrls: Record<string, string>
   statuses: Record<string, string>
+  byLocale?: Record<string, LocalePromoSlice>
   sequence?: number
   revision?: number
   /** Process epoch of the publisher. A restart mints a new one and resets revision. */
@@ -51,25 +57,57 @@ function unwrap(response: unknown): Record<string, unknown> | null {
   return body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null
 }
 
+function parseSlice(
+  rawChoices: unknown,
+  rawDefault: unknown,
+  rawUrls: unknown,
+  statuses: Record<string, string>,
+): LocalePromoSlice | null {
+  if (!Array.isArray(rawChoices) || typeof rawDefault !== 'string') return null
+  const choices: string[] = []
+  for (const id of rawChoices) {
+    if (typeof id !== 'string' || !PROMO_CHOICES.includes(id) || choices.includes(id)) return null
+    if (statuses[id] === 'out_of_service') return null
+    choices.push(id)
+  }
+  if (choices[choices.length - 1] !== 'other') return null
+  const defaultChoice = choices.includes(rawDefault) ? rawDefault : choices[0]
+  const registerUrls: Record<string, string> = {}
+  const urlMap = rawUrls && typeof rawUrls === 'object' ? rawUrls as Record<string, unknown> : {}
+  for (const id of choices) {
+    if (id === 'other') continue
+    const url = urlMap[id]
+    if (typeof url !== 'string') continue
+    if (hostOf(url) !== packagedHost(id) || !url.startsWith('https://')) return null
+    registerUrls[id] = url
+  }
+  return { choices, defaultChoice, registerUrls }
+}
+
 export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
   if (!view || typeof view !== 'object' || Array.isArray(view)) return null
   const record = view as Record<string, unknown>
-  if (!Array.isArray(record.choices) || typeof record.default !== 'string') return null
-  const choices: Array<(typeof PROMO_CHOICES)[number]> = []
-  for (const id of record.choices) {
-    if (typeof id !== 'string' || !PROMO_CHOICES.includes(id as (typeof PROMO_CHOICES)[number]) || choices.includes(id as (typeof PROMO_CHOICES)[number])) return null
-    choices.push(id as (typeof PROMO_CHOICES)[number])
-  }
-  if (choices[choices.length - 1] !== 'other') return null
-  const fallback = choices.includes(record.default as (typeof PROMO_CHOICES)[number]) ? record.default as (typeof PROMO_CHOICES)[number] : choices[0]
   const rawStatuses = record.statuses && typeof record.statuses === 'object' ? record.statuses as Record<string, unknown> : {}
   const statuses: Record<string, string> = {}
   for (const id of NOTICE_IDS) {
     const status = rawStatuses[id]
     if (status === undefined) continue
     if (!STATUSES.has(String(status))) return null
-    if (choices.includes(id as (typeof PROMO_CHOICES)[number]) && status === 'out_of_service') return null
     statuses[id] = String(status)
+  }
+  const top = parseSlice(record.choices, record.default, record.register_urls, statuses)
+  if (!top) return null
+  let byLocale: Record<string, LocalePromoSlice> | undefined
+  if (record.by_locale !== undefined) {
+    if (!record.by_locale || typeof record.by_locale !== 'object' || Array.isArray(record.by_locale)) return null
+    byLocale = {}
+    for (const [loc, rawSlice] of Object.entries(record.by_locale as Record<string, unknown>)) {
+      if (!SUPPORTED_LOCALES.has(loc) || !rawSlice || typeof rawSlice !== 'object' || Array.isArray(rawSlice)) return null
+      const entry = rawSlice as Record<string, unknown>
+      const parsed = parseSlice(entry.choices, entry.default, entry.register_urls, statuses)
+      if (!parsed) return null
+      byLocale[loc] = parsed
+    }
   }
   const notices: Record<string, Record<string, string>> = {}
   const rawNotices = record.notices && typeof record.notices === 'object' ? record.notices as Record<string, unknown> : {}
@@ -83,21 +121,13 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     }
     if (Object.keys(texts).length) notices[id] = texts
   }
-  const registerUrls: Record<string, string> = {}
-  const rawUrls = record.register_urls && typeof record.register_urls === 'object' ? record.register_urls as Record<string, unknown> : {}
-  for (const id of choices) {
-    if (id === 'other') continue
-    const url = rawUrls[id]
-    if (typeof url !== 'string') continue
-    if (hostOf(url) !== packagedHost(id) || !url.startsWith('https://')) return null
-    registerUrls[id] = url
-  }
   return {
-    choices,
-    defaultChoice: fallback,
+    choices: top.choices,
+    defaultChoice: top.defaultChoice,
     notices,
-    registerUrls,
+    registerUrls: top.registerUrls,
     statuses,
+    ...(byLocale ? { byLocale } : {}),
     sequence: typeof record.sequence === 'number' ? record.sequence : undefined,
     revision: typeof record.revision === 'number' ? record.revision : undefined,
     instance: typeof record.instance === 'string' && record.instance ? record.instance : undefined,
@@ -164,13 +194,14 @@ async function readPromotion(params: Record<string, string | number>) {
 
 export async function loadSponsorPromo(trigger: 'startup' | 'settings' | 'interval' | 'resume' = 'settings'): Promise<AppliedSponsorPromo | null> {
   try {
-    let body = await readPromotion({ trigger })
+    const locale = readPromoLocale()
+    let body = await readPromotion(locale ? { trigger, locale } : { trigger })
     let applied = body ? applySponsorPromo(body) : null
     let rounds = 0
     // Two short reads. A generation can accept after this returns; the watcher keeps following.
     while (body?.pending === true && rounds < 2) {
       rounds += 1
-      body = await readPromotion({ after: Number(body.revision || 0), wait: 2 })
+      body = await readPromotion(locale ? { after: Number(body.revision || 0), wait: 2, locale } : { after: Number(body.revision || 0), wait: 2 })
       applied = (body && applySponsorPromo(body)) || applied
     }
     return applied

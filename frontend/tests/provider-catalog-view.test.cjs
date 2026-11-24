@@ -42,17 +42,20 @@ test('B2: catalog analysis switching preserves explicit bindings and follows onl
   }
 })
 
-test('catalog lists all 40 presets in the four product groups', () => {
+test('catalog lists all 43 presets in the four product groups', () => {
   const rows = view.catalogProviders()
-  assert.equal(rows.length, 40)
+  assert.equal(rows.length, 43)
   const groups = view.groupCatalog(rows)
   assert.equal(groups.recommended.length, 3)
-  assert.equal(groups.popular.length, 9)
+  assert.equal(groups.popular.length, 12)
   assert.equal(groups.local.length, 4)
   assert.equal(groups.more.length, 24)
   assert.equal(groups.recommended.map(row => row.id).join(','), 'deepseek,dashscope,apimart')
   assert.equal(groups.popular.some(row => row.id === 'api88'), true)
   assert.equal(groups.popular.some(row => row.id === 'infistar'), true)
+  assert.equal(groups.popular.some(row => row.id === 'cometapi'), true)
+  assert.equal(groups.popular.some(row => row.id === 'novita'), true)
+  assert.equal(groups.popular.some(row => row.id === 'poyo'), true)
   assert.equal(groups.recommended.some(row => row.success_tier === 'low'), false)
   assert.equal(groups.popular.some(row => row.id === 'gemini' && row.success_tier === 'low'), true)
   assert.equal(groups.popular.some(row => row.id === 'openai' && row.success_tier === 'low'), true)
@@ -246,7 +249,7 @@ test('catalog host helper never returns a full URL', () => {
 })
 
 test('every catalog name and hint used in the UI exists in all eight locales', () => {
-  const langs = ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']
+  const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
   const locales = Object.fromEntries(langs.map(lang => [
     lang,
     JSON.parse(fs.readFileSync(path.join(__dirname, '../src/i18n/locales', `${lang}.json`), 'utf8')),

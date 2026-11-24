@@ -18,7 +18,8 @@ v1.5.8 和当前 RC（`8fb72a745d8080225e371d60ee325f5431b6e195`）的服务商�
 - 新用户默认推荐哪一个
 - 状态：`healthy`、`fault`、`out_of_service`
 - 八种界面语言的短通知
-- 同一注册主机名下的注册链接
+- 可选的语言分流（`locales`）：限制某个赞助商只在指定界面语言下进入新用户推荐（如 `["zh"]` vs `["en", "ja", "ko", "es", "fr", "pt", "ru"]`）；允许不同语言分组各自指定一个 `new_user_default: true`，但在任意同一语言内至多只能有一个默认项
+- 同一注册主机名下的注册链接（`register_url` 或按语言区分的 `register_urls` 映射，同样严格校验 HTTPS 与已信任主机名）
 
 `out_of_service` 只从新用户选择器里隐藏。`fault` 仍显示，并带通知。
 
@@ -28,11 +29,11 @@ v1.5.8 和当前 RC（`8fb72a745d8080225e371d60ee325f5431b6e195`）的服务商�
 
 公钥和 URL 只写在安装包的 `backend/presets/sponsor_promo_config.json`。远程文件不能更换这两项。三者缺一（`enabled`、`https` URL、32 字节公钥）时，客户端不发起请求，选择器使用安装包内的顺序。
 
-当前仓库里的配置是关闭的，公钥和 URL 都是空的。测试用的密钥在测试进程里临时生成，不能当作生产公钥。
+当前仓库已指向独立的 Cloudflare Worker 静态分发地址（与诊断服务完全隔离），公钥写在 `backend/presets/sponsor_promo_config.json`，私钥仅保存在维护者本机仓库外并备份到密码管理器。测试用的密钥仍在测试进程里临时生成，不接触生产私钥。
 
-建议的静态文件位置（主机名由已有站点决定，这里不写死一个未部署的域名）：
+生产静态文件地址：
 
-`https://<已批准的静态主机>/autoclip/sponsor-promo.json`
+`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json`
 
 只放这一个 JSON。签名在文件内部，不跟随跳转。TLS 负责传输，Ed25519 负责内容。私钥留在维护者自己的密码管理器里，不进仓库、不进客户端、不进日志。
 

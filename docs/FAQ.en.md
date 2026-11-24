@@ -1,6 +1,6 @@
 # FAQ and troubleshooting
 
-[简体中文](FAQ.md) · [Installation](USER_INSTALLATION_GUIDE.en.md) · [README](../README-EN.md)
+[简体中文](FAQ.md) · [Installation](USER_INSTALLATION_GUIDE.en.md) · [README](../README.md)
 
 ## Cost, models, and data
 

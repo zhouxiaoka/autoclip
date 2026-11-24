@@ -393,3 +393,71 @@ test('an empty candidate list does not invent a provider or open its key flow', 
     state.writePromoSnapshot(null)
   }
 })
+
+test('locale routing splits zh and overseas surfaces without breaking saved providers', () => {
+  const state = loadTs('sponsorPromoState.ts')
+  const providers = loadTs('providers.ts', { '../../i18n': i18n, './sponsorPromoState': state })
+  const catalogView = loadTs('providerCatalogView.ts', {
+    '../../i18n': i18n,
+    './sponsorPromoState': state,
+    './providers': providers,
+  })
+  try {
+    state.writePromoSnapshot(promoView({
+      source: 'cache',
+      choices: ['apimart', 'api88', 'other'],
+      defaultChoice: 'apimart',
+      statuses: { apimart: 'healthy', api88: 'healthy' },
+      registerUrls: {
+        apimart: 'https://go.apimart.ai/cn',
+        api88: 'https://88api.ai/sign-up?aff=global',
+      },
+      byLocale: {
+        zh: {
+          choices: ['apimart', 'other'],
+          defaultChoice: 'apimart',
+          registerUrls: { apimart: 'https://go.apimart.ai/cn' },
+        },
+        en: {
+          choices: ['api88', 'other'],
+          defaultChoice: 'api88',
+          registerUrls: { api88: 'https://88api.ai/sign-up?aff=global' },
+        },
+        ja: {
+          choices: ['other'],
+          defaultChoice: 'other',
+          registerUrls: {},
+        },
+      },
+    }))
+
+    state.setPromoLocale('zh-CN')
+    assert.equal(state.promotionCurrentlyPromoted('apimart'), true)
+    assert.equal(state.promotionCurrentlyPromoted('api88'), false)
+    assert.equal(state.promotionRecommends('apimart'), true)
+    assert.equal(state.promotionRegisterUrl('apimart'), 'https://go.apimart.ai/cn')
+    assert.equal(state.promotionRegisterUrl('api88'), null)
+    assert.equal(state.promotionSetupChoice(providers.recommendedSetupProviders()), 'apimart')
+
+    state.setPromoLocale('en-US')
+    assert.equal(state.promotionCurrentlyPromoted('apimart'), false)
+    assert.equal(state.promotionCurrentlyPromoted('api88'), true)
+    assert.equal(state.promotionRecommends('api88'), true)
+    assert.equal(state.promotionRecommends('apimart'), false)
+    assert.equal(state.promotionRegisterUrl('api88'), 'https://88api.ai/sign-up?aff=global')
+    assert.equal(state.promotionRegisterUrl('apimart'), null)
+    assert.equal(state.promotionSetupChoice(providers.recommendedSetupProviders()), 'api88')
+    const groupedEn = catalogView.groupCatalog(catalogView.catalogProviders())
+    assert.equal(groupedEn.recommended.some(item => item.id === 'api88'), true)
+    assert.equal(groupedEn.recommended.some(item => item.id === 'apimart'), false)
+    assert.equal(groupedEn.popular.some(item => item.id === 'apimart'), true)
+
+    state.setPromoLocale('ja')
+    assert.equal(state.promotionCurrentlyPromoted('apimart'), false)
+    assert.equal(state.promotionCurrentlyPromoted('api88'), false)
+    assert.equal(state.promotionSetupChoice(providers.recommendedSetupProviders()), 'deepseek')
+  } finally {
+    state.setPromoLocale(null)
+    state.writePromoSnapshot(null)
+  }
+})

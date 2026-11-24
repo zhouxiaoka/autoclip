@@ -10,7 +10,7 @@ CLEANUP=false
 BUILD=true
 for arg in "$@"; do
     case "$arg" in
-        dev|--dev) FILE=docker-compose.dev.yml ;;
+        dev|--dev) FILE=docker/docker-compose.dev.yml ;;
         --cleanup) CLEANUP=true ;;
         --no-build) BUILD=false ;;
         --force) echo '--force removed: use an explicit docker compose down --volumes after backing up data.' >&2; exit 2 ;;

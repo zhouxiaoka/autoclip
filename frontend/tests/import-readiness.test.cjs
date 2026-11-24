@@ -88,6 +88,7 @@ function render(options = {}) {
     [options.source || 'link', () => {}],
     [options.url === undefined ? 'https://youtube.com/watch?v=video' : options.url, () => {}],
     [null, () => {}],
+    [options.remote, () => {}],
     [options.subtitle || null, () => {}],
     [{ goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' }, () => {}],
     ['', () => {}],
@@ -106,16 +107,33 @@ function render(options = {}) {
     [{ open: false, durationSec: null, trigger: 'button' }, () => {}],
     [{ open: false, trigger: 'button' }, () => {}],
   ]
+  const storage = options.storage || new Map()
+  const localStorage = {
+    getItem: key => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, val) => storage.set(key, String(val)),
+  }
+  let childMode = false
+  let childVal
+  let childInit = false
+  const childEffects = []
   const { exports, code } = transpile(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'))
   const mocks = {
     'react-i18next': { useTranslation() {} },
     '../../i18n': { t: text => text },
-    react: { useState: () => states[index++], useEffect() {}, useRef: current => ({ current }) },
+    react: {
+      useState: init => {
+        if (!childMode) return states[index++]
+        if (!childInit) { childVal = typeof init === 'function' ? init() : init; childInit = true }
+        return [childVal, next => { childVal = typeof next === 'function' ? next(childVal) : next }]
+      },
+      useEffect: fn => { if (childMode) childEffects.push(fn) },
+      useRef: current => ({ current }),
+    },
     antd: { Select: 'select' },
     'react-router-dom': { useNavigate: () => destination => navigations.push(destination) },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'fragment' },
     '../../ui': { Btn: 'button', Segmented: 'segmented', Dialog: 'dialog', StatusDot: 'status' },
-    './PlatformPicker': { default: 'platform-picker' },
+    './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: 'platform-picker' },
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './api': {
       studioApi: {
@@ -153,9 +171,20 @@ function render(options = {}) {
     '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
     './ImportSetupCard': { default: ImportSetupCardMark },
   }
-  runInSandbox(code, { FormData: FormDataMock, exports, require: id => { assert.ok(id in mocks, id); return mocks[id] } })
+  runInSandbox(code, { FormData: FormDataMock, localStorage, exports, require: id => { assert.ok(id in mocks, id); return mocks[id] } })
   const tree = nodes(exports.default({ onImported: async () => {}, blocked: !!options.blocked, onBlocked: () => blocked.push('setup') }))
-  return { tree, calls, navigations, installs, blocked, errors, probes }
+  const renderReplayLabel = (active, reset = false) => {
+    const seg = tree.find(node => node.type === 'segmented')
+    const Label = seg.props.options.find(o => o.value === 'replay').label.type
+    childMode = true
+    if (reset) childInit = false
+    childEffects.length = 0
+    const out = nodes(Label({ active }))
+    for (const fn of childEffects.splice(0)) fn()
+    childMode = false
+    return out
+  }
+  return { tree, calls, navigations, installs, blocked, errors, probes, storage, renderReplayLabel }
 }
 
 function button(tree, label) {
@@ -386,6 +415,33 @@ test('R22 #212: a whisper failure offers transcription settings (install entry),
   }
 })
 
+test('a selected Twitch archive submits its identifiers without a file picker or playback URL', async () => {
+  const view = render({ source: 'file', url: '', remote: { kind: 'twitch', id: 'selected-archive', title: 'Final round', direct_video_id: '123' } })
+  await button(view.tree, 'replays.generate').props.onClick()
+  assert.equal(view.calls.length, 1)
+  const [form] = view.calls
+  assert.equal(form.get('twitch_video_id'), '123')
+  assert.equal(form.get('channel_replay_id'), 'selected-archive')
+  assert.equal(form.get('auto_start'), 'true')
+  assert.equal(form.get('video'), undefined)
+  assert.equal(form.get('url'), undefined)
+})
+
+test('a selected OBS replay submits obs_capture_id with the home-selected platforms', async () => {
+  const view = render({ source: 'replay', url: '', remote: { kind: 'obs', id: 'obs-cap-1', title: 'OBS · Stream', seconds: 300 } })
+  const seg = nodes(view.tree).find(node => node.type === 'segmented')
+  assert.deepEqual([...seg.props.options.map(o => o.value)], ['link', 'file', 'replay'])
+  await button(view.tree, 'replays.generate').props.onClick()
+  assert.equal(view.calls.length, 1)
+  const [form] = view.calls
+  assert.equal(form.get('obs_capture_id'), 'obs-cap-1')
+  assert.equal(form.get('replay_source'), 'obs')
+  assert.equal(form.get('name'), 'OBS · Stream')
+  assert.equal(form.get('auto_start'), 'true')
+  assert.equal(form.get('video'), undefined)
+  assert.equal(form.get('url'), undefined)
+})
+
 test('a matching platform subtitle probe starts import without local ASR under bundled defaults', async () => {
   const view = render({ withPlatformSubs: true, report: report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }) })
   await button(view.tree, '生成成片').props.onClick()
@@ -398,4 +454,18 @@ test('fresh users can open the sample or start connecting', () => {
   assert.ok(button(view.tree, '先看示例'))
   button(view.tree, '剪自己的视频').props.onClick()
   assert.deepEqual(view.blocked, ['setup'])
+})
+
+test('live replay tab shows NEW badge until clicked and persists dismissal', () => {
+  const view = render({ source: 'link' })
+  const hasNewBadge = tree => tree.some(node => node.props?.className === 'replay-new-badge' && node.props?.children === 'NEW')
+  assert.equal(hasNewBadge(view.renderReplayLabel(false)), true)
+  assert.equal(view.storage.get('autoclip.seen.live_replay_tab'), undefined)
+
+  assert.equal(hasNewBadge(view.renderReplayLabel(true)), false)
+  assert.equal(view.storage.get('autoclip.seen.live_replay_tab'), '1')
+
+  // Switching back to another tab or reloading keeps the NEW badge dismissed
+  assert.equal(hasNewBadge(view.renderReplayLabel(false)), false)
+  assert.equal(hasNewBadge(view.renderReplayLabel(false, true)), false)
 })

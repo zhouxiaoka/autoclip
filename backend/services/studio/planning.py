@@ -332,7 +332,12 @@ def recommend(video: Path, options: ImportOptions):
                     from backend.core.failure_attribution import ModelResponseInvalid
                     raise ModelResponseInvalid('推荐结果结构不合规，请重试') from None
                 raise
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
+        except Exception as error:
+            from backend.services.obs.billing import CallPaused
+            if isinstance(error, CallPaused):
+                raise
+            if not isinstance(error, (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError)):
+                raise
             # Only an explicit visual choice fails the run; the default automatic
             # screening is optional and falls back to the subtitle route.
             if consent.analysis_mode == 'auto' and _is_parse_failure(error):
@@ -386,10 +391,24 @@ def recommend(video: Path, options: ImportOptions):
         # route that will actually run (visual); the user may still switch to subtitles.
         result.goal = 'highlight'
         result.suggested_goals = ['highlight'] + [g for g in (result.suggested_goals or []) if g not in ('highlight', 'content')]
+    if options.replay_source and options.goal == 'auto':
+        # The replay picker supplies the editorial goal. Keep the configured analysis route.
+        result.content_type, result.goal, result.suggested_goals = 'gameplay', 'highlight', ['highlight']
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
     route = resolve_route(consent.analysis_mode, result.goal, duration, ai_screened=mode == 'ai', degraded=invalid_degrade)
+    if (mode == 'ai' and consent.analysis_mode == 'auto' and result.content_type == 'gameplay'
+            and result.goal == 'highlight' and not (short or no_audio or options.source_window)):
+        from backend.services.studio.game_highlights import commentary_evidence
+        local_evidence = commentary_evidence(video, duration)
+        if local_evidence['commentary']:
+            route = 'subtitle'
+            result.reason = '分段检查发现持续解说，按解说定位关键操作和随后的反应。'
+    if (options.replay_source and route == 'subtitle' and 'commentary' not in (local_evidence or {})
+            and not (short or no_audio or options.source_window)):
+        from backend.services.studio.game_highlights import commentary_evidence
+        local_evidence = {**(local_evidence or {}), **commentary_evidence(video, duration)}
     if short or no_audio:
         from backend.pipeline import media_precheck
         if route == 'subtitle' and options.auto_start:

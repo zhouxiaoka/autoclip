@@ -20,18 +20,28 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 SCHEMA = "autoclip.sponsor-promo/v1"
 STATUSES = frozenset({"healthy", "fault", "out_of_service"})
-LOCALES = frozenset({"zh", "en", "ja", "ko", "es", "fr", "pt", "ru"})
+LOCALES = frozenset({"zh", "en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"})
 PAYLOAD_KEYS = frozenset({
     "schema", "sequence", "issued_at", "expires_at", "min_app", "max_app",
     "rollback_of", "sponsors",
 })
-SPONSOR_KEYS = frozenset({"id", "order", "new_user_default", "status", "notices", "register_url"})
+SPONSOR_KEYS = frozenset({
+    "id", "order", "new_user_default", "status", "notices",
+    "register_url", "register_urls", "locales",
+})
 BUNDLED_CHOICES = ("apimart", "other")
 BUNDLED_DEFAULT = "apimart"
 # Status notices may name a built-in provider that is no longer promoted.
-NOTICE_PROVIDER_IDS = frozenset({"api88", "infistar", "apimart"})
+NOTICE_PROVIDER_IDS = frozenset({"api88", "infistar", "apimart", "cometapi", "novita", "poyo"})
 _MAX_NOTICE = 240
 _CLOCK_SKEW = timedelta(minutes=5)
+
+
+def normalize_locale(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    code = value.strip().lower().split("-", 1)[0].split("_", 1)[0]
+    return code if code in LOCALES else None
 
 
 @dataclass(frozen=True)
@@ -69,6 +79,9 @@ def notice_provider_ids() -> set[str]:
 _TRUSTED_REGISTER_HOSTS = {
     "api88": "88api.ai",
     "infistar": "www.infistar.cc",
+    "cometapi": "www.cometapi.com",
+    "novita": "novita.ai",
+    "poyo": "poyo.ai",
 }
 
 
@@ -213,7 +226,7 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
         return None
     seen: set[str] = set()
     orders: set[int] = set()
-    defaults = 0
+    defaults_by_locale: dict[str, int] = {}
     cleaned = []
     for row in rows:
         if not isinstance(row, dict) or set(row) - SPONSOR_KEYS or not {"id", "order", "status"} <= set(row):
@@ -227,6 +240,18 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
             return None
         if row.get("new_user_default") not in (None, True, False):
             return None
+        raw_locales = row.get("locales")
+        locales: Optional[list[str]] = None
+        if raw_locales is not None:
+            if not isinstance(raw_locales, list) or not raw_locales:
+                return None
+            seen_locales: set[str] = set()
+            locales = []
+            for entry in raw_locales:
+                if not isinstance(entry, str) or entry not in LOCALES or entry in seen_locales:
+                    return None
+                seen_locales.add(entry)
+                locales.append(entry)
         notices = row.get("notices", {})
         if not isinstance(notices, dict) or set(notices) - LOCALES:
             return None
@@ -239,38 +264,107 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
         register_url = row.get("register_url")
         if register_url is not None and (not isinstance(register_url, str) or not _register_url(sponsor_id, register_url, hosts)):
             return None
+        raw_register_urls = row.get("register_urls")
+        localized_urls: dict[str, str] = {}
+        if raw_register_urls is not None:
+            if not isinstance(raw_register_urls, dict) or not raw_register_urls or set(raw_register_urls) - LOCALES:
+                return None
+            for locale, url in raw_register_urls.items():
+                if not isinstance(url, str) or not _register_url(sponsor_id, url, hosts):
+                    return None
+                localized_urls[locale] = url
         if row.get("new_user_default") is True:
             if sponsor_id not in hosts:
                 return None
-            defaults += 1
+            target_locales = locales if locales is not None else LOCALES
+            for locale in target_locales:
+                defaults_by_locale[locale] = defaults_by_locale.get(locale, 0) + 1
+                if defaults_by_locale[locale] > 1:
+                    return None
         seen.add(sponsor_id)
         orders.add(order)
-        item = {"id": sponsor_id, "order": order, "status": status, "new_user_default": row.get("new_user_default") is True, "notices": text}
+        item: dict[str, Any] = {
+            "id": sponsor_id,
+            "order": order,
+            "status": status,
+            "new_user_default": row.get("new_user_default") is True,
+            "notices": text,
+        }
         if register_url:
             item["register_url"] = register_url
+        if localized_urls:
+            item["register_urls"] = localized_urls
+        if locales is not None:
+            item["locales"] = locales
         cleaned.append(item)
-    if defaults > 1 or len(orders) != len(cleaned):
+    if len(orders) != len(cleaned):
         return None
     return cleaned
 
 
-def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str) -> dict:
+def _resolve_register_url(row: Mapping[str, Any], locale_key: Optional[str]) -> Optional[str]:
+    localized = row.get("register_urls")
+    if isinstance(localized, Mapping) and locale_key:
+        direct = localized.get(locale_key)
+        if isinstance(direct, str) and direct:
+            return direct
+        if locale_key != "zh":
+            fallback_en = localized.get("en")
+            if isinstance(fallback_en, str) and fallback_en:
+                return fallback_en
+    url = row.get("register_url")
+    if isinstance(url, str) and url:
+        return url
+    if isinstance(localized, Mapping):
+        for key in ("en", "zh"):
+            candidate = localized.get(key)
+            if isinstance(candidate, str) and candidate:
+                return candidate
+    return None
+
+
+def _locale_slice(visible: list[dict[str, Any]], locale_key: Optional[str]) -> dict[str, Any]:
+    matched = [
+        row for row in visible
+        if not row.get("locales") or locale_key is None or locale_key in row["locales"]
+    ]
+    choices = [row["id"] for row in matched] + ["other"]
+    marked = next((row["id"] for row in matched if row.get("new_user_default")), None)
+    default = marked or (choices[0] if choices else "other")
+    if default not in choices:
+        default = "other"
+    register_urls: dict[str, str] = {}
+    for row in matched:
+        resolved = _resolve_register_url(row, locale_key)
+        if resolved:
+            register_urls[row["id"]] = resolved
+    return {
+        "choices": choices,
+        "default": default,
+        "register_urls": register_urls,
+    }
+
+
+def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, locale: Optional[str] = None) -> dict:
     """New-user choices exclude paused and non-promoted providers. Status stays for saved users."""
     rows = sorted(payload.get("sponsors") or [], key=lambda item: item["order"])
     promoted = set(builtin_sponsor_hosts())
     visible = [row for row in rows if row["status"] != "out_of_service" and row["id"] in promoted]
-    choices = [row["id"] for row in visible] + ["other"]
-    marked = next((row["id"] for row in visible if row.get("new_user_default")), None)
-    default = marked or (choices[0] if choices else "other")
-    if default not in choices:
-        default = "other"
-    return {
+    locale_key = normalize_locale(locale)
+    active = _locale_slice(visible, locale_key)
+    view: dict[str, Any] = {
         "source": source,
         "enabled": enabled,
-        "choices": choices,
-        "default": default,
+        "choices": active["choices"],
+        "default": active["default"],
         "statuses": {row["id"]: row["status"] for row in rows},
         "notices": {row["id"]: row.get("notices") or {} for row in rows if row.get("notices")},
-        "register_urls": {row["id"]: row["register_url"] for row in visible if row.get("register_url")},
+        "register_urls": active["register_urls"],
         "sequence": payload.get("sequence"),
     }
+    if any(row.get("locales") or row.get("register_urls") for row in rows):
+        view["by_locale"] = {
+            loc: _locale_slice(visible, loc)
+            for loc in sorted(LOCALES)
+        }
+    return view

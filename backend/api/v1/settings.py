@@ -56,6 +56,7 @@ def get_sponsor_promo(
     trigger: Optional[Literal['startup', 'settings', 'interval', 'resume']] = None,
     after: int = 0,
     wait: float = 0,
+    locale: Optional[str] = None,
 ):
     """Chooser order and service notices. Does not read or write model settings.
 
@@ -64,8 +65,8 @@ def get_sponsor_promo(
     from backend.core.sponsor_promo_client import get_client
     client = get_client()
     if wait > 0:
-        return client.wait_for_change(after, min(wait, 3))
-    return client.view(trigger=trigger or 'settings')
+        return client.wait_for_change(after, min(wait, 3), locale=locale)
+    return client.view(trigger=trigger or 'settings', locale=locale)
 
 
 class ModelSettingsUpdate(ai_models.ModelSettings):
@@ -329,6 +330,9 @@ class ApiKeys(BaseModel):
     infistar: str = Field(default="", description="Infistar 无限星河 API密钥")
     api88: str = Field(default="", description="88API API密钥")
     apimart: str = Field(default="", description="APIMart API密钥")
+    cometapi: str = Field(default="", description="CometAPI API密钥")
+    novita: str = Field(default="", description="Novita AI API密钥")
+    poyo: str = Field(default="", description="PoYo AI API密钥")
     seed: str = Field(default="", description="火山方舟 Seed / 豆包 API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
@@ -585,6 +589,9 @@ async def get_settings():
                     infistar="",
                     api88="",
                     apimart="",
+                    cometapi="",
+                    novita="",
+                    poyo="",
                     seed="",
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
@@ -1022,6 +1029,9 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
         "infistar": keys.infistar,
         "api88": keys.api88,
         "apimart": keys.apimart,
+        "cometapi": keys.cometapi,
+        "novita": keys.novita,
+        "poyo": keys.poyo,
         "seed": keys.seed,
     }.get((provider or "").strip().lower(), "") or ""
 

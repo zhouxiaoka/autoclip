@@ -12,8 +12,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from backend.core import gemini_transport
+from backend.core.failure_attribution import ProviderTransportError
+from backend.core.llm_retry import retry_after_from_error
 from backend.core.llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
 from backend.core.failure_logging import failure_logger
+from backend.core.upstream_errors import http_error_parts
 
 logger = failure_logger(__name__)
 
@@ -62,7 +65,9 @@ class LLMProvider(ABC):
 
         def wrapped(self, prompt: str, input_data: Any = None, **call_kwargs):
             from backend.core.llm_telemetry import observe_provider_call
-            return observe_provider_call(self, raw, prompt, input_data, **call_kwargs)
+            from backend.services.obs.billing import is_obs
+            method = LLMProvider._obs_call if is_obs() else raw
+            return observe_provider_call(self, method, prompt, input_data, **call_kwargs)
 
         wrapped._llm_telemetry = True  # type: ignore[attr-defined]
         cls.call = wrapped  # type: ignore[method-assign]
@@ -71,6 +76,26 @@ class LLMProvider(ABC):
         self.api_key = api_key
         self.model_name = model_name
         self.kwargs = kwargs
+
+    def _obs_call(self, prompt, input_data=None, **kwargs):
+        from backend.services.obs.billing import CallPaused, chat
+        from backend.core.llm_stream import from_chat_json
+        from backend.core.provider_endpoint import official_chat_url
+        base = getattr(self, 'base_url', '')
+        if not base:
+            if isinstance(self, OpenAIProvider):
+                base = OPENAI_OFFICIAL_BASE_URL
+            elif isinstance(self, GeminiProvider):
+                base = official_chat_url('gemini') or ''
+        if not base:
+            raise CallPaused('OBS requires a configured chat endpoint', code='bad_endpoint')
+        model = self.request_model()
+        payload = token_param_kwargs(model, base, guarded_chat_kwargs(base, {
+            **kwargs, 'stream': True, 'model': model,
+            'messages': [{'role': 'user', 'content': self._build_full_input(prompt, input_data)}],
+        }))
+        result = from_chat_json(chat('analysis', base, payload, self.api_key, _http_timeout(180)))
+        return LLMResponse(result.content, result.usage, model, result.finish_reason)
 
     def request_model(self) -> str:
         """Model for this request only. Never writes ``self.model_name``."""
@@ -746,6 +771,8 @@ class GeminiProvider(LLMProvider):
 
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用Gemini API"""
+        import requests
+
         try:
             full_input = self._build_full_input(prompt, input_data)
 
@@ -760,7 +787,6 @@ class GeminiProvider(LLMProvider):
                 'response_format': kwargs.get('response_format'),
             }
             url, headers, body = gemini_transport.request(self.base_url, self.api_key, payload)
-            import requests
             from backend.core.job_budget import clip_job_read_timeout
             from backend.core.llm_stream import budget_watch
             timeout = clip_job_read_timeout(LLM_READ_TIMEOUT_SEC)
@@ -783,6 +809,14 @@ class GeminiProvider(LLMProvider):
             from backend.core.job_budget import promote_if_budget_spent
             promote_if_budget_spent(e)
             _attach_gemini_error_body(e)
+            if isinstance(e, (requests.Timeout, requests.ConnectionError, requests.HTTPError)):
+                status, body = http_error_parts(e)
+                transport = ProviderTransportError(type(e).__name__, http_status=status,
+                                                   timed_out=isinstance(e, requests.Timeout))
+                transport.body = body if status is not None else (
+                    'timeout' if isinstance(e, requests.Timeout) else 'connection error')
+                transport.retry_after = retry_after_from_error(e)
+                e = transport
             logger.error(f"Gemini调用失败: {sanitize_exception_text(e)}")
             raise log_safe_exception(e) from None
     

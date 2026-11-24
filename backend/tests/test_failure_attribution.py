@@ -2293,7 +2293,7 @@ def test_i422_release_validation_splits_by_attribution_source():
     assert 'GROUP BY event, attribution_source, provider' in block
 
 
-LOCALES = ('zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru')
+LOCALES = ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de')
 
 
 @pytest.mark.usefixtures('isolated__r22_415')
@@ -2303,7 +2303,9 @@ def test_i424_lock_timeout_notice_in_all_8_locales():
         data = json.loads((ROOT / f'frontend/src/i18n/locales/{lang}.json').read_text(encoding='utf-8'))
         value = data.get(key)
         assert isinstance(value, str) and value.strip(), lang
-        if lang != 'zh':
+        if lang == 'zh-TW':
+            assert value != key and '进程' not in value, lang
+        elif lang != 'zh':
             assert value != key and '进程' not in value and '原素材已保留' not in value, lang  # translated, not the Chinese
     ts = (ROOT / 'frontend/src/utils/llmFailure.ts').read_text(encoding='utf-8')
     assert key in ts and "STORE_LOCK_TIMEOUT = 'store_lock_timeout'" in ts

@@ -3,7 +3,7 @@ const assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path'),ts=require('typescript')
 const { runInSandbox } = require('./vm-sandbox.cjs')
 const React=require('react'),{renderToStaticMarkup}=require('react-dom/server'),{createInstance}=require('i18next')
-const langs=['zh','en','ja','ko','es','pt','ru','fr']
+const langs=['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
 const catalogs=Object.fromEntries(langs.map(l=>[l,require('../src/i18n/locales/'+l+'.json')]))
 const root=path.resolve(__dirname,'../src/features/studio')
 function history(i18n){

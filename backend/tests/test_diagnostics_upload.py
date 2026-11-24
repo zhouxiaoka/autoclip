@@ -50,7 +50,7 @@ def test_privacy_copy_exists_in_all_eight_locales():
     notice = "从这一版开始，新的安装会在失败后自动发送脱敏诊断，用来排查问题并改进产品，不会用来训练模型。这不是你以前单独同意过的记录；你现在就可以关闭。"
     media_scope = "本地视频默认会压缩并上传这次失败附近的短片段。没有失败时间时，用片头约 60 秒。短片段可能包含私人内容。完整原片默认不上传，需要你打开开关。如果这次用的是视频链接，只发送清洗后的链接，不发送下载下来的视频。字幕正文不会自动上传。"
     retention = "已上传的诊断会在 14 天后自动删除。你可以在这条说明里关闭总开关或单独关闭素材。关闭总开关会取消还没完成的上传。"
-    for lang in ("zh", "en", "ja", "ko", "es", "pt", "ru", "fr"):
+    for lang in ("zh", "zh-TW", "en", "ja", "ko", "es", "pt", "ru", "fr", "id", "tr", "vi", "de"):
         data = json.loads((ROOT / "frontend/src/i18n/locales" / f"{lang}.json").read_text(encoding="utf-8"))
         prefix = 'settings.diagnostics.'
         assert data[prefix + 'report']

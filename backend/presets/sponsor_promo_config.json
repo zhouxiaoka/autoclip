@@ -1,8 +1,8 @@
 {
-  "enabled": false,
-  "url": "",
-  "public_key": "",
-  "min_sequence": 0,
+  "enabled": true,
+  "url": "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json",
+  "public_key": "VgEhoRZJe4tH1p8jrKBitKKcB4J1NWuCMXKziwMk0pQ=",
+  "min_sequence": 1,
   "max_bytes": 65536,
   "timeout_seconds": 4,
   "refresh_seconds": 21600

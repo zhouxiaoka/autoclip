@@ -372,8 +372,8 @@ const ProjectDetailPage: React.FC = () => {
               )}
             </div>
           </div>
-          {isCompleted && clips.length > 0 && (
-            <Btn onClick={() => navigate(`/project/${currentProject.id}/publish`)}>{t("发布")}</Btn>
+          {isCompleted && (
+            <Btn onClick={() => navigate(`/project/${currentProject.id}/publish`)}>{t("发布记录")}</Btn>
           )}
           {!isVisual && currentProject.status === 'pending' && (
             <Btn variant="cta" onClick={() => { trackLegacyEntry({ legacy_action: 'start_processing' }, flagAssigned('hide_legacy_entrypoints')); void handleStartProcessing() }} loading={statusLoading}>{t("开始处理")}</Btn>

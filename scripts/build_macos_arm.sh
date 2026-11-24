@@ -109,9 +109,10 @@ echo "==> Creating DMG"
 APP_VERSION="$(app_version)"
 DMG_PATH="src-tauri/target/release/bundle/macos/AutoClip Desktop_${APP_VERSION}_aarch64.dmg"
 rm -f "$DMG_PATH"
+# ULMO uses LZMA (native on macOS 10.15+, including all Apple Silicon Macs) and cuts DMG size ~40-50%.
 hdiutil create -volname "AutoClip Desktop" \
     -srcfolder "$APP_PATH" \
-    -ov -format UDZO \
+    -ov -format ULMO \
     "$DMG_PATH"
 echo "OK"
 

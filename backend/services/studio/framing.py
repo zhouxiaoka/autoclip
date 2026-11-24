@@ -613,7 +613,8 @@ def _grab_shot(video: Path, abs_start: float, abs_end: float, times: list[float]
     cmd = [get_ffmpeg_path(), "-v", "error", *render_limits.input_args(),
            "-ss", f"{max(0.0, abs_start):.3f}", "-t", f"{length:.3f}", "-i", str(video),
            "-an", "-vf", f"fps={rate},select={pick},scale={FRAME_WIDTH}:-2",
-           "-fps_mode", "passthrough", "-q:v", "4", "-y", str(pattern)]
+           # Preserve small eye and nose landmarks used to follow a speaker across the shot.
+           "-fps_mode", "passthrough", "-q:v", "2", "-y", str(pattern)]
     cmd, priority = render_limits.low_priority(cmd)
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=max(30, length * 2), **priority)
@@ -643,15 +644,48 @@ def _grab_shot(video: Path, abs_start: float, abs_end: float, times: list[float]
 
 _detectors: dict[tuple[int, int, float], Any] = {}
 _detector_lock = threading.Lock()
+_model_bytes_cache: tuple[tuple[str, int, int], bytes] | None = None
+
+
+def _model_bytes() -> bytes:
+    """Read YuNet ONNX weights via Python's Unicode-safe Path API, cached by stat signature."""
+    global _model_bytes_cache
+    stat = MODEL.stat()
+    sig = (str(MODEL), stat.st_mtime_ns, stat.st_size)
+    cached = _model_bytes_cache
+    if cached is not None and cached[0] == sig:
+        return cached[1]
+    data = MODEL.read_bytes()
+    _model_bytes_cache = (sig, data)
+    return data
+
+
+def create_detector(cv2: Any, width: int, height: int, score: float = TRACK_SCORE) -> Any:
+    """Create a YuNet detector from in-memory ONNX bytes.
+
+    OpenCV's C++ file-path loader opens paths with the narrow ANSI codepage on Windows,
+    so `FaceDetectorYN.create(str(MODEL), ...)` raises `cv2.error` when the install path
+    contains non-ASCII characters (PYTHON-FASTAPI-68). Loading bytes through Python avoids
+    C++ path encoding altogether.
+    """
+    model_bytes = _model_bytes()
+    try:
+        return cv2.FaceDetectorYN.create(
+            "onnx", model_bytes, b"", (width, height),
+            score_threshold=float(score), nms_threshold=0.3, top_k=50,
+        )
+    except TypeError:
+        return cv2.FaceDetectorYN.create(
+            str(MODEL), "", (width, height),
+            score_threshold=float(score), nms_threshold=0.3, top_k=50,
+        )
 
 
 def _detector(cv2: Any, width: int, height: int, score: float = TRACK_SCORE) -> Any:
     """One YuNet instance per frame size and score floor. Caller holds _detector_lock."""
     key = (width, height, round(float(score), 3))
     if key not in _detectors:
-        _detectors[key] = cv2.FaceDetectorYN.create(
-            str(MODEL), "", (width, height), score_threshold=float(score), nms_threshold=0.3, top_k=50,
-        )
+        _detectors[key] = create_detector(cv2, width, height, score)
     return _detectors[key]
 
 
@@ -756,6 +790,20 @@ def _mouth_motion(cv2, face, grey_a, grey_b, width: int, height: int) -> float:
     return float(abs(grey_a[top:bottom, left:right].astype("int16") - grey_b[top:bottom, left:right].astype("int16")).mean())
 
 
+def _read_bgr_image(cv2: Any, path: Path) -> Any:
+    """Decode a frame image from bytes so non-ASCII temp paths never hit C++ cv2.imread."""
+    try:
+        raw = Path(path).read_bytes()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    if hasattr(cv2, "imdecode"):
+        import numpy as np
+        return cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    return cv2.imread(str(path))
+
+
 def _observe_pair(pair: tuple[Path, Path]) -> dict[str, list[dict[str, float]]] | None:
     """Frontal and turned faces in one sample, each `{x, w, motion, area}` in frame fractions.
 
@@ -765,11 +813,13 @@ def _observe_pair(pair: tuple[Path, Path]) -> dict[str, list[dict[str, float]]] 
     cv2 = load_cv2()
     if cv2 is None:
         return None  # broken/missing component: keep the default framing, no Sentry noise
-    first = cv2.imread(str(pair[0]))
-    second = cv2.imread(str(pair[1])) if len(pair) > 1 else None
-    if first is None:
+    first = _read_bgr_image(cv2, pair[0])
+    second = _read_bgr_image(cv2, pair[1]) if len(pair) > 1 else None
+    if first is None or getattr(first, "size", 1) == 0:
         return None
     height, width = first.shape[:2]
+    if width <= 0 or height <= 0:
+        return None
     # The DNN holds mutable input/output buffers. Concurrent renders must not
     # overwrite another video's input while its inference is still running.
     def _score_of(face) -> float:

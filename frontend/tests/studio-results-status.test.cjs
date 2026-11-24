@@ -9,7 +9,10 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
   const workspace = {
     analysis: { status, phase, message, error, error_code: errorCode, failure_stage: failureStage },
     generation: generationOverride.value || (automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null),
-    drafts: items.drafts || [], jobs: [], events: [], output_variants: items.variants || [], attempts: attemptsOverride.value || undefined,
+    jobs: [], events: [], attempts: attemptsOverride.value || undefined,
+    ...items,
+    drafts: items.drafts || [],
+    output_variants: items.output_variants || items.variants || [],
   }
   const exportsObject = {}
   const children = ({ children }) => React.createElement('div', null, children)
@@ -459,6 +462,31 @@ test('1.5.7 results page has no control that appends platforms', () => {
   assert.doesNotMatch(html, /追加平台/)
 })
 
+test('gameplay review opens from rendered outputs even without visual events', () => {
+  const result = (content_type, variants) => render(true, 'done', 'completed', [], [], undefined, undefined, '', '', {
+    plan: { content_type }, output_variants: variants,
+  })
+  const playable = { id: 'winner', status: 'completed', render_job_id: 'render-1' }
+  assert.match(result('gameplay', [playable]), /回看游戏高光/)
+  assert.doesNotMatch(result('interview', [playable]), /回看游戏高光/)
+  assert.doesNotMatch(result('gameplay', [
+    { id: 'missing-file-id', status: 'completed' },
+    { id: 'failed', status: 'failed', render_job_id: 'failed-job' },
+    { id: 'pending', status: 'on_demand' },
+  ]), /回看游戏高光/)
+})
+
+test('results page survives chapter coverage without sample_interval and shows replay origin', () => {
+  const html = render(false, 'production', 'completed', [], [], undefined, undefined, '', '', {
+    import_source: 'obs',
+    analysis: { status: 'completed', phase: 'production', coverage: { duration: 1800, note: '分段扫描完成' } },
+    events: [{ id: 'ev-1', label: '短高光', start: 10, end: 17, evidence: 'proof' }],
+  })
+  assert.match(html, /OBS Studio/)
+  assert.match(html, /分段扫描完成/)
+  assert.match(html, /<details[^>]*open=""/)
+})
+
 function labels(buttons) {
   return buttons.map(button => button.children)
 }
@@ -539,7 +567,7 @@ test('manual results count drafts separately and keep source actions reachable, 
 test('a completed manual project offers another version on the results page', () => {
   const buttons = []
   render(false, 'production', 'completed', buttons, [], undefined, undefined, '', '', {drafts: [{id: 'existing'}]})
-  const remake = buttons.find(button => button.children === '再做一版')
+  const remake = buttons.find(button => button.children === '重做')
   assert.ok(remake)
   const before = navigations.length
   remake.onClick()

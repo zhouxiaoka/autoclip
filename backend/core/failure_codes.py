@@ -53,6 +53,9 @@ def user_visible_error(error):
     from backend.pipeline.failures import PipelineFailure
     if type(error).__name__ == "JobDurationExceeded":
         return _shown(str(error), "job_budget")
+    if type(error).__name__ == "CallPaused":
+        from backend.core.sentry_setup import studio_error_code
+        return _shown(getattr(error, "user_message", "") or sentence("provider_error"), studio_error_code(error))
     if isinstance(error, PipelineFailure):
         return _shown(error.user_message(), error.code or "unknown")
     local = _local_sentence_code(error)

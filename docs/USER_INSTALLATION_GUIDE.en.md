@@ -1,6 +1,6 @@
 # Installation and your first clips
 
-[简体中文](USER_INSTALLATION_GUIDE.md) · [README](../README-EN.md) · [Troubleshooting](FAQ.en.md)
+[简体中文](USER_INSTALLATION_GUIDE.md) · [README](../README.md) · [Troubleshooting](FAQ.en.md)
 
 ## Choose how to run AutoClip
 

@@ -37,7 +37,7 @@ test('StudioResults keeps same-source remake entry after leaving or restarting',
   const resultsSrc = read('src/features/studio/StudioResults.tsx')
   assert.doesNotMatch(resultsSrc, /const showMorePlatform = viewedProject === project\.id/)
   assert.match(resultsSrc, /const showMorePlatform = automatic && genDone && !bannerDismissed && !morePlatformBannerSeen\(\)/)
-  assert.match(resultsSrc, /automatic && genDone &&[\s\S]{0,160}onClick=\{startAnotherPlatform\}>\{t\('再做一版'\)\}/)
+  assert.match(resultsSrc, /canRemake && <Btn[^>]+onClick=\{\(\) => openRemake\([^\n]+\)\}>\{t\('重做'\)\}/)
 })
 
 test('StudioResults displays completed export count on 导出记录 button when multiple versions exist', () => {

@@ -238,7 +238,7 @@ def public_fields(provider_id: Optional[str]) -> Dict[str, Optional[str]]:
 
 # Packaged quality list only. These ids are not quality-promoted while the
 # bundled catalog has no sponsor block. A signed view can still list them.
-_PACKAGED_QUALITY_HOLD = frozenset({"api88", "infistar"})
+_PACKAGED_QUALITY_HOLD = frozenset({"api88", "infistar", "cometapi", "novita", "poyo"})
 
 
 def display_catalog_group(group: str, *, sponsor: bool, success_tier_value: Optional[str], provider_id: Optional[str] = None) -> str:
