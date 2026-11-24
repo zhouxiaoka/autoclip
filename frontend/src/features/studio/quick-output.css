@@ -657,14 +657,48 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
-.studio-style-actions {
-  display: flex;
+.studio-style-refresh-btn {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ac-sub);
+  cursor: pointer;
+  flex: none;
+  transition: background .15s ease, color .15s ease;
+}
+
+.studio-style-refresh-btn:hover:not(:disabled) {
+  background: var(--ac-line-2);
+  color: var(--ac-ink);
+}
+
+.studio-style-refresh-btn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.studio-style-refresh-btn.is-syncing svg {
+  animation: ac-spin .8s linear infinite;
+}
+
+.studio-style-refresh-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ac-accent);
 }
 
 .studio-style-remove-btn {
