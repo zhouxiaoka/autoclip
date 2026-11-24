@@ -189,8 +189,9 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
     saved_model = model
     provider = provider_for_endpoint({'base_url': base, 'identity': identity})
+    auth_options = {'extra_headers': config['http_headers']} if config.get('http_headers') else {}
     allow_substitute = config.get('model_source') != 'user'
-    cached = remembered_model(provider, base, key, saved_model) if allow_substitute else None
+    cached = remembered_model(provider, base, key, saved_model, **auth_options) if allow_substitute else None
     if cached:
         model = cached
     from backend.core.model_catalog import known_text_only
@@ -207,11 +208,14 @@ def vision_call(content, config=None, *, allow_event_list=False):
             payload['enable_thinking'] = False
         # Long vision thinks keep the socket alive. A refusal or a JSON 2xx is read in load().
         payload['stream'] = True
-        return token_param_kwargs(name, base, payload)  # OpenAI o-series / gpt-5+ reject max_tokens (#333)
+        from backend.core.custom_request_options import apply_chat_options
+        from backend.core.llm_providers import http_chat_body
+        return http_chat_body(token_param_kwargs(name, base, apply_chat_options(payload, config)))
 
     body = build_body(model)
     native = gemini_transport.is_official_gemini(config.get('provider', ''), base)
-    headers = {**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}
+    from backend.core.custom_request_options import merge_headers
+    headers = merge_headers({**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}, config.get('http_headers'))
 
     def request(payload):
         if native:
@@ -229,7 +233,11 @@ def vision_call(content, config=None, *, allow_event_list=False):
             from backend.services.obs import billing
             if billing.is_obs():
                 return billing.chat('vision', base, body, key, timeout)
-            with urllib.request.urlopen(request(body), timeout=timeout) as response:
+            opener = urllib.request.urlopen
+            if config.get('http_headers'):
+                from backend.core.custom_request_options import no_redirect_open
+                opener = no_redirect_open
+            with opener(request(body), timeout=timeout) as response:
                 result = read_completion_response(response)
                 return gemini_transport.completion(result) if native else result
 
@@ -292,7 +300,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                     tried_substitute = True
                     alt = resolve_available_model(
                         base_url=base, api_key=key, provider=provider,
-                        failed_model=model, exclude=(saved_model, model),
+                        failed_model=model, exclude=(saved_model, model), **auth_options,
                     )
                     if alt and alt != model:
                         _telem['retries'] += 1
@@ -325,7 +333,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 raise failure('invalid_response', '视觉模型返回了无法解析的响应，请检查接口兼容性后重试') from None
             _telem['result'] = result
             if model != saved_model:
-                remember_model(provider, base, key, saved_model, model, purpose='vision')
+                remember_model(provider, base, key, saved_model, model, purpose='vision', **auth_options)
             from backend.core import llm_usage
             llm_usage.record(model, result.get('usage') if isinstance(result, dict) else None, kind='vision',
                              prompt_chars=sum(len(part.get('text', '')) for part in content if isinstance(part, dict)),

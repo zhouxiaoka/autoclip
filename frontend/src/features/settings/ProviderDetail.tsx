@@ -7,11 +7,14 @@ import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import type { ProviderPreset } from './providerPresets'
 import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
+import CustomRequestOptions from './CustomRequestOptions'
+import { hasRequestHeaderAuth, requestScopeIdentity } from './requestOptions'
+import { presetKey } from './modelSettingsLogic'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { validationCopy } from './providerAccess'
 import TrialRunPanel from './TrialRunPanel'
 import {
-  catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
+  catalogDraftConnection, catalogHost, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected, matchedCatalogPreset,
   type LocalAsrReady,
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
@@ -58,6 +61,7 @@ export default function ProviderDetail({
 }) {
   const { settings, lists, busy, listErrors } = m
   const editingConnectionId = useRef<string | undefined>(undefined)
+  const draftSession = useRef<{ preset: string; id: string } | null>(null)
   if (!settings) return null
   const kind = connectKind(preset)
   // Editing base_url may move the connection out of the catalog preset match,
@@ -68,6 +72,15 @@ export default function ProviderDetail({
   const connection = persisted && !persisted.base_url && !editingConnectionId.current && preset.base_url
     ? { ...persisted, base_url: preset.base_url }
     : persisted || catalogDraftConnection(preset)
+  const compatible = (row: NonNullable<typeof connection>) => row.provider === 'compatible' || presetKey(row) === 'compatible'
+  // A native catalog form may not select a saved compatible account on the same service.
+  const savedAdvanced = settings.connections.filter(row => compatible(row) && (
+    row.id === persisted?.id || matchedCatalogPreset(row)?.id === preset.id
+    // Official compatible accounts remain separate from the native OpenAI credential form.
+    || (preset.id === 'openai' && (!row.catalog_provider_id || row.catalog_provider_id === 'openai')
+      && catalogHost(row.base_url) === catalogHost(preset.base_url))
+  ))
+  const advancedConnections = savedAdvanced.length ? savedAdvanced : connection && compatible(connection) ? [connection] : []
   const connected = isCatalogConnected(settings, preset, asrReady, persisted)
   const list = connection ? lists[connection.id] : undefined
   // Only a real (live/cache, non-preview) fetch shows models; catalog/preview reference IDs would mislead.
@@ -113,8 +126,9 @@ export default function ProviderDetail({
   const testing = m.testing
   const listing = connection && busy[connection.id]
   const status = connection?.validation_status
-  const testDisabled = !connection || testing || (
+  const testDisabled = !connection || connection._request_scope_conflict || testing || (
     preset.auth === 'api_key' && !(connection.api_key || '').trim() && !connection.has_key
+      && !(compatible(connection) && hasRequestHeaderAuth(connection))
   ) || !connection.base_url.trim()
 
   return (
@@ -309,6 +323,25 @@ export default function ProviderDetail({
               <p className="ac-note">{t('settings.providers.models_empty')}</p>
             )}
           </section>
+        )}
+        {advancedConnections.length > 0 && (
+          <details className="ac-disclosure ac-provider-detail-card" data-panel="advanced">
+            <summary>{t('高级')}</summary>
+            {advancedConnections.map(row => <div key={
+              !savedAdvanced.some(item => item === row) || (draftSession.current?.preset === preset.id && draftSession.current.id === row.id)
+                ? `new:${preset.id}` : `saved:${row.id}`
+            } data-request-connection-id={row.id}>
+              {(advancedConnections.length > 1 || row.id !== connection?.id) && <p className="ac-note">{row.name}</p>}
+              <CustomRequestOptions key={JSON.stringify([m.loadSession, requestScopeIdentity(row)])} value={row} onEdit={patch => {
+                const saved = savedAdvanced.find(item => item === row)
+                if (saved) m.editConnection(saved, patch)
+                else {
+                  const created = m.ensureCatalogProvider(preset.id, patch)
+                  if (created) draftSession.current = { preset: preset.id, id: created }
+                }
+              }} />
+            </div>)}
+          </details>
         )}
       </div>
     </div>

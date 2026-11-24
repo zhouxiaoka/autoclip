@@ -44,10 +44,11 @@ function matchesCustom(connection: Connection, query: string, filter: Capability
 }
 
 function CustomCard({
-  connection, selected, onOpen,
+  connection, selected, unsaved = false, onOpen,
 }: {
   connection: Connection
   selected: boolean
+  unsaved?: boolean
   onOpen: (id: string) => void
 }) {
   const id = customCatalogId(connection.id)
@@ -57,12 +58,16 @@ function CustomCard({
       className={`ac-provider-card${selected ? ' is-selected' : ''}`}
       data-provider-id={id}
       data-connect-kind="compatible"
+      data-unsaved={unsaved ? '1' : undefined}
       aria-current={selected || undefined}
       onClick={() => onOpen(id)}
     >
       <span className="ac-provider-mark" aria-hidden>{(connection.name.charAt(0) || '?').toUpperCase()}</span>
       <span className="ac-provider-card-body">
-        <span className="ac-provider-card-title">{connection.name || t('自定义 OpenAI 兼容接口')}</span>
+        <span className="ac-provider-card-title">
+          {connection.name || t('自定义 OpenAI 兼容接口')}
+          {unsaved && <span className="ac-badge">{t('有未保存的更改')}</span>}
+        </span>
       </span>
       <span className="ac-provider-card-action">
         <span className="ac-provider-action-label">{t(connection.validation_status === 'failed' ? 'settings.providers.repair_custom' : '编辑')}</span>
@@ -129,7 +134,7 @@ function ProviderCard({
 }
 
 export default function ProviderCatalog({
-  settings, query, filter, moreOpen, selectedId, asrReady = {}, onQuery, onFilter, onToggleMore, onOpen, onAdd,
+  settings, query, filter, moreOpen, selectedId, asrReady = {}, unsavedConnectionIds, onQuery, onFilter, onToggleMore, onOpen, onAdd,
 }: {
   settings: ModelSettings
   query: string
@@ -137,6 +142,7 @@ export default function ProviderCatalog({
   moreOpen: boolean
   selectedId?: string | null
   asrReady?: LocalAsrReady
+  unsavedConnectionIds?: ReadonlySet<string>
   onQuery: (value: string) => void
   onFilter: (value: CapabilityFilter) => void
   onToggleMore: () => void
@@ -199,6 +205,7 @@ export default function ProviderCatalog({
                 key={connection.id}
                 connection={connection}
                 selected={selectedId === customCatalogId(connection.id)}
+                unsaved={!!unsavedConnectionIds?.has(connection.id)}
                 onOpen={onOpen}
               />
             ))}

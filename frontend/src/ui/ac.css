@@ -610,3 +610,61 @@ details.ac-provider-model-block[open] > summary.ac-provider-model-group::before 
 .ac-provider-model-off[open] > summary::after { transform: rotate(-135deg) translateY(-1px); }
 .ac-provider-model-off > summary .count { font-family: var(--ac-font-mono); color: var(--ac-muted); }
 .ac-provider-model-off[open] > .ac-provider-model-list { margin-top: 8px; }
+
+/* ---- advanced model requests: a quiet, spacious name/value editor ---- */
+.ac-custom-request-options { padding: 18px 0; border-bottom: 1px solid var(--ac-line); }
+.ac-request-launcher { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ac-request-summary { min-width: 0; font-size: 12.5px; color: var(--ac-muted); }
+.ac-request-dialog { position: relative; width: min(860px, calc(100vw - 32px)); padding: 28px 28px 24px; }
+.ac-request-dialog h3 { padding-right: 64px; font-size: 20px; letter-spacing: -.015em; }
+.ac-request-dialog .ac-dialog-foot { justify-content: flex-end; }
+.ac-request-close { position: absolute; top: 24px; right: 22px; }
+.ac-request-headers { margin-top: 26px; }
+.ac-request-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.ac-request-toolbar h4 { margin: 0; color: var(--ac-sub); font-size: 14px; font-weight: 500; }
+.ac-request-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ac-request-common { width: 176px; height: 36px; }
+.ac-request-common .ant-select-selector { border-radius: 999px !important; background: var(--ac-line-2) !important; border-color: transparent !important; padding: 0 15px !important; }
+.ac-request-common .ant-select-selection-placeholder { color: var(--ac-sub) !important; font-size: 13px; }
+.ac-request-header-list { display: grid; gap: 12px; }
+.ac-request-header-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) 32px; gap: 12px; align-items: center; }
+.ac-request-header-row > .ac-input,
+.ac-request-header-row > .ant-input-affix-wrapper { height: 52px; padding: 0 16px; border-radius: 16px; background: var(--ac-line-2); border-color: transparent; min-width: 0; }
+.ac-request-header-row .ant-input { background: transparent; font-family: var(--ac-font-sans); }
+.ac-request-header-row > .ac-input:hover,
+.ac-request-header-row > .ant-input-affix-wrapper:hover { border-color: var(--ac-line); }
+.ac-request-header-row > .ac-input[aria-invalid="true"] { border-color: var(--ac-error); }
+.ac-request-delete { width: 32px; height: 32px; padding: 0; color: var(--ac-muted); }
+.ac-request-delete:hover { color: var(--ac-error); }
+.ac-request-add { margin-top: 14px; background: var(--ac-line-2); border-color: transparent; color: var(--ac-sub); }
+.ac-request-saved { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.ac-request-saved p { margin: 0; font-size: 12.5px; flex: 1 1 280px; }
+.ac-request-import { padding: 16px; margin-bottom: 16px; border-radius: 16px; border: 1px solid var(--ac-line); background: var(--ac-line-2); }
+.ac-request-import > .ant-input-affix-wrapper { width: 100%; min-width: 0; }
+.ac-request-import-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ac-request-feedback { font-size: 12.5px !important; }
+.ac-request-generation { margin-top: 28px; padding-top: 10px; border-top: 1px solid var(--ac-line); }
+.ac-request-generation .ac-row { gap: 12px; padding: 18px 0; }
+.ac-request-generation .ac-row:last-of-type { border-bottom: 0; }
+.ac-request-generation textarea { min-height: 120px; border-radius: 16px; padding: 14px 16px; }
+@media (max-width: 600px) {
+  .ac-request-dialog { padding: 24px 18px 20px; }
+  .ac-request-close { top: 20px; right: 14px; }
+  .ac-request-toolbar { gap: 12px; }
+  .ac-request-actions { width: 100%; gap: 4px; }
+  .ac-request-actions .ac-btn { font-size: 12px; padding: 0 6px; }
+  .ac-request-header-row { gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 28px; }
+  .ac-request-header-row > .ac-input,
+  .ac-request-header-row > .ant-input-affix-wrapper { padding: 0 12px; height: 48px; }
+  .ac-request-delete { width: 28px; }
+}
+/* Override the app-wide AntD important defaults only inside this editor. */
+.ac-request-header-row > .ac-input,
+.ac-request-header-row > .ant-input-affix-wrapper { background-color: var(--ac-thumb) !important; }
+.ac-request-header-row > .ant-input-affix-wrapper { border-color: transparent !important; }
+.ac-request-header-row .ant-input { background-color: transparent !important; }
+.ac-request-header-row > .ant-input-affix-wrapper-focused { border-color: var(--ac-accent) !important; }
+.ac-request-header-row > .ant-input-affix-wrapper-status-error { border-color: var(--ac-error) !important; }
+.ac-request-common-menu { border-radius: 16px !important; padding: 8px !important; background: var(--ac-thumb) !important; border: 1px solid var(--ac-line); }
+.ac-request-common-menu .ant-select-item { min-height: 40px; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; color: var(--ac-ink); }
+.ac-request-common-menu .ant-select-item-option-disabled { color: var(--ac-muted); }

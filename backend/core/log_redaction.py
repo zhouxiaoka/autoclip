@@ -45,9 +45,46 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+_REQUEST_OBJECT = re.compile(r"[\"']?(?:http_headers|extra_body)[\"']?\s*[:=]\s*\{", re.I)
+
+
+def _redact_request_objects(text: str) -> str:
+    # JSON/dict values may contain braces or escaped quotes; do not use a regex
+    # that stops halfway through a credential value.
+    start = 0
+    parts = []
+    while match := _REQUEST_OBJECT.search(text, start):
+        brace = match.end() - 1
+        depth, quote, escaped = 0, None, False
+        end = len(text)
+        for index in range(brace, len(text)):
+            char = text[index]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in ("'", '"'):
+                quote = char
+            elif char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    end = index + 1
+                    break
+        parts.extend((text[start:brace], REDACTED))
+        start = end
+    parts.append(text[start:])
+    return ''.join(parts)
+
+
 def redact_text(text: str) -> str:
     if not text:
         return text
+    text = _redact_request_objects(text)
     for pattern, repl in _PATTERNS:
         text = pattern.sub(repl, text)
     return text

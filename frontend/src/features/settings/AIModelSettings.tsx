@@ -8,6 +8,7 @@ import { mainConnection, failedSelection, visionFollowLacksCapability, VISION_HI
 import TrialRunPanel from './TrialRunPanel'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
+import CustomRequestOptions from './CustomRequestOptions'
 import ModelPicker from './ModelPicker'
 import { isImageModel } from './modelKind'
 import ProviderCatalog from './ProviderCatalog'
@@ -84,6 +85,7 @@ function CustomGatewayRepair({ connection, m, onBack }: { connection: Connection
         onChoose={p => m.chooseProvider('analysis', p)}
         onEdit={patch => m.editConnection(connection, patch)}
       />
+      <CustomRequestOptions value={connection} onEdit={patch => m.editConnection(connection, patch)} />
       <p className="ac-note">{t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')}</p>
       <Btn variant="cta" size="sm" onClick={() => void m.configureProvider(connection)}>{t('一键配置模型')}</Btn>
       {isAnalysis && settings.analysis
@@ -285,6 +287,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
           moreOpen={moreOpen}
           selectedId={selectedId}
           asrReady={asrReady}
+          unsavedConnectionIds={m.unsavedConnectionIds}
           onQuery={setQuery}
           onFilter={setFilter}
           onToggleMore={() => setMoreOpen(open => !open)}

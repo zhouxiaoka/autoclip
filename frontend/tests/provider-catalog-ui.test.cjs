@@ -7,6 +7,7 @@ const { loadTs } = require('./load-ts.cjs')
 
 function loadDetail(mocks) {
   return loadTs('ProviderDetail.tsx', {
+    './CustomRequestOptions': { default: () => null },
     ...mocks,
     react: { ...React, useRef: current => ({ current }), ...(mocks.react || {}) },
   }).default
@@ -270,6 +271,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
   const m = { settings: value, lists: {}, busy: {}, listErrors: {}, lastTrialByConnection: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
   const Page = loadTs('AIModelSettings.tsx', {
     './ModelSettingsLeaveGuard': { default: () => null },
+    './CustomRequestOptions': { default: props => React.createElement('request-options', props) },
     './AddCustomProviderDialog': { default: () => null },
     react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {}, useRef: initial => ({ current: initial }) },
     'react-i18next': { useTranslation: () => {} },
@@ -334,6 +336,7 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
     }
     const Page = loadTs('AIModelSettings.tsx', {
     './ModelSettingsLeaveGuard': { default: () => null },
+    './CustomRequestOptions': { default: props => React.createElement('request-options', props) },
       './AddCustomProviderDialog': { default: () => null },
       react: {
         ...React,
@@ -364,6 +367,8 @@ for (const requestedProvider of ['deepseek', 'custom:ds']) {
     const nodes = flatten(Page({ requestedSection: 'model', requestedProvider }))
     if (requestedProvider.startsWith('custom:')) {
       assert.ok(nodes.some(node => node.props?.['data-connect-kind'] === 'compatible'))
+      assert.equal(nodes.filter(node => node.type === 'request-options').length, 1)
+      assert.equal(nodes.find(node => node.type === 'request-options').props.value.id, 'ds')
     } else {
       assert.ok(nodes.some(node => node.props?.['data-detail'] === 'deepseek' || node.props?.['data-provider-id'] === 'deepseek'))
     }
@@ -479,6 +484,7 @@ for (const [presetId, address, legacy] of [
       testCatalogProvider(id, connection, kind) { probes.push([connection.id, connection.base_url, kind]) },
     }
     const Detail = loadTs('ProviderDetail.tsx', {
+      './CustomRequestOptions': { default: () => null },
       react: { ...React, useRef: () => tracked },
       '../../i18n': i18n, '../../ui': ui,
       '../../utils/externalLinks': { openExternalLink: () => {} },
@@ -684,4 +690,50 @@ test('pasting an OpenRouter key into its compatible connection stays in the fiel
     input.props.onPaste({ clipboardData: { getData: () => 'sk-or-v1-fixture-only-abcdefghijklmnopqrstuvwxyz' }, preventDefault() { prevented = true } })
     assert.equal(prevented, intercept)
   }
+})
+
+test('custom gateway cards show an unsaved badge while pending save and clear it once saved', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const saved = {
+    ...settings,
+    saved: true,
+    connections: [{
+      id: 'gw-saved', name: 'Saved Gateway', provider: 'compatible',
+      base_url: 'https://saved.example/v1', api_key: '', has_key: true,
+      image_api: 'auto', image_base_url: '', base_url_source: 'user',
+    }],
+  }
+  const current = {
+    ...saved,
+    connections: [
+      saved.connections[0],
+      {
+        id: 'gw-draft', name: 'Pending Gateway', provider: 'compatible',
+        base_url: 'https://pending.example/v1', api_key: '', has_key: false,
+        image_api: 'auto', image_base_url: '', base_url_source: 'user',
+      },
+    ],
+  }
+
+  const unsavedTree = Catalog({
+    settings: current, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    unsavedConnectionIds: view.unsavedConnectionIds(current, saved),
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const unsavedNodes = flatten(unsavedTree)
+  const savedCard = unsavedNodes.find(node => node.props?.['data-provider-id'] === 'custom:gw-saved')
+  const draftCard = unsavedNodes.find(node => node.props?.['data-provider-id'] === 'custom:gw-draft')
+  assert.equal(savedCard.props['data-unsaved'], undefined)
+  assert.doesNotMatch(textOf(savedCard), /有未保存的更改/)
+  assert.equal(draftCard.props['data-unsaved'], '1')
+  assert.match(textOf(draftCard), /有未保存的更改/)
+
+  const afterSaveTree = Catalog({
+    settings: current, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    unsavedConnectionIds: view.unsavedConnectionIds(current, current),
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const afterSaveCard = flatten(afterSaveTree).find(node => node.props?.['data-provider-id'] === 'custom:gw-draft')
+  assert.equal(afterSaveCard.props['data-unsaved'], undefined)
+  assert.doesNotMatch(textOf(afterSaveCard), /有未保存的更改/)
 })
