@@ -458,11 +458,14 @@ def _hard_cuts(video: Path, start: float, length: float) -> list[float]:
            "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo", *render_limits.output_args(), "-f", "null", "-"]
     cmd, priority = render_limits.low_priority(cmd)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, length * 4), check=False, **priority)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=max(60, length * 4), check=False, **priority,
+        )
     except subprocess.TimeoutExpired:
         return []
     cuts = []
-    for line in proc.stderr.splitlines():
+    for line in (proc.stderr or "").splitlines():
         if "pts_time:" not in line:
             continue
         try:

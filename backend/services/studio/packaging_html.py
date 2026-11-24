@@ -466,8 +466,8 @@ def _run(cmd: list[str], timeout: float):
     full, priority = render_limits.low_priority(cmd)
     # A bound studio render must be able to kill this ffmpeg with the rest of the task.
     if project_cancellation.current():
-        return project_cancellation.run(full, capture_output=True, text=True, timeout=timeout, **priority)
-    return subprocess.run(full, capture_output=True, text=True, timeout=timeout, **priority)
+        return project_cancellation.run(full, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, **priority)
+    return subprocess.run(full, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, **priority)
 
 
 def encode_ffv1(holds: list[tuple[Path, int]], dest: Path, fps: int = 30, *, timeout: float, run=None) -> None:

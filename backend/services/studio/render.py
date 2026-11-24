@@ -461,7 +461,7 @@ def _encode_draft(
 
                         def run(full, length=scene.end - scene.start):
                             full, priority = render_limits.low_priority(full)
-                            return project_cancellation.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
+                            return project_cancellation.run(full, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=max(180, length * 20), **priority)
 
                         proc = video_encoder.run_with_fallback(build, run)
                         if proc.returncode and scene_overlay:

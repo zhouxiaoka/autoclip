@@ -103,3 +103,32 @@ def test_python_fastapi_79_playwright_timeout_downgrades_as_over_budget_without_
     assert job.downgraded is True
     assert job.downgrade_reason == "over_budget"
     assert reported == []
+
+
+def test_python_fastapi_7e_and_j_hard_cuts_uses_utf8_replace_and_handles_none_stderr(monkeypatch, tmp_path):
+    """PYTHON-FASTAPI-7E & -J: _hard_cuts must pass encoding='utf-8', errors='replace' and tolerate None stderr."""
+    import subprocess
+
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=None)
+
+    monkeypatch.setattr(framing.subprocess, "run", fake_run)
+    dummy = tmp_path / "video.mp4"
+    dummy.write_bytes(b"")
+    assert framing._hard_cuts(dummy, 0.0, 5.0) == []
+    assert seen.get("encoding") == "utf-8"
+    assert seen.get("errors") == "replace"
+
+
+def test_python_fastapi_r_parse_srt_falls_back_to_gb18030_without_bom(tmp_path):
+    """PYTHON-FASTAPI-R: legacy GBK/GB18030 SRT without BOM must parse cleanly instead of raising UnicodeDecodeError."""
+    from backend.utils.text_processor import TextProcessor
+
+    srt = tmp_path / "legacy_gbk.srt"
+    srt.write_bytes("1\n00:00:01,000 --> 00:00:03,000\n你好世界，测试字幕。\n".encode("gb18030"))
+    items = TextProcessor.parse_srt(srt)
+    assert len(items) == 1
+    assert items[0]["text"] == "你好世界，测试字幕。"

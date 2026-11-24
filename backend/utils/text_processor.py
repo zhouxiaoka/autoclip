@@ -233,8 +233,19 @@ class TextProcessor:
             return []
 
         try:
-            # Let pysrt detect a byte order mark before falling back to UTF-8.
-            subs = pysrt.open(str(srt_path))
+            # Let pysrt detect a byte order mark before falling back to UTF-8, then common legacy encodings.
+            try:
+                subs = pysrt.open(str(srt_path))
+            except UnicodeDecodeError:
+                subs = None
+                for enc in ("gb18030", "cp1252", "latin-1"):
+                    try:
+                        subs = pysrt.open(str(srt_path), encoding=enc)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                if subs is None:
+                    raise
 
             subtitles = []
             for sub in subs:
