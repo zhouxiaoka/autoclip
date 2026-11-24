@@ -65,7 +65,9 @@ class LLMProvider(ABC):
 
         def wrapped(self, prompt: str, input_data: Any = None, **call_kwargs):
             from backend.core.llm_telemetry import observe_provider_call
-            return observe_provider_call(self, raw, prompt, input_data, **call_kwargs)
+            from backend.services.obs.billing import is_obs
+            method = LLMProvider._obs_call if is_obs() else raw
+            return observe_provider_call(self, method, prompt, input_data, **call_kwargs)
 
         wrapped._llm_telemetry = True  # type: ignore[attr-defined]
         cls.call = wrapped  # type: ignore[method-assign]
@@ -74,6 +76,26 @@ class LLMProvider(ABC):
         self.api_key = api_key
         self.model_name = model_name
         self.kwargs = kwargs
+
+    def _obs_call(self, prompt, input_data=None, **kwargs):
+        from backend.services.obs.billing import CallPaused, chat
+        from backend.core.llm_stream import from_chat_json
+        from backend.core.provider_endpoint import official_chat_url
+        base = getattr(self, 'base_url', '')
+        if not base:
+            if isinstance(self, OpenAIProvider):
+                base = OPENAI_OFFICIAL_BASE_URL
+            elif isinstance(self, GeminiProvider):
+                base = official_chat_url('gemini') or ''
+        if not base:
+            raise CallPaused('OBS requires a configured chat endpoint', code='bad_endpoint')
+        model = self.request_model()
+        payload = token_param_kwargs(model, base, guarded_chat_kwargs(base, {
+            **kwargs, 'stream': True, 'model': model,
+            'messages': [{'role': 'user', 'content': self._build_full_input(prompt, input_data)}],
+        }))
+        result = from_chat_json(chat('analysis', base, payload, self.api_key, _http_timeout(180)))
+        return LLMResponse(result.content, result.usage, model, result.finish_reason)
 
     def request_model(self) -> str:
         """Model for this request only. Never writes ``self.model_name``."""

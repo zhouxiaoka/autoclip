@@ -1,7 +1,7 @@
 # Windows 安装包自动验收 harness（命令行部分）
 
 从一台 Linux/macOS 机器通过 SSH 驱动**专用** Windows 验收机（实体机或虚拟机均可，例如 Windows Server 2025 / Windows 11），
-把 [RELEASE_CHECKLIST.md](../../RELEASE_CHECKLIST.md) 3.2「Windows」里**能用命令验证**的部分跑一遍，并留下证据目录。
+把 [docs/RELEASE_CHECKLIST.md](../../docs/RELEASE_CHECKLIST.md) 3.2「Windows」里**能用命令验证**的部分跑一遍，并留下证据目录。
 做法与 `.github/workflows/desktop-build.yml` 的 `smoke-windows-x64` / `scripts/windows_upgrade_smoke.ps1` 一致，
 区别是：真实 Windows 机器、真实交互桌面里启动的应用，上一版是真的在运行（不只是模拟残留进程）。
 

@@ -8,14 +8,14 @@ import { ConfigProvider } from 'antd'
 import './ac.css'
 
 /* ---------- Segmented ---------- */
-export interface SegmentedOption<T extends string> { value: T; label: React.ReactNode }
+export interface SegmentedOption<T extends string> { value: T; label: React.ReactNode; disabled?: boolean }
 export function Segmented<T extends string>({
   value, onChange, options, size, ariaLabel, className, disabled,
 }: { value: T; onChange: (v: T) => void; options: SegmentedOption<T>[]; size?: 'sm'; ariaLabel?: string; className?: string; disabled?: boolean }) {
   return (
     <div className={`ac-seg${size === 'sm' ? ' ac-seg--sm' : ''}${className ? ` ${className}` : ''}`} role="group" aria-label={ariaLabel}>
       {options.map((o) => (
-        <button key={o.value} type="button" disabled={disabled} aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" disabled={disabled || o.disabled} aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
       ))}
@@ -170,6 +170,7 @@ const I: React.FC<{ d: string; size?: number; stroke?: number }> = ({ d, size = 
 )
 export const Icon = {
   Back: (p?: { size?: number }) => <I size={p?.size} d="M15 18l-6-6 6-6" />,
+  Edit: (p?: { size?: number }) => <I size={p?.size} d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />,
   Play: (p?: { size?: number }) => <I size={p?.size} d="M7 5v14l11-7z" />,
   Plus: (p?: { size?: number }) => <I size={p?.size} d="M12 5v14M5 12h14" />,
   Down: (p?: { size?: number }) => <I size={p?.size} d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" />,

@@ -68,7 +68,7 @@ def test_no_browser_gives_a_readable_hint_and_falls_back_to_classic(monkeypatch,
 @pytest.mark.parametrize('key', [runtime.NO_BROWSER_WARNING, runtime.NO_RUNTIME_WARNING])
 def test_hints_are_translated_in_all_eight_locales(key):
     files = sorted(LOCALES.glob('*.json'))
-    assert len(files) == 8
+    assert len(files) == 13
     for file in files:
         value = json.loads(file.read_text(encoding='utf-8')).get(key)
         assert value, f'{file.name} lacks {key}'
@@ -78,11 +78,11 @@ def test_hints_are_translated_in_all_eight_locales(key):
 
 def test_desktop_build_bundles_playwright_and_checks_it():
     common = (ROOT / 'scripts' / 'lib' / 'desktop_build_common.sh').read_text(encoding='utf-8')
-    assert 'requirements-desktop.txt' in common and 'verify_playwright_bundled()' in common
+    assert 'requirements/requirements-desktop.txt' in common and 'verify_playwright_bundled()' in common
     assert '"playwright"}' not in common  # no longer an on-demand-only import
     for script in ('build_macos_arm.sh', 'build_windows_x64.sh'):
         assert '\nverify_playwright_bundled\n' in (ROOT / 'scripts' / script).read_text(encoding='utf-8'), script
-    desktop = (ROOT / 'requirements-desktop.txt').read_text(encoding='utf-8')
+    desktop = (ROOT / 'requirements/requirements-desktop.txt').read_text(encoding='utf-8')
     assert runtime.PACKAGES[0] in desktop
 
 

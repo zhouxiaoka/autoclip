@@ -201,7 +201,7 @@ test('install prompt copy exists in all 8 languages', () => {
     '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。',
     '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。']
     const slowNetwork = ['视频没有字幕，需要本地转写组件（约 220 MB，国内约 15 分钟），或改用云端转写。', ...keys.slice(-2)]
-  for (const lang of ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh']) {
+  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     for (const key of keys) assert.ok(typeof data[key] === 'string' && data[key].length > 0, `${lang}: ${key}`)
     if (lang !== 'zh') {
@@ -1515,7 +1515,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     antd: { Select: () => null },
     'react-router-dom': { useNavigate: () => navigate },
     '../../ui': { Btn, Segmented: () => null, Dialog: () => null, StatusDot: ({ label }) => h('span', null, label) },
-    './PlatformPicker': { default: () => null },
+    './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: () => null },
     './api': { studioApi: { inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true, has_audio: true }), readiness, readinessProbe: signal => readiness(signal), import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackImportPreviewShown() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },

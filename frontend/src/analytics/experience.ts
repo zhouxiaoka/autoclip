@@ -17,7 +17,7 @@ const enums: Record<string, readonly string[]> = {
   reason: ['setup_required', 'provider', 'model', 'key'], config_source: ['preset', 'customized'], mode: ['initial', 'update'],
   provider: TELEMETRY_PROVIDERS, // same generated enum as success-rate events (every preset)
   source: ['live', 'cache', 'catalog'], outcome: ['success', 'error', 'blocked', 'unknown'],
-  resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'unknown'],
+  resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'obs', 'unknown'],
   analysis_mode: ['auto', 'subtitle', 'visual'], transcription_mode: ['whisper_local', 'sensevoice_local', 'cloud', 'unknown'],
   cover_mode: ['ai', 'frame'], capability: ['text', 'multimodal', 'auto'],
   analysis_source: ['preset', 'user', 'none'],

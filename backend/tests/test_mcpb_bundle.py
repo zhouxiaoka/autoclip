@@ -80,7 +80,7 @@ def test_blank_user_config_does_not_override_desktop_settings(monkeypatch):
 def test_docs_explain_pack_and_do_not_publish():
     guide = (ROOT / 'docs' / 'CLI_AND_MCP.md').read_text(encoding='utf-8')
     readme = (ROOT / 'README.md').read_text(encoding='utf-8')
-    english = (ROOT / 'README-EN.md').read_text(encoding='utf-8')
+    english = (ROOT / 'docs/i18n/README-ZH.md').read_text(encoding='utf-8')
     script = (ROOT / 'scripts' / 'pack_mcpb.py').read_text(encoding='utf-8')
     ignore = (ROOT / '.gitignore').read_text(encoding='utf-8')
     for text in (guide, readme, english):

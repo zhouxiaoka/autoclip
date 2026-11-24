@@ -11,7 +11,7 @@ const HINT = '关闭后成片不带字幕。标题只在封面上，不会烧进
 const MAIN = '成片显示字幕'
 const SETTINGS = '自动成片压字幕'
 const SAVE_ERROR = '保存失败，请稍后重试'
-const LANGS = ['zh', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr']
+const LANGS = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
 const h = React.createElement
 const { act } = React
 const studioDir = path.resolve(__dirname, '../src/features/studio')
@@ -118,7 +118,7 @@ function studioMocks(templates) {
       Btn: ({ children, onClick, disabled, loading }) => h('button', { type: 'button', onClick, disabled: !!(disabled || loading) }, children),
       Segmented: () => null, Dialog: () => null, StatusDot: ({ label }) => h('span', null, label), Row,
     },
-    './PlatformPicker': { default: () => null },
+    './LiveReplayPicker': { default: () => null }, './PlatformPicker': { default: () => null },
     './api': { studioApi: { inspectUrl: async () => ({ title: 't', duration: 60, preview_route: 'platform_subtitle', has_manual_subtitle: true }),
         readiness: async () => READY, readinessProbe: async () => READY, import: async () => ({ project_id: 'p' }) }, errorText: value => String(value), errorCode: () => undefined },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackImportPreviewShown() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },

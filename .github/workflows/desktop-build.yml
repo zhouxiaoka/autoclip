@@ -204,6 +204,9 @@ jobs:
 
       - name: Build desktop app (PBS route)
         env:
+          AUTOCLIP_TWITCH_CLIENT_ID: ${{ vars.AUTOCLIP_TWITCH_CLIENT_ID }}
+          AUTOCLIP_YOUTUBE_CLIENT_ID: ${{ vars.AUTOCLIP_YOUTUBE_CLIENT_ID }}
+          AUTOCLIP_YOUTUBE_CLIENT_SECRET: ${{ secrets.AUTOCLIP_YOUTUBE_DESKTOP_CLIENT_SECRET }}
           # PostHog analytics. The phc_ key is a public client key (it ships in
           # the frontend bundle anyway), but we keep it in repo Secrets so it's
           # easy to rotate and not hard-coded. Set this secret in
@@ -360,6 +363,9 @@ jobs:
 
       - name: Build desktop app (PBS route)
         env:
+          AUTOCLIP_TWITCH_CLIENT_ID: ${{ vars.AUTOCLIP_TWITCH_CLIENT_ID }}
+          AUTOCLIP_YOUTUBE_CLIENT_ID: ${{ vars.AUTOCLIP_YOUTUBE_CLIENT_ID }}
+          AUTOCLIP_YOUTUBE_CLIENT_SECRET: ${{ secrets.AUTOCLIP_YOUTUBE_DESKTOP_CLIENT_SECRET }}
           # cargo inherits this. Rust option_env! passes the same key the frontend build uses.
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}

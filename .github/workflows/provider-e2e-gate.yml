@@ -87,7 +87,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-test.txt
+          pip install -r requirements/requirements-test.txt
       - name: Run mock provider e2e
         env:
           OPENAI_API_KEY: ""
@@ -136,7 +136,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-test.txt
+          pip install -r requirements/requirements-test.txt
       - name: Load case library
         env:
           GH_TOKEN: ${{ github.token }}

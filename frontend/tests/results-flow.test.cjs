@@ -120,14 +120,21 @@ test('first-clip time uses the backend finish time and stays quiet until the fla
   assert.equal(events[0].props.strategy_id, 'xiaohongshu')
 })
 
-test('the result flags stay off in the card source until their treatment is on', () => {
+test('result cards stay unified without inline descriptions while publish flags remain gated', () => {
   const kit = fs.readFileSync(path.join(__dirname, '../src/features/studio/PublishKit.tsx'), 'utf8')
   const card = fs.readFileSync(path.join(__dirname, '../src/features/studio/OutputVariantCard.tsx'), 'utf8')
+  const draftCard = fs.readFileSync(path.join(__dirname, '../src/features/studio/DraftResultCard.tsx'), 'utf8')
   assert.match(kit, /useFlag\('publish_pack_v2'\) === 'combined'/)
   assert.match(kit, /copyText\(postCaption\(post\)\)/)
   assert.match(kit, /t\('复制文案并保存视频和封面'\)/)
   const preview = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioPublishPreview.tsx'), 'utf8')
-  assert.match(card, /useFlag\('clip_reasons'\) === true/)
   assert.match(preview, /share_target: 'copy_and_save'/)
   assert.match(preview, /flagAssigned\('publish_pack_v2'\)/)
+  // Both result card types share the same badge, single meta line, no inline description, and compact edit action.
+  for (const src of [card, draftCard]) {
+    assert.match(src, /className="ac-tag ac-tag--tl"/)
+    assert.match(src, /className="studio-result-meta"/)
+    assert.match(src, /className="studio-card-edit-btn"/)
+    assert.doesNotMatch(src, /studio-clip-reason|studio-draft-description|studio-draft-status/)
+  }
 })

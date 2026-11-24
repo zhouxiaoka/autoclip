@@ -40,13 +40,13 @@ macOS 15 及以上首次打开：双击一次，若被拦截则到「系统设�
 2. 检查磁盘空间，记录界面上的具体错误和发生阶段。
 3. 桌面后端端口由启动器管理，查看实际启动日志，不要假设一直是 8000。Docker 默认 Web 端口为 3000、API 端口为 8000。
 4. Web 模式下若开启了浏览器网页翻译，先关闭翻译再刷新。
-5. Docker 用户执行 `docker compose ps` 和 `docker compose logs --tail=100 autoclip celery-worker`，参见 [Docker 指南](../DOCKER.md)。
+5. Docker 用户执行 `docker compose ps` 和 `docker compose logs --tail=100 autoclip celery-worker`，参见 [Docker 指南](DOCKER.md)。
 
 ### 模型连接测试失败怎么办？
 
 确认提供商、模型名、API Key、Base URL 与区域设置一致，账号拥有该模型权限。Ollama / LM Studio 要先启动服务并加载模型。本地服务默认地址分别是 `http://localhost:11434/v1` 和 `http://localhost:1234/v1`。
 
-Docker 中的 `localhost` 是容器自己。宿主机模型服务的访问方式见 [Docker 指南](../DOCKER.md)。若出现代理、TLS 或超时错误，检查具体连接目标和网络配置；不要在反馈中粘贴完整 API Key。
+Docker 中的 `localhost` 是容器自己。宿主机模型服务的访问方式见 [Docker 指南](DOCKER.md)。若出现代理、TLS 或超时错误，检查具体连接目标和网络配置；不要在反馈中粘贴完整 API Key。
 
 ## 字幕、分析与导出
 

@@ -12,7 +12,7 @@ import {
 } from './sponsorPromoState'
 
 const STATUSES = new Set(['healthy', 'fault', 'out_of_service'])
-const SUPPORTED_LOCALES = new Set(['zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru'])
+const SUPPORTED_LOCALES = new Set(['zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru', 'id', 'tr', 'vi', 'de'])
 
 const NOTICE_IDS = Object.keys(TRUSTED_REGISTER_HOSTS)
 const PROMO_CHOICES = [...NOTICE_IDS, 'other']

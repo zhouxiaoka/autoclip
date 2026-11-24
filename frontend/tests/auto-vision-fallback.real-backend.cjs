@@ -6,7 +6,7 @@ const React=require('react'),{renderToStaticMarkup}=require('react-dom/server')
 
 const CODE='vision_unavailable_subtitle_fallback'
 const MESSAGE='视觉服务暂不可用，已切换为字幕分析继续制作。'
-const langs=['zh','en','ja','ko','es','pt','ru','fr']
+const langs=['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
 const catalogs=Object.fromEntries(langs.map(lang=>[lang,require('../src/i18n/locales/'+lang+'.json')]))
 
 function load(file,mocks={}){

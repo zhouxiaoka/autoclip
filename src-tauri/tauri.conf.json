@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AutoClip Desktop",
-  "version": "1.5.9",
+  "version": "1.6.0",
   "identifier": "com.autoclip.desktop",
   "build": {
     "beforeDevCommand": "cd ../frontend && npm run dev",
@@ -93,7 +93,9 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["autoclip"]
+        "schemes": [
+          "autoclip"
+        ]
       }
     },
     "updater": {
