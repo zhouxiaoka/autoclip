@@ -25,7 +25,7 @@
 
 </div>
 
-![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[最新正式版](https://github.com/zhouxiaoka/autoclip/releases/latest)**，桌面版、CLI 與 MCP 同步更新。版本以 `autoclip --version` 與 MCP `get_version` 為準。一鍵出片、字幕分頁、人物取景與長影片佇列修復詳見 [更新日誌](CHANGELOG.md)。舊版使用者請升級。
 
@@ -227,6 +227,24 @@ autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
 ```
+
+<details>
+<summary>离线 Wheel、源码安装与 MCPB 打包</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+如需本地构建 MCPB 包而不发布，运行 `python scripts/pack_mcpb.py`（不自动执行 `smithery mcp publish`）。
+
+</details>
+
 
 **Docker / Web 部署**
 

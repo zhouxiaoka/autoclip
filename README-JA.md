@@ -25,7 +25,7 @@
 
 </div>
 
-![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[最新リリース](https://github.com/zhouxiaoka/autoclip/releases/latest)**。バージョンは `autoclip --version` の表示です。デスクトップ・CLI・MCP を同時更新。自動制作、字幕のページ分割、人物構図、長尺キューの修正は [変更履歴](CHANGELOG.md) を参照し、旧版から更新してください。
 
@@ -227,6 +227,24 @@ autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
 ```
+
+<details>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
+
+</details>
+
 
 **Docker / Web**
 

@@ -10,7 +10,7 @@ SURFACES = (
     'docs/CLI_AND_MCP.md',
     'README.md',
     'README-ZH-TW.md',
-    'README-EN.md',
+    'README-ZH.md',
     'README-JA.md',
     'README-KO.md',
     'README-ES.md',

@@ -25,7 +25,7 @@
 
 </div>
 
-![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[Актуальный релиз](https://github.com/zhouxiaoka/autoclip/releases/latest)** — это то, что показывает `autoclip --version`, вместе с desktop, CLI и MCP. Автовыпуск, разбивка субтитров, кадрирование и очередь длинных видео описаны в [истории изменений](CHANGELOG.md). Обновите старые версии.
 
@@ -227,6 +227,24 @@ autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
 ```
+
+<details>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
+
+</details>
+
 
 **Docker / Web**
 

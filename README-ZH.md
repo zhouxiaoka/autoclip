@@ -64,13 +64,13 @@
 
 **本机优先：** 剪辑与渲染全部在本机完成，无需上传原片排队，也没有订阅费。支持自带云端 API Key，或搭配 **Ollama / LM Studio + Whisper / SenseVoice** 实现 100% 离线运行。
 
-![AutoClip v1.6.0 直播回放切片演示](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 直播回放切片演示](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 <p align="center"><em>首页 → 6 路直播回放入口 → OBS WebSocket 配置 → Twitch 导入 → 成片卡与一键发布。</em></p>
 
 ---
 
-## v1.6.0 新特性
+## v1.6 新特性
 
 | 能力 | 说明 |
 | :--- | :--- |
@@ -276,6 +276,24 @@ autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
 ```
+
+<details>
+<summary>离线 Wheel、源码安装与 MCPB 打包</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+如需本地构建 MCPB 包而不发布，运行 `python scripts/pack_mcpb.py`（不自动执行 `smithery mcp publish`）。
+
+</details>
+
 
 ### 3. Docker / Web
 

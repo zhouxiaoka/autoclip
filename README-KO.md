@@ -25,7 +25,7 @@
 
 </div>
 
-![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[최신 정식 릴리스](https://github.com/zhouxiaoka/autoclip/releases/latest)**. 버전은 `autoclip --version`이 보여 주는 값입니다. 데스크톱·CLI·MCP를 함께 업데이트했습니다. 자동 제작, 자막 페이지 분할, 인물 구도, 긴 영상 대기열 수정은 [변경 기록](CHANGELOG.md)을 확인하고 이전 버전에서 업그레이드하세요.
 
@@ -227,6 +227,24 @@ autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
 ```
+
+<details>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
+
+</details>
+
 
 **Docker / Web**
 

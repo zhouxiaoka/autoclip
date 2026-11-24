@@ -25,7 +25,7 @@ dành cho Douyin, Xiaohongshu, TikTok, Reels, YouTube Shorts, Bilibili hoặc Yo
 
 </div>
 
-![AutoClip v1.6.0 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
+![AutoClip v1.6 Live Stream Replays](docs/images/v1.6/autoclip-v1.6-demo.gif)
 
 **[Phiên bản phát hành mới nhất](https://github.com/zhouxiaoka/autoclip/releases/latest)** là phiên bản mà `autoclip --version` hiển thị, với desktop, CLI và MCP được cập nhật đồng bộ. Xem [nhật ký thay đổi](CHANGELOG.md) để biết các bản sửa lỗi về xuất nhanh, phân trang phụ đề, căn khung hình người nói và hàng đợi video dài. Vui lòng nâng cấp các bản cài đặt cũ.
 
@@ -229,6 +229,24 @@ autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform tiktok --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
 ```
+
+<details>
+<summary>Offline wheel, source install &amp; MCPB packaging</summary>
+
+```bash
+# Install from a downloaded CLI/MCP release ZIP wheel
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
+
+# Or install from source
+python -m pip install --no-deps .
+```
+
+To build a local MCPB bundle without publishing, run `python scripts/pack_mcpb.py` (never run `smithery mcp publish` automatically).
+
+</details>
+
 
 **Docker / Web**
 
