@@ -2447,5 +2447,9 @@
   "editing_style.installing": "安装中…",
   "editing_style.update": "更新",
   "editing_style.remote_badge": "新上线",
-  "editing_style.install_failed": "模板同步或安装失败，请稍后重试"
+  "editing_style.install_failed": "模板同步或安装失败，请稍后重试",
+  "editing_style.import_zip": "导入模板包",
+  "editing_style.importing": "导入中…",
+  "editing_style.uninstall": "卸载模板",
+  "editing_style.new_count": "发现 {{count}} 款新模板"
 }

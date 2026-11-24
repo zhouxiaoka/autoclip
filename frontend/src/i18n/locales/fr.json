@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Installation…",
   "editing_style.update": "Mettre à jour",
   "editing_style.remote_badge": "Nouveau",
-  "editing_style.install_failed": "Échec de la synchronisation ou de l’installation du modèle."
+  "editing_style.install_failed": "Échec de la synchronisation ou de l’installation du modèle.",
+  "editing_style.import_zip": "Importer .zip",
+  "editing_style.importing": "Importation…",
+  "editing_style.uninstall": "Supprimer le modèle",
+  "editing_style.new_count": "{{count}} nouveaux modèles"
 }

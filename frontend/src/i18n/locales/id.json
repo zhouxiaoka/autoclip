@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Memasang…",
   "editing_style.update": "Perbarui",
   "editing_style.remote_badge": "Baru",
-  "editing_style.install_failed": "Gagal menyinkronkan atau memasang templat. Silakan coba lagi."
+  "editing_style.install_failed": "Gagal menyinkronkan atau memasang templat. Silakan coba lagi.",
+  "editing_style.import_zip": "Impor .zip",
+  "editing_style.importing": "Mengimpor…",
+  "editing_style.uninstall": "Hapus templat",
+  "editing_style.new_count": "{{count}} templat baru"
 }

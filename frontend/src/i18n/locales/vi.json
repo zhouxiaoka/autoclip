@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Đang cài đặt…",
   "editing_style.update": "Cập nhật",
   "editing_style.remote_badge": "Mới",
-  "editing_style.install_failed": "Không thể đồng bộ hoặc cài đặt mẫu. Vui lòng thử lại."
+  "editing_style.install_failed": "Không thể đồng bộ hoặc cài đặt mẫu. Vui lòng thử lại.",
+  "editing_style.import_zip": "Nhập .zip",
+  "editing_style.importing": "Đang nhập…",
+  "editing_style.uninstall": "Gỡ mẫu",
+  "editing_style.new_count": "{{count}} mẫu mới"
 }

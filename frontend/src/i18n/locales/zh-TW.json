@@ -2447,5 +2447,9 @@
   "editing_style.installing": "安裝中…",
   "editing_style.update": "更新",
   "editing_style.remote_badge": "新上線",
-  "editing_style.install_failed": "範本同步或安裝失敗，請稍後再試"
+  "editing_style.install_failed": "範本同步或安裝失敗，請稍後再試",
+  "editing_style.import_zip": "匯入範本包",
+  "editing_style.importing": "匯入中…",
+  "editing_style.uninstall": "移除範本",
+  "editing_style.new_count": "發現 {{count}} 款新範本"
 }

@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Wird installiert…",
   "editing_style.update": "Aktualisieren",
   "editing_style.remote_badge": "Neu",
-  "editing_style.install_failed": "Vorlage konnte nicht synchronisiert oder installiert werden."
+  "editing_style.install_failed": "Vorlage konnte nicht synchronisiert oder installiert werden.",
+  "editing_style.import_zip": "ZIP importieren",
+  "editing_style.importing": "Importiere…",
+  "editing_style.uninstall": "Vorlage entfernen",
+  "editing_style.new_count": "{{count}} neue Vorlagen"
 }

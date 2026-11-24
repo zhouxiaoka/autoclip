@@ -150,6 +150,19 @@ export async function uninstallUserTemplate(templateId: string): Promise<Templat
   return applyResponse(await res.json())
 }
 
+export async function importLocalTemplateArchive(file: File): Promise<{ installed: string; templates: TemplateCatalogItem[] }> {
+  await ensureApi()
+  const body = new FormData()
+  body.append('archive', file, file.name || 'template.zip')
+  const res = await fetch(buildApiUrl('/studio/templates/import'), { method: 'POST', body })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail?.detail || 'import failed')
+  }
+  const data = await res.json() as TemplateCatalogResponse & { installed: string }
+  return { installed: data.installed, templates: applyResponse(data) }
+}
+
 export function resetTemplateCatalogForTests(): void {
   currentItems = BUILTIN_DEFAULTS
   loadedOnce = false

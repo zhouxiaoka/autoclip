@@ -11,7 +11,7 @@ import {
   type BuiltinTemplateChoice, type EditingStyle, type HtmlTemplateChoice,
 } from './editingStyle'
 import {
-  installRemoteTemplate, resolveLocalizedCopy, syncTemplateCatalog, useTemplateCatalog,
+  importLocalTemplateArchive, installRemoteTemplate, resolveLocalizedCopy, syncTemplateCatalog, uninstallUserTemplate, useTemplateCatalog,
   type TemplateCatalogItem,
 } from './templateCatalogClient'
 
@@ -63,8 +63,10 @@ export default function EditingStylePicker({
 }) {
   const { items: catalogItems, installed, remote } = useTemplateCatalog()
   const [syncing, setSyncing] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [installingId, setInstallingId] = useState<string | null>(null)
   const [catalogError, setCatalogError] = useState<string | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
   const locale = getLocale()
   const itemById = new Map<string, TemplateCatalogItem>(catalogItems.map(item => [item.id, item]))
   const installedIds = installed.map(item => item.id)
@@ -366,6 +368,32 @@ export default function EditingStylePicker({
     }
   }
 
+  const onUninstall = async (id: string) => {
+    if (installingId || disabled) return
+    setCatalogError(null)
+    try {
+      await uninstallUserTemplate(id)
+      if (selected === id) choose('editorial', 'mouse')
+    } catch {
+      setCatalogError(t('editing_style.install_failed'))
+    }
+  }
+
+  const onImportZip = async (file: File | undefined) => {
+    if (!file || importing || disabled) return
+    setImporting(true)
+    setCatalogError(null)
+    try {
+      const res = await importLocalTemplateArchive(file)
+      if (res.installed) choose(res.installed, 'mouse')
+    } catch {
+      setCatalogError(t('editing_style.install_failed'))
+    } finally {
+      setImporting(false)
+      if (importInputRef.current) importInputRef.current.value = ''
+    }
+  }
+
   const onCardKey = (id: EditingStyle, event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -392,11 +420,23 @@ export default function EditingStylePicker({
   const flat = degraded || reducedTransparency
   return <fieldset className={`studio-template-picker studio-style-picker${disabled ? ' is-disabled' : ''}${flat ? ' is-degraded' : ''}${reducedMotion ? ' is-still' : ''}`} disabled={disabled}>
     <legend>{t('editing_style.title')}</legend>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+    <div className="studio-style-toolbar">
       <p className="studio-muted" style={{ margin: 0 }}>{t('editing_style.lead_ready')}</p>
-      <button type="button" className="studio-link" disabled={disabled || syncing} onClick={onSyncCatalog}>
-        {syncing ? t('editing_style.syncing') : t('editing_style.sync_catalog')}
-      </button>
+      <div className="studio-style-actions">
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".zip"
+          hidden
+          onChange={event => void onImportZip(event.target.files?.[0])}
+        />
+        <button type="button" className="studio-link" disabled={disabled || importing} onClick={() => importInputRef.current?.click()}>
+          {importing ? t('editing_style.importing') : t('editing_style.import_zip')}
+        </button>
+        <button type="button" className="studio-link" disabled={disabled || syncing} onClick={onSyncCatalog}>
+          {syncing ? t('editing_style.syncing') : remote.length > 0 ? t('editing_style.new_count', { count: remote.length }) : t('editing_style.sync_catalog')}
+        </button>
+      </div>
     </div>
     <div className="studio-style-row" role="radiogroup" aria-label={t('editing_style.title')} aria-disabled={disabled || undefined}>
       {installed.map(item => {
@@ -453,6 +493,7 @@ export default function EditingStylePicker({
             />
             {loading && id === 'editorial' ? <span className="studio-style-badge studio-style-badge--wait" aria-hidden="true" /> : null}
             {recommendedCard ? <span className="studio-style-badge">{t('editing_style.badge')}</span> : null}
+            {item.removable ? <button type="button" className="studio-style-remove-btn" title={t('editing_style.uninstall')} aria-label={t('editing_style.uninstall')} onClick={event => { event.stopPropagation(); void onUninstall(id) }}>×</button> : null}
             {item.update_available ? <button type="button" className="studio-style-preview-btn" onClick={event => { event.stopPropagation(); void onInstallRemote(id) }}>{installingId === id ? t('editing_style.installing') : t('editing_style.update')}</button> : null}
             <span className={`studio-style-radio${on ? ' is-on' : ''}`} aria-hidden="true">{on ? '✓' : ''}</span>
             <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span>

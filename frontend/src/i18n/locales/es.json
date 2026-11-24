@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Instalando…",
   "editing_style.update": "Actualizar",
   "editing_style.remote_badge": "Nueva",
-  "editing_style.install_failed": "No se pudo sincronizar o instalar la plantilla. Inténtalo de nuevo."
+  "editing_style.install_failed": "No se pudo sincronizar o instalar la plantilla. Inténtalo de nuevo.",
+  "editing_style.import_zip": "Importar .zip",
+  "editing_style.importing": "Importando…",
+  "editing_style.uninstall": "Eliminar plantilla",
+  "editing_style.new_count": "{{count}} plantillas nuevas"
 }

@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Установка…",
   "editing_style.update": "Обновить",
   "editing_style.remote_badge": "Новый",
-  "editing_style.install_failed": "Не удалось синхронизировать или установить шаблон."
+  "editing_style.install_failed": "Не удалось синхронизировать или установить шаблон.",
+  "editing_style.import_zip": "Импорт .zip",
+  "editing_style.importing": "Импорт…",
+  "editing_style.uninstall": "Удалить шаблон",
+  "editing_style.new_count": "Новых шаблонов: {{count}}"
 }

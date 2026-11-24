@@ -507,6 +507,8 @@ async def template_recommend(
 def list_templates(include_remote: bool = True):
     """Return built-in, user-installed, and cached remote packaging templates."""
     from backend.services.studio.templates import catalog
+    if include_remote:
+        catalog.trigger_background_sync()
     return catalog.list_template_items(include_remote=include_remote)
 
 

@@ -2447,5 +2447,9 @@
   "editing_style.installing": "インストール中…",
   "editing_style.update": "更新",
   "editing_style.remote_badge": "新着",
-  "editing_style.install_failed": "テンプレートの同期またはインストールに失敗しました。"
+  "editing_style.install_failed": "テンプレートの同期またはインストールに失敗しました。",
+  "editing_style.import_zip": "ZIPをインポート",
+  "editing_style.importing": "インポート中…",
+  "editing_style.uninstall": "テンプレートを削除",
+  "editing_style.new_count": "新着 {{count}} 件"
 }

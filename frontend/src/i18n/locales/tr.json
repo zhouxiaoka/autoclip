@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Yükleniyor…",
   "editing_style.update": "Güncelle",
   "editing_style.remote_badge": "Yeni",
-  "editing_style.install_failed": "Şablon eşitlenemedi veya yüklenemedi. Lütfen tekrar deneyin."
+  "editing_style.install_failed": "Şablon eşitlenemedi veya yüklenemedi. Lütfen tekrar deneyin.",
+  "editing_style.import_zip": ".zip içe aktar",
+  "editing_style.importing": "İçe aktarılıyor…",
+  "editing_style.uninstall": "Şablonu kaldır",
+  "editing_style.new_count": "{{count}} yeni şablon"
 }

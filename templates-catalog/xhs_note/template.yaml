@@ -1,0 +1,48 @@
+id: xhs_note
+version: 2
+name: {zh: 干货便签, en: Knowledge Note}
+fit:
+  formats: {sit_down_interview: 0.95, keynote_stage: 0.9, podcast_studio: 0.85, street_interview: 0.3}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: window
+  face_y: 0.45
+  head_zone: [656, 1264]
+  zoom:
+    mode: creep
+    creep: 0.0
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.03:saturation=1.02"
+  picture_layout: fit
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 210, alt_top: 210}
+    subtitle: {top: 1340, max_rows: 2}
+  safe_area: xiaohongshu
+  limits: {emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: xhs_note_3x4, from_overlay: true}
+caption_layout:
+  font_px: 34
+  inset_px: 110
+  source_limit: 56
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: 暖米白便签卡片 + 荧光黄重点标亮，适合小红书知识干货切片, en: Warm paper note card with highlighter accents for Xiaohongshu knowledge clips}
+  tags: [xiaohongshu, knowledge, note, bilingual]
+  category: interview
+  order: 55
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: fit
+qa: {}

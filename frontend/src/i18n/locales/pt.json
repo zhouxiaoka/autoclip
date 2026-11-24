@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Instalando…",
   "editing_style.update": "Atualizar",
   "editing_style.remote_badge": "Novo",
-  "editing_style.install_failed": "Não foi possível sincronizar ou instalar o modelo."
+  "editing_style.install_failed": "Não foi possível sincronizar ou instalar o modelo.",
+  "editing_style.import_zip": "Importar .zip",
+  "editing_style.importing": "Importando…",
+  "editing_style.uninstall": "Remover modelo",
+  "editing_style.new_count": "{{count}} novos modelos"
 }

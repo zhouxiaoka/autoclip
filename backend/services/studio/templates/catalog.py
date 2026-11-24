@@ -20,6 +20,7 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -104,14 +105,30 @@ class CatalogManifest(BaseModel):
     templates: list[CatalogEntry] = Field(default_factory=list)
 
 
-def catalog_url() -> str | None:
+def catalog_urls() -> list[str]:
+    """Return ordered list of catalog.json URLs (primary + mirrors). Empty when disabled."""
     raw = os.getenv('AUTOCLIP_TEMPLATE_CATALOG_URL')
     if raw is None:
-        return DEFAULT_CATALOG_URL
-    cleaned = raw.strip()
-    if not cleaned or cleaned.lower() in {'off', 'none', 'disabled', '0', 'false'}:
-        return None
-    return cleaned
+        primary = [DEFAULT_CATALOG_URL]
+    else:
+        cleaned = raw.strip()
+        if not cleaned or cleaned.lower() in {'off', 'none', 'disabled', '0', 'false'}:
+            return []
+        primary = [u.strip() for u in cleaned.split(',') if u.strip()]
+    mirrors_raw = os.getenv('AUTOCLIP_TEMPLATE_CATALOG_MIRRORS', '').strip()
+    mirrors = [u.strip() for u in mirrors_raw.split(',') if u.strip()] if mirrors_raw else []
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in (*primary, *mirrors):
+        if item not in seen:
+            seen.add(item)
+            ordered.append(item)
+    return ordered
+
+
+def catalog_url() -> str | None:
+    urls = catalog_urls()
+    return urls[0] if urls else None
 
 
 def _cache_path(user_root: Path | None = None) -> Path:
@@ -174,17 +191,27 @@ def _http_get(url: str, *, headers: dict[str, str] | None = None, timeout: float
 Fetcher = Callable[..., tuple[int, bytes, dict[str, str]]]
 
 
+_bg_sync_lock = threading.Lock()
+_bg_sync_running = False
+
+
 def sync_catalog(
     *,
     force: bool = False,
     url: str | None = None,
+    urls: list[str] | None = None,
     user_root: Path | None = None,
     fetcher: Fetcher | None = None,
 ) -> CatalogManifest:
-    """Fetch remote ``catalog.json`` with ETag/TTL caching."""
-    target_url = url if url is not None else catalog_url()
+    """Fetch remote ``catalog.json`` with ETag/TTL caching and multi-mirror fallback."""
+    if urls is not None:
+        candidates = [u for u in urls if u]
+    elif url is not None:
+        candidates = [url] if url else []
+    else:
+        candidates = catalog_urls()
     cached, meta = read_cached_catalog(user_root=user_root)
-    if not target_url:
+    if not candidates:
         return cached or CatalogManifest()
     if not force and cached is not None and (time.time() - meta.get('fetched_at', 0)) < CATALOG_CACHE_TTL_SEC:
         return cached
@@ -194,22 +221,67 @@ def sync_catalog(
         headers['If-None-Match'] = meta['etag']
 
     do_fetch = fetcher or _http_get
-    status, body, resp_headers = do_fetch(target_url, headers=headers, timeout=CATALOG_TIMEOUT_SEC, max_bytes=MAX_CATALOG_BYTES)
-    if status == 304 and cached is not None:
-        _write_cached_catalog(cached, etag=meta.get('etag', ''), user_root=user_root)
-        return cached
-    if status == 404:
-        # Remote release catalog not published yet: treat as an empty remote list rather than failing UI sync.
+    last_error: TemplateCatalogError | None = None
+    saw_404 = False
+    for target_url in candidates:
+        try:
+            status, body, resp_headers = do_fetch(
+                target_url, headers=headers, timeout=CATALOG_TIMEOUT_SEC, max_bytes=MAX_CATALOG_BYTES,
+            )
+        except TemplateCatalogError as error:
+            last_error = error
+            logger.debug('Catalog mirror failed (%s): %s', target_url, error)
+            continue
+        if status == 304 and cached is not None:
+            _write_cached_catalog(cached, etag=meta.get('etag', ''), user_root=user_root)
+            return cached
+        if status == 404:
+            saw_404 = True
+            continue
+        try:
+            parsed = json.loads(body.decode('utf-8'))
+            manifest = CatalogManifest.model_validate(parsed)
+        except Exception as error:
+            last_error = TemplateCatalogError('远端模板目录格式无效')
+            logger.debug('Catalog mirror returned invalid payload (%s): %s', target_url, error)
+            continue
+        _write_cached_catalog(manifest, etag=resp_headers.get('etag', ''), user_root=user_root)
+        return manifest
+
+    if saw_404 and last_error is None:
         empty = CatalogManifest()
         _write_cached_catalog(empty, etag='', user_root=user_root)
         return empty
-    try:
-        parsed = json.loads(body.decode('utf-8'))
-        manifest = CatalogManifest.model_validate(parsed)
-    except Exception as error:
-        raise TemplateCatalogError('远端模板目录格式无效') from error
-    _write_cached_catalog(manifest, etag=resp_headers.get('etag', ''), user_root=user_root)
-    return manifest
+    if last_error is not None:
+        raise last_error
+    return cached or CatalogManifest()
+
+
+def trigger_background_sync(*, user_root: Path | None = None) -> bool:
+    """Silently refresh a stale catalog in a daemon thread without blocking callers."""
+    global _bg_sync_running
+    if os.getenv('PYTEST_CURRENT_TEST') or not catalog_urls():
+        return False
+    cached, meta = read_cached_catalog(user_root=user_root)
+    if cached is not None and (time.time() - meta.get('fetched_at', 0)) < CATALOG_CACHE_TTL_SEC:
+        return False
+    with _bg_sync_lock:
+        if _bg_sync_running:
+            return False
+        _bg_sync_running = True
+
+    def _run() -> None:
+        global _bg_sync_running
+        try:
+            sync_catalog(force=False, user_root=user_root)
+        except Exception:
+            pass
+        finally:
+            with _bg_sync_lock:
+                _bg_sync_running = False
+
+    threading.Thread(target=_run, name='template-catalog-sync', daemon=True).start()
+    return True
 
 
 def _is_symlink(info: zipfile.ZipInfo) -> bool:
@@ -482,8 +554,10 @@ def list_template_items(
                 'preview_webm_url': entry.preview_webm_url,
             })
 
+    remote_count = sum(1 for item in items if not item['installed'])
     return {
         'templates': items,
+        'remote_count': remote_count,
         'catalog_url': catalog_url(),
         'catalog_updated_at': remote_manifest.updated_at if remote_manifest else '',
         'catalog_synced_at': meta.get('fetched_at', 0),

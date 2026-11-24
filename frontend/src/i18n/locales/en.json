@@ -2447,5 +2447,9 @@
   "editing_style.installing": "Installing…",
   "editing_style.update": "Update",
   "editing_style.remote_badge": "New",
-  "editing_style.install_failed": "Could not sync or install template. Please try again."
+  "editing_style.install_failed": "Could not sync or install template. Please try again.",
+  "editing_style.import_zip": "Import .zip",
+  "editing_style.importing": "Importing…",
+  "editing_style.uninstall": "Remove template",
+  "editing_style.new_count": "{{count}} new templates"
 }

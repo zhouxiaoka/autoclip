@@ -160,3 +160,33 @@ def test_sync_catalog_treats_http_404_as_empty_remote_list(tmp_path, monkeypatch
     assert manifest.templates == []
     listed = catalog.list_template_items(include_remote=True)
     assert any(item['id'] == 'editorial' for item in listed['templates'])
+
+
+def test_sync_catalog_falls_back_across_mirrors(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    tried = []
+
+    def mirror_fetcher(url: str, **_kw):
+        tried.append(url)
+        if 'primary.example' in url:
+            raise catalog.TemplateCatalogError('timeout')
+        payload = json.dumps({'schema_version': 1, 'updated_at': '2026-11-24T00:00:00Z', 'templates': []}).encode()
+        return 200, payload, {'etag': '"mirror-ok"'}
+
+    manifest = catalog.sync_catalog(
+        force=True,
+        urls=['https://primary.example/catalog.json', 'https://mirror.example/catalog.json'],
+        fetcher=mirror_fetcher,
+    )
+    assert manifest.updated_at == '2026-11-24T00:00:00Z'
+    assert tried == ['https://primary.example/catalog.json', 'https://mirror.example/catalog.json']
+
+
+def test_all_shipping_catalog_templates_pass_factory_verify():
+    catalog_root = Path(__file__).resolve().parents[2] / 'templates-catalog'
+    found = sorted(p.name for p in catalog_root.iterdir() if p.is_dir() and (p / 'template.yaml').is_file())
+    assert {'interview_card', 'xhs_note', 'podcast_dark'} <= set(found)
+    for name in found:
+        spec, info = template_factory.verify_folder(catalog_root / name)
+        assert spec.id == name
+        assert set(info['previews']) == {'poster.webp', 'preview.mp4', 'preview.webm'}

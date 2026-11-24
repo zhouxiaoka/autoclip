@@ -653,6 +653,43 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, .24);
 }
 
+.studio-style-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.studio-style-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.studio-style-remove-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 20px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.studio-style-card:hover .studio-style-remove-btn,
+.studio-style-card:focus-within .studio-style-remove-btn {
+  opacity: 1;
+}
+
 .studio-style-why {
   display: flex;
   min-height: 44px;
