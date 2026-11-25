@@ -11,7 +11,13 @@ const MAX_BYTES: u64 = 16 * 1024;
 #[serde(deny_unknown_fields)]
 struct Preferences {
     schema_version: u8,
+    #[serde(deserialize_with = "required_directory")]
     directory: Option<PathBuf>,
+}
+
+// A custom field decoder makes omission an error while preserving an explicit JSON null.
+fn required_directory<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<PathBuf>, D::Error> {
+    Option::<PathBuf>::deserialize(deserializer)
 }
 
 fn validate_directory(directory: &Path) -> Result<(), String> {
@@ -33,13 +39,8 @@ pub fn read(path: &Path) -> Result<Option<PathBuf>, String> {
     if bytes.len() as u64 > MAX_BYTES {
         return Err("export_directory_config_invalid".into());
     }
-    let value: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|_| "export_directory_config_invalid".to_string())?;
-    // Option fields default to None when absent in serde; only an explicit null may reset the destination.
-    if value.get("directory").is_none() {
-        return Err("export_directory_config_invalid".into());
-    }
-    let prefs: Preferences = serde_json::from_value(value)
+    // Parse the original bytes so duplicate fields remain errors, not last-value-wins resets.
+    let prefs: Preferences = serde_json::from_slice(&bytes)
         .map_err(|_| "export_directory_config_invalid".to_string())?;
     if prefs.schema_version != 1 {
         return Err("export_directory_config_invalid".into());
@@ -195,6 +196,21 @@ mod tests {
         assert_eq!(destination(&temp.config(), || panic!("incomplete configuration must not use Downloads")).unwrap_err(), "export_directory_config_invalid");
         fs::write(temp.config(), r#"{"schema_version":1,"directory":null}"#).unwrap();
         assert_eq!(read(&temp.config()).unwrap(), None);
+    }
+
+    #[test]
+    fn repeated_fields_cannot_reset_a_custom_destination() {
+        let temp = Sandbox::new();
+        let custom = temp.folder("custom");
+        let encoded = serde_json::to_string(&custom).unwrap();
+        for payload in [
+            format!(r#"{{"schema_version":1,"directory":{encoded},"directory":null}}"#),
+            format!(r#"{{"schema_version":1,"directory":null,"directory":{encoded}}}"#),
+            r#"{"schema_version":1,"schema_version":1,"directory":null}"#.to_string(),
+        ] {
+            fs::write(temp.config(), payload).unwrap();
+            assert_eq!(destination(&temp.config(), || panic!("duplicate fields must not use Downloads")).unwrap_err(), "export_directory_config_invalid");
+        }
     }
 
     #[test]
