@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import requests
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -448,6 +449,99 @@ def test_cli_parser_publish():
     assert a.project_id is None and a.list_profiles is True
     a = build_parser().parse_args(["publish", "--status", "req-1"])
     assert a.status == "req-1"
+
+
+def test_cli_publish_status_wait_respects_short_polling_timeout(data_dir, capsys, monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.cli import main
+    from backend.services import upload_post_publisher as up
+
+    elapsed = 0.0
+    status_checks = []
+
+    def get_status(request_id, *, timeout_sec, **kwargs):
+        status_checks.append((request_id, timeout_sec))
+        return {"request_id": request_id, "status": "processing", "final": False}
+
+    def sleep(seconds):
+        nonlocal elapsed
+        elapsed += seconds
+        assert elapsed <= 2, "status polling slept past the requested deadline"
+
+    monkeypatch.setattr(up, "get_status", get_status)
+    monkeypatch.setattr(up, "time", SimpleNamespace(monotonic=lambda: elapsed, sleep=sleep))
+
+    assert main(["publish", "--status", "req-1", "--wait", "--timeout", "2", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "processing"
+    assert status_checks == [("req-1", 2)]
+    assert elapsed == 2
+
+
+def test_publish_wait_keeps_last_processing_status_when_final_poll_times_out(data_dir, monkeypatch):
+    from types import SimpleNamespace
+
+    import requests
+
+    from backend.services import upload_post_publisher as up
+
+    elapsed = 0.0
+    timeouts = []
+    processing = {"request_id": "req-1", "status": "processing", "final": False}
+
+    def get_status(request_id, *, timeout_sec, **kwargs):
+        timeouts.append(timeout_sec)
+        if len(timeouts) == 1:
+            return processing
+        raise requests.ReadTimeout
+
+    def sleep(seconds):
+        nonlocal elapsed
+        elapsed += seconds
+
+    monkeypatch.setattr(up, "get_status", get_status)
+    monkeypatch.setattr(up, "time", SimpleNamespace(monotonic=lambda: elapsed, sleep=sleep))
+
+    assert up.wait_for_status("req-1", timeout_sec=4, poll_sec=3) == processing
+    assert timeouts == [4, 1]
+
+
+@pytest.mark.parametrize(
+    ("transport_error", "expected_error"),
+    [(requests.ReadTimeout, "查询发布状态超时"), (requests.ConnectionError, "ConnectionError")],
+)
+def test_cli_publish_wait_keeps_receipts_after_poll_error(data_dir, capsys, monkeypatch, transport_error, expected_error):
+    from backend.cli import main
+    from backend.services import upload_post_publisher as up
+
+    up.save_config(api_key="mock-key-1234567890", user="u")
+    polled = []
+    transport_detail = "transport reset by mock peer at a private endpoint"
+
+    def publish_clip(req, **kwargs):
+        return {"ok": True, "clip_id": req.clip_id, "request_id": f"req-{req.clip_id}", "status": "submitted"}
+
+    def get(_session, _url, *, params, **kwargs):
+        request_id = params["request_id"]
+        polled.append(request_id)
+        if request_id == "req-1":
+            raise transport_error(transport_detail)
+        return _Resp(payload={"status": "completed", "results": []})
+
+    monkeypatch.setattr(up, "publish_clip", publish_clip)
+    monkeypatch.setattr(requests.Session, "get", get)
+
+    assert main(["publish", "p1", "--clip", "1", "--clip", "2", "--platform", "tiktok",
+                 "--wait", "--timeout", "2", "--json"]) == 1
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+    first, second = output["published"]
+    assert polled == ["req-1", "req-2"]
+    assert output["ok"] is False
+    assert (first["request_id"], first["status"], first["ok"]) == ("req-1", "submitted", False)
+    assert expected_error in first["error"]
+    assert transport_detail not in captured.out and transport_detail not in captured.err
+    assert (second["request_id"], second["status"], second["ok"]) == ("req-2", "completed", True)
 
 
 def test_cli_publish_refuses_bulk_without_yes(data_dir, capsys):

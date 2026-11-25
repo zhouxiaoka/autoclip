@@ -1,0 +1,98 @@
+/* 干货便签 1080x1920. Warm paper card outside the 16:9 band (y 656..1264). No animation. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: transparent;
+  font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #191a1a;
+}
+.stage { position: relative; width: 1080px; height: 1920px; }
+
+.pane { position: absolute; left: 0; width: 1080px; background: #f7f3ea; }
+.pane-top { top: 0; height: 656px; }
+.pane-bottom { top: 1264px; height: 656px; }
+
+.rule { position: absolute; left: 0; width: 1080px; height: 4px; background: #191a1a; }
+.rule-top { top: 652px; }
+.rule-bottom { top: 1264px; }
+
+.head {
+  position: absolute;
+  top: 210px;
+  left: 84px;
+  width: 912px;
+  text-align: center;
+}
+.pill {
+  display: inline-block;
+  padding: 6px 20px;
+  border-radius: 999px;
+  border: 2px solid #191a1a;
+  background: #f4dc3c;
+  color: #191a1a;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.title {
+  margin-top: 28px;
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 62px;
+  letter-spacing: 0.4px;
+  color: #191a1a;
+}
+.title .accent {
+  background: linear-gradient(180deg, transparent 58%, #f4dc3c 58%, #f4dc3c 96%, transparent 96%);
+  padding: 0 8px;
+}
+.guest {
+  margin-top: 24px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #5b5851;
+}
+
+.subtitle {
+  position: absolute;
+  top: 1340px;
+  left: 110px;
+  width: 860px;
+  text-align: center;
+}
+.zh {
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 54px;
+  color: #191a1a;
+  white-space: pre-line;
+  max-height: 112px;
+  overflow: hidden;
+}
+.zh .hl {
+  background: #f4dc3c;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.en {
+  margin: 24px auto 0;
+  max-width: 720px;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 32px;
+  color: #5b5851;
+  max-height: 64px;
+  overflow: hidden;
+}
+
+.foot {
+  position: absolute;
+  top: 1590px;
+  left: 90px;
+  width: 900px;
+  text-align: center;
+  font-size: 18px;
+  color: #847f75;
+}

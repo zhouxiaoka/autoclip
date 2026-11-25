@@ -239,6 +239,8 @@ def _next_keyframe(path, start, end):
             stderr=subprocess.DEVNULL,
             timeout=30,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except (OSError, subprocess.SubprocessError):
         return None

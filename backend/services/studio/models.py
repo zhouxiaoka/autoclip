@@ -1,8 +1,9 @@
 from backend.core.failure_codes import UserFacingError
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.services.studio.templates import registry as template_registry
 from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
 
 
@@ -177,14 +178,13 @@ class Packaging(BaseModel):
         if any(len(line) > 40 for line in self.title_lines):
             raise UserFacingError('标题每行最多 40 个字符')
         classic = self.template in _CLASSIC_TEMPLATES
-        html = self.template in _HTML_TEMPLATES
+        html = template_registry.is_html_template(self.template)
         if not classic and not html:
             raise UserFacingError('未知包装模板')
         if html and self.version != 2:
             raise UserFacingError('HTML 模板需要 packaging version 2')
         if html:
-            from backend.services.studio.templates.registry import get
-            get(self.template)
+            template_registry.get(self.template)
         extended = bool(self.kicker or self.emphasis or self.numbers or self.gloss)
         if self.version == 1 and extended:
             raise UserFacingError('version 1 不包含扩展包装字段')
@@ -228,11 +228,19 @@ class Draft(BaseModel):
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
     # Frozen import choice for standalone drafts. Platform versions own their render settings.
-    html_template: Literal['editorial', 'street', 'news', 'cinema', 'classic'] | None = None
+    html_template: str | None = None
+    creator_pack: dict | None = None
     packaging: Packaging | None = None
     # (top, bottom) of burned captions as fractions of the frame height, blurred out before layout:
     # an English version of a source with Chinese captions in the picture.
     caption_mask: tuple[float, float] | None = None
+
+    @field_validator('html_template')
+    @classmethod
+    def valid_draft_template(cls, value: str | None) -> str | None:
+        if value is not None and not template_registry.is_valid_style(value):
+            raise ValueError(f'不支持的剪辑风格: {value}')
+        return value
 
     @model_validator(mode='after')
     def title_version(self):
@@ -342,11 +350,18 @@ class OutputVariant(BaseModel):
     # Shadow quality report. Absent when the gate is off. Never changes the file.
     qa: QaReport | None = None
     # Set on the top three scored portrait clips when the import chose an HTML template.
-    html_template: Literal['editorial', 'street', 'news', 'cinema'] | None = None
+    html_template: str | None = None
     # The other automatic portrait clips record why they stayed on classic.
     html_fallback: Literal['rank'] | None = None
     # The import choice, kept when this clip renders classic because it was not in the top three.
-    requested_template: Literal['editorial', 'street', 'news', 'cinema'] | None = None
+    requested_template: str | None = None
+
+    @field_validator('html_template', 'requested_template')
+    @classmethod
+    def valid_variant_template(cls, value: str | None) -> str | None:
+        if value is not None and not template_registry.is_html_template(value):
+            raise ValueError(f'不支持的 HTML 模板: {value}')
+        return value
 
 
 class SourceWindow(BaseModel):
@@ -373,10 +388,17 @@ class ImportOptions(BaseModel):
     platforms: list[str] = Field(default_factory=lambda: ['douyin'], min_length=1, max_length=8)
     auto_start: bool = False
     portrait_style: Literal['auto', 'interview', 'podcast'] = 'auto'
-    html_template: Literal['editorial', 'street', 'news', 'cinema', 'classic'] | None = None
-    recommended_template: Literal['editorial', 'street', 'classic'] | None = None
+    html_template: str | None = None
+    recommended_template: str | None = None
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
     source_window: SourceWindow | None = None
+
+    @field_validator('html_template', 'recommended_template')
+    @classmethod
+    def valid_import_template(cls, value: str | None) -> str | None:
+        if value is not None and not template_registry.is_valid_style(value):
+            raise ValueError(f'不支持的剪辑风格: {value}')
+        return value
 
     @model_validator(mode='after')
     def unique_platforms(self):

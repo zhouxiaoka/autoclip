@@ -9,7 +9,9 @@ not already trusted. Current bundled promotion is a separate list.
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional
@@ -19,16 +21,29 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 SCHEMA = "autoclip.sponsor-promo/v1"
+SCHEMA_V2 = "autoclip.sponsor-promo/v2"
+SCHEMAS = frozenset({SCHEMA, SCHEMA_V2})
 STATUSES = frozenset({"healthy", "fault", "out_of_service"})
 LOCALES = frozenset({"zh", "en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"})
 PAYLOAD_KEYS = frozenset({
     "schema", "sequence", "issued_at", "expires_at", "min_app", "max_app",
     "rollback_of", "sponsors",
 })
+PAYLOAD_KEYS_V2 = PAYLOAD_KEYS | frozenset({"providers"})
 SPONSOR_KEYS = frozenset({
     "id", "order", "new_user_default", "status", "notices",
     "register_url", "register_urls", "locales",
 })
+DYNAMIC_PROVIDER_KEYS = frozenset({
+    "id", "name", "base_url", "register_url", "docs_url",
+    "placeholder", "capabilities", "hint", "offer", "candidates", "icon_url", "group",
+})
+DYNAMIC_CAPABILITIES = frozenset({"language", "vision", "image", "video", "asr"})
+DYNAMIC_CANDIDATE_ROLES = frozenset({"analysis", "vision", "asr", "image"})
+DYNAMIC_GROUPS = frozenset({"popular", "recommended"})
+MAX_DYNAMIC_PROVIDERS = 16
+_DYNAMIC_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
+_RESERVED_DYNAMIC_IDS = frozenset({"other", "compatible", "custom", "local", "default", "system"})
 BUNDLED_CHOICES = ("apimart", "other")
 BUNDLED_DEFAULT = "apimart"
 # Status notices may name a built-in provider that is no longer promoted.
@@ -164,6 +179,164 @@ def _register_url(sponsor_id: str, value: str, hosts: Mapping[str, str]) -> bool
     )
 
 
+def _public_https_url(value: Any, *, allow_query: bool = True, max_len: int = 256) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    url = value.strip()
+    if not url or len(url) > max_len:
+        return None
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError:
+        return None
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if (
+        parsed.scheme != "https"
+        or parsed.username
+        or parsed.password
+        or parsed.fragment
+        or (not allow_query and parsed.query)
+        or port not in (None, 443)
+        or not host
+        or "." not in host
+        or host == "localhost"
+        or host.endswith((".localhost", ".local", ".internal", ".home.arpa"))
+    ):
+        return None
+    try:
+        ipaddress.ip_address(host)
+        return None
+    except ValueError:
+        pass
+    return url
+
+
+def _clean_text(value: Any, *, max_len: int) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    if not text or len(text) > max_len:
+        return None
+    if any(ord(char) < 32 for char in text) or "<" in text or ">" in text or "://" in text.lower():
+        return None
+    return text
+
+
+def _localized_text(raw: Any, *, max_len: int, require_en: bool = False) -> Optional[dict[str, str]]:
+    if isinstance(raw, str):
+        cleaned = _clean_text(raw, max_len=max_len)
+        return {"en": cleaned} if cleaned is not None else None
+    if not isinstance(raw, dict) or not raw or set(raw) - LOCALES:
+        return None
+    out: dict[str, str] = {}
+    for locale, text in raw.items():
+        cleaned = _clean_text(text, max_len=max_len)
+        if cleaned is None:
+            return None
+        out[locale] = cleaned
+    if require_en and "en" not in out:
+        return None
+    return out
+
+
+def _builtin_provider_ids() -> set[str]:
+    from backend.core.provider_presets import load_provider_catalog
+
+    return set(load_provider_catalog().providers) | set(NOTICE_PROVIDER_IDS) | set(_RESERVED_DYNAMIC_IDS)
+
+
+def _providers(rows: Any) -> Optional[list[dict[str, Any]]]:
+    if not isinstance(rows, list) or len(rows) > MAX_DYNAMIC_PROVIDERS:
+        return None
+    reserved = _builtin_provider_ids()
+    seen: set[str] = set()
+    cleaned: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or set(row) - DYNAMIC_PROVIDER_KEYS:
+            return None
+        if not {"id", "name", "base_url", "register_url", "docs_url", "capabilities"} <= set(row):
+            return None
+        pid = row.get("id")
+        if not isinstance(pid, str) or not _DYNAMIC_ID_RE.match(pid) or pid in reserved or pid in seen:
+            return None
+        name = _localized_text(row.get("name"), max_len=48, require_en=True)
+        base_url = _public_https_url(row.get("base_url"), allow_query=False)
+        register_url = _public_https_url(row.get("register_url"), allow_query=True)
+        docs_url = _public_https_url(row.get("docs_url"), allow_query=True)
+        if not name or not base_url or not register_url or not docs_url:
+            return None
+        if base_url.rstrip("/").lower().endswith("/chat/completions"):
+            return None
+        raw_caps = row.get("capabilities")
+        if not isinstance(raw_caps, list) or not raw_caps:
+            return None
+        caps: list[str] = []
+        for cap in raw_caps:
+            if not isinstance(cap, str) or cap not in DYNAMIC_CAPABILITIES or cap in caps:
+                return None
+            caps.append(cap)
+        placeholder = _clean_text(row.get("placeholder", "sk-…"), max_len=32)
+        if placeholder is None:
+            return None
+        group = row.get("group", "popular")
+        if not isinstance(group, str) or group not in DYNAMIC_GROUPS:
+            return None
+        hint: dict[str, str] = {}
+        if "hint" in row and row["hint"] is not None:
+            parsed_hint = _localized_text(row["hint"], max_len=_MAX_NOTICE, require_en=False)
+            if parsed_hint is None:
+                return None
+            hint = parsed_hint
+        offer: dict[str, str] = {}
+        if "offer" in row and row["offer"] is not None:
+            parsed_offer = _localized_text(row["offer"], max_len=64, require_en=False)
+            if parsed_offer is None:
+                return None
+            offer = parsed_offer
+        icon_url: Optional[str] = None
+        if "icon_url" in row and row["icon_url"] is not None:
+            icon_url = _public_https_url(row["icon_url"], allow_query=True)
+            if icon_url is None:
+                return None
+        candidates: dict[str, list[str]] = {}
+        if "candidates" in row and row["candidates"] is not None:
+            raw_cand = row["candidates"]
+            if not isinstance(raw_cand, dict) or set(raw_cand) - DYNAMIC_CANDIDATE_ROLES:
+                return None
+            for role, models in raw_cand.items():
+                if not isinstance(models, list) or len(models) > 8:
+                    return None
+                clean_models: list[str] = []
+                for model in models:
+                    clean_model = _clean_text(model, max_len=128)
+                    if clean_model is None:
+                        return None
+                    clean_models.append(clean_model)
+                candidates[role] = clean_models
+        seen.add(pid)
+        item: dict[str, Any] = {
+            "id": pid,
+            "name": name,
+            "base_url": base_url.rstrip("/"),
+            "register_url": register_url,
+            "docs_url": docs_url,
+            "placeholder": placeholder,
+            "capabilities": caps,
+            "group": group,
+        }
+        if hint:
+            item["hint"] = hint
+        if offer:
+            item["offer"] = offer
+        if icon_url:
+            item["icon_url"] = icon_url
+        if candidates:
+            item["candidates"] = candidates
+        cleaned.append(item)
+    return cleaned
+
+
 def validate_payload(
     payload: Any,
     *,
@@ -176,9 +349,13 @@ def validate_payload(
     current_sequence: Optional[int] = None,
 ) -> PromoDecision:
     required = {"schema", "sequence", "issued_at", "expires_at", "min_app", "sponsors"}
-    if not isinstance(payload, dict) or set(payload) - PAYLOAD_KEYS or not required <= set(payload):
+    if not isinstance(payload, dict) or not required <= set(payload):
         return PromoDecision(False, "schema")
-    if payload.get("schema") != SCHEMA or not isinstance(payload.get("sponsors"), list):
+    schema = payload.get("schema")
+    if schema not in SCHEMAS or not isinstance(payload.get("sponsors"), list):
+        return PromoDecision(False, "schema")
+    allowed_keys = PAYLOAD_KEYS_V2 if schema == SCHEMA_V2 else PAYLOAD_KEYS
+    if set(payload) - allowed_keys:
         return PromoDecision(False, "schema")
     sequence = payload.get("sequence")
     rollback_of = payload.get("rollback_of")
@@ -213,11 +390,26 @@ def validate_payload(
         return PromoDecision(False, "version")
     if app < minimum or (maximum is not None and app > maximum):
         return PromoDecision(False, "incompatible")
-    sponsors = _sponsors(payload["sponsors"], hosts, notice_provider_ids())
+    dynamic_providers: list[dict[str, Any]] = []
+    if schema == SCHEMA_V2 and "providers" in payload:
+        parsed_providers = _providers(payload["providers"])
+        if parsed_providers is None:
+            return PromoDecision(False, "providers")
+        dynamic_providers = parsed_providers
+    effective_hosts = dict(hosts)
+    effective_allowed = set(notice_provider_ids())
+    for dp in dynamic_providers:
+        effective_allowed.add(dp["id"])
+        host = (urlparse(dp["register_url"]).hostname or "").lower().rstrip(".")
+        if host:
+            effective_hosts[dp["id"]] = host
+    sponsors = _sponsors(payload["sponsors"], effective_hosts, effective_allowed)
     if sponsors is None:
         return PromoDecision(False, "sponsors")
     cleaned = dict(payload)
     cleaned["sponsors"] = sponsors
+    if dynamic_providers:
+        cleaned["providers"] = dynamic_providers
     return PromoDecision(True, "ok", cleaned, None)
 
 
@@ -348,7 +540,8 @@ def _locale_slice(visible: list[dict[str, Any]], locale_key: Optional[str]) -> d
 def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, locale: Optional[str] = None) -> dict:
     """New-user choices exclude paused and non-promoted providers. Status stays for saved users."""
     rows = sorted(payload.get("sponsors") or [], key=lambda item: item["order"])
-    promoted = set(builtin_sponsor_hosts())
+    dynamic_providers = [dp for dp in (payload.get("providers") or []) if isinstance(dp, Mapping) and isinstance(dp.get("id"), str)]
+    promoted = set(builtin_sponsor_hosts()) | {dp["id"] for dp in dynamic_providers}
     visible = [row for row in rows if row["status"] != "out_of_service" and row["id"] in promoted]
     locale_key = normalize_locale(locale)
     active = _locale_slice(visible, locale_key)
@@ -362,6 +555,8 @@ def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, lo
         "register_urls": active["register_urls"],
         "sequence": payload.get("sequence"),
     }
+    if dynamic_providers:
+        view["providers"] = dynamic_providers
     if any(row.get("locales") or row.get("register_urls") for row in rows):
         view["by_locale"] = {
             loc: _locale_slice(visible, loc)

@@ -26,7 +26,8 @@ def test_openai_models_without_image_input(model):
 
 def test_non_openai_names_are_unchanged():
     assert supports_vision("claude-sonnet-5-5") and supports_vision("qwen-vl-plus")
-    assert not supports_vision("qwen-plus") and not supports_vision("deepseek-flash")
+    assert not supports_vision("qwen-plus") and not supports_vision("deepseek-v4-pro")
+    assert supports_vision("deepseek-flash") and supports_vision("deepseek-v4-flash-vision-exp")
     assert not supports_vision("llama-o3x")
 
 

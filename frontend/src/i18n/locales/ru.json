@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "Импорт .zip",
   "editing_style.importing": "Импорт…",
   "editing_style.uninstall": "Удалить шаблон",
-  "editing_style.new_count": "Новых шаблонов: {{count}}"
+  "editing_style.new_count": "Новых шаблонов: {{count}}",
+  "editing_style.category.all": "Все",
+  "editing_style.category.gaming": "Игры",
+  "editing_style.category.interview": "Интервью",
+  "editing_style.category.knowledge": "Заметки",
+  "editing_style.category.general": "Общие",
+  "editing_style.view_all": "Все {{count}}",
+  "editing_style.gallery_title": "Выбор стиля монтажа",
+  "editing_style.scroll_prev": "Назад",
+  "editing_style.scroll_next": "Вперёд"
 }

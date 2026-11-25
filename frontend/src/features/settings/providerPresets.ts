@@ -1,5 +1,6 @@
 import raw from '@provider-presets'
 import { qualityFor, type LatencyTier, type SuccessTier } from './providerQuality'
+import { findDynamicProvider, localizedDynamicText, readDynamicProviders, readPromoLocale, type DynamicProviderSpec } from './sponsorPromoState'
 
 export type ProviderGroupId = 'recommended' | 'popular' | 'local' | 'more'
 export type PurposeId = 'analysis' | 'vision' | 'asr' | 'image'
@@ -30,6 +31,8 @@ export type ProviderPreset = {
   local_app: string
   sponsor?: { register_url: string; guide_url: string; offer: string; description: string; topup_url?: string }
   referral: string
+  icon_url?: string
+  dynamic?: boolean
   success_tier?: SuccessTier
   latency_tier?: LatencyTier
   caveat_key?: string
@@ -141,19 +144,82 @@ function parseCatalog(document: unknown): ProviderCatalog {
 
 const catalog = parseCatalog(raw)
 
+export function dynamicProviderToPreset(spec: DynamicProviderSpec, locale?: string | null): ProviderPreset {
+  const loc = locale ?? readPromoLocale()
+  const name = localizedDynamicText(spec.name, loc) || spec.id
+  const hint = localizedDynamicText(spec.hint, loc)
+  const offer = localizedDynamicText(spec.offer, loc)
+  let baseHost = ''
+  try { baseHost = new URL(spec.baseUrl).hostname.toLowerCase() } catch { baseHost = '' }
+  return {
+    id: spec.id,
+    kind: 'preset',
+    display_name: name,
+    ui_name: name,
+    short_name: name,
+    group: spec.group,
+    protocol: 'openai-completions',
+    base_url: spec.baseUrl,
+    auth: 'api_key',
+    capabilities: [...spec.capabilities],
+    docs_url: spec.docsUrl,
+    locked: false,
+    accepted_hosts: baseHost ? [baseHost] : [],
+    default_model: spec.candidates?.analysis?.[0] || '',
+    candidates: {
+      analysis: [...(spec.candidates?.analysis || [])],
+      vision: [...(spec.candidates?.vision || [])],
+      asr: [...(spec.candidates?.asr || [])],
+      image: [...(spec.candidates?.image || [])],
+    },
+    openai_compat_remap: true,
+    local_compat_remap: false,
+    legacy_ui: false,
+    api_key_setting: `${spec.id}_api_key`,
+    placeholder: spec.placeholder || 'sk-…',
+    hint,
+    context_hint: '',
+    local_app: '',
+    sponsor: {
+      register_url: spec.registerUrl,
+      guide_url: spec.docsUrl,
+      offer,
+      description: hint,
+    },
+    referral: spec.registerUrl,
+    ...(spec.iconUrl ? { icon_url: spec.iconUrl } : {}),
+    dynamic: true,
+  }
+}
+
 export function getCatalog(): ProviderCatalog {
   return catalog
 }
 
-export function resolveProviderId(name?: string): string | undefined {
-  if (!name) return undefined
-  const key = catalog.aliases[name.trim().toLowerCase()] || name.trim().toLowerCase()
-  return key in catalog.providers ? key : undefined
+export function listAllProviders(locale?: string | null): ProviderPreset[] {
+  const builtin = Object.values(catalog.providers)
+  const dynamic = readDynamicProviders()
+    .filter(spec => !(spec.id in catalog.providers))
+    .map(spec => dynamicProviderToPreset(spec, locale))
+  return [...builtin, ...dynamic]
 }
 
-export function getProvider(name?: string): ProviderPreset | undefined {
-  const key = resolveProviderId(name)
-  return key ? catalog.providers[key] : undefined
+export function resolveProviderId(name?: string): string | undefined {
+  if (!name) return undefined
+  const normalized = name.trim().toLowerCase()
+  const key = catalog.aliases[normalized] || normalized
+  if (key in catalog.providers) return key
+  if (findDynamicProvider(key)) return key
+  return undefined
+}
+
+export function getProvider(name?: string, locale?: string | null): ProviderPreset | undefined {
+  if (!name) return undefined
+  const normalized = name.trim().toLowerCase()
+  const key = catalog.aliases[normalized] || normalized
+  if (key in catalog.providers) return catalog.providers[key]
+  const dynamic = findDynamicProvider(key)
+  return dynamic ? dynamicProviderToPreset(dynamic, locale) : undefined
 }
 
 export function analysisCandidates(name?: string): string[] {

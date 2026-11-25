@@ -5,7 +5,7 @@
 import { PROVIDERS, type ProviderKey } from './providers'
 import { promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
 import { compareRecommended, displayCatalogGroup, qualityFor } from './providerQuality'
-import { getCatalog, getProvider, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
+import { getProvider, listAllProviders, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
 import { cleanBinding, newConnection, presetKey, endpointProviderReady } from './modelSettingsLogic'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import { syncFollowingCover } from './modelDefaults'
@@ -25,7 +25,7 @@ const LEGACY_IDS = new Set<string>([
 const OPENAI_LIKE = new Set(['openai-completions', 'openai-responses'])
 
 export function catalogProviders(): ProviderPreset[] {
-  return Object.values(getCatalog().providers)
+  return listAllProviders()
 }
 
 export function displayNameOf(preset: ProviderPreset): string {

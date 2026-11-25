@@ -13,7 +13,8 @@ import math
 import re
 
 from backend.services.studio.caption_layout import NO_LINE_START, display_text, lines_for, page_screens, strip_speaker_prefix, width
-from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS
+from backend.services.studio.templates import registry as template_registry
+from backend.services.studio.templates.spec import CaptionLayoutSpec
 
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
 # Phrase budget on the 1080px canvas. One line at the template's caption size.
@@ -43,18 +44,19 @@ _STREET_INSET = {
 _PUNCT = '，。、！？：；,.!?'
 
 
+def _caption_layout(template: str | None) -> CaptionLayoutSpec | None:
+    if not template or not template_registry.is_html_template(template):
+        return None
+    return template_registry.get(template).effective_caption_layout()
+
+
 def caption_line_limit(template: str, safe_area: str = 'xiaohongshu') -> int | None:
     """CJK-width capacity of one caption line, or None when the cue is not paged."""
-    if template == 'editorial':
-        return (_CANVAS - 2 * _EDITORIAL_INSET) // _EDITORIAL_FONT
-    if template == 'street':
-        inset = _STREET_INSET.get(safe_area, _STREET_INSET['xiaohongshu'])
-        return (_CANVAS - 2 * inset) // _STREET_FONT
-    if template == 'news':
-        return (_CANVAS - 2 * _NEWS_INSET) // _NEWS_FONT
-    if template == 'cinema':
-        return (_CANVAS - 2 * _CINEMA_INSET) // _CINEMA_FONT
-    return None
+    del safe_area  # kept in signature for callers; inset is declared in template.yaml
+    layout = _caption_layout(template)
+    if layout is None:
+        return None
+    return (_CANVAS - 2 * layout.inset_px) // layout.font_px
 
 
 def _get(packaging, name, default):
@@ -367,14 +369,22 @@ def _agree_speaker(model_name: str, cue_start: float, cue_end: float, transcript
         return _names_agree(model_name, best[4], speakers)
     host_side = _host_parity(turns)
     role_host = best[2] is not None and int(best[2]) % 2 == host_side
+    host_lower = {item.lower() for item in _HOST_NAMES}
+    is_declared_host = bool(model_name) and (
+        model_name in _HOST_NAMES
+        or model_name.lower() in host_lower
+        or any(
+            str(person.get('name') or '').strip() == model_name
+            and _HOST_ROLE_RE.search(str(person.get('role') or ''))
+            for person in speakers
+        )
+    )
     if role_host:
-        if model_name in _HOST_NAMES or (model_name and model_name.lower() in {item.lower() for item in _HOST_NAMES}):
-            return model_name
-        return ''
+        return model_name if is_declared_host else ''
     guests = _guest_names(speakers)
     if len(guests) == 1 and (not model_name or model_name == guests[0]):
         return guests[0]
-    if model_name in guests:
+    if model_name in guests or (len(turns) == 1 and is_declared_host):
         return model_name
     return ''
 
@@ -388,13 +398,21 @@ def _deck_line(packaging) -> str:
 _CREDIT_STOP = {'on', 'the', 'a', 'an', 'of', 'about', 'and'}
 
 
+_HOST_ROLE_RE = re.compile(r'主持|host|interviewer', re.IGNORECASE)
+
+
 def _guest_names(speakers: list[dict]) -> list[str]:
     from backend.services.studio.packaging import _HOST_NAMES
+    host_lower = {item.lower() for item in _HOST_NAMES}
     names = []
     for person in speakers:
         name = str(person.get('name') or '').strip()
-        if name and name not in _HOST_NAMES and name.lower() not in {item.lower() for item in _HOST_NAMES}:
-            names.append(name)
+        role = str(person.get('role') or '').strip()
+        if not name or name in _HOST_NAMES or name.lower() in host_lower:
+            continue
+        if role and _HOST_ROLE_RE.search(role):
+            continue
+        names.append(name)
     return names
 
 
@@ -414,7 +432,12 @@ def _issue_line(packaging, speakers: list[dict]) -> str:
     if issue:
         return issue
     guests = _guest_names(speakers)
-    return f'{guests[0]} 访谈' if len(guests) == 1 else ''
+    if len(guests) != 1:
+        return ''
+    audience = str(_get(packaging, 'audience_language', '') or '').strip().lower()
+    if audience == 'en':
+        return f'{guests[0]} · Interview'
+    return f'{guests[0]} 访谈'
 
 
 def _caps_credit(deck: str, speakers: list[dict], title_lines: list[str] | None = None) -> str:
@@ -612,6 +635,23 @@ def _no_leading_particle(pieces: list[str]) -> list[str]:
             continue
         fixed.append(piece)
     return [piece for piece in fixed if piece]
+
+
+def _with_punctuation(pieces: list[str], text: str) -> list[str]:
+    """Re-attach the punctuation that followed each piece in the cue text. Unmatched pieces stay as-is."""
+    out: list[str] = []
+    cursor = 0
+    for piece in pieces:
+        start = text.find(piece, cursor)
+        if start < 0:
+            out.append(piece)
+            continue
+        end = start + len(piece)
+        while end < len(text) and text[end] in _PUNCT:
+            end += 1
+        out.append(text[start:end])
+        cursor = end
+    return out
 
 
 def _phrases(text: str, limit: float, emphasis: str = '') -> list[str]:
@@ -1430,7 +1470,7 @@ def _en_for_groups(english: list[dict], groups: list[list], timed: bool) -> list
     return out
 
 
-def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None, transcript=None) -> dict:
+def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu', scenes=None, template: str | None = None, word_timing=None, transcript=None, creator_pack_overrides: dict | None = None) -> dict:
     """A JSON-safe fill. Word times are frame indexes on the clip, not source timestamps."""
     duration = max(0.0, float(duration))
     total = max(1, _frames(duration, fps))
@@ -1441,22 +1481,23 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     emphasis = [str(_get(mark, 'text', '')).strip() for mark in (_get(packaging, 'emphasis', []) or [])]
     emphasis = [phrase for phrase in emphasis if phrase]
     area = safe_area if safe_area in SAFE_AREAS else 'xiaohongshu'
+    layout = _caption_layout(template)
+    is_html = layout is not None
     limit = caption_line_limit(template or '', area)
-    source_limit = _STREET_SOURCE_LIMIT if (template or '') == 'street' else _SOURCE_LIMIT
+    source_limit = layout.source_limit if layout else _SOURCE_LIMIT
     people = _speakers(packaging)
     words = []
     moments = []
     phrase_limit = float(limit or 10)
     # One caption line. Two full phrases used to share a moment and overflow the box.
-    group_limit = phrase_limit if (template or '') == 'editorial' else phrase_limit * 10**6
-    if (template or '') == 'editorial':
-        # The preview shows about 6-8 characters for about 1.5s, not a full 18-character line.
-        phrase_limit = min(phrase_limit, _EDITORIAL_SCREEN)
+    if layout and layout.screen_chars is not None:
+        phrase_limit = min(phrase_limit, float(layout.screen_chars))
+    if layout and layout.paging_mode in ('grouped_screen', 'phrase'):
         group_limit = phrase_limit
-    if (template or '') in {'news', 'cinema'}:
-        group_limit = phrase_limit
+    else:
+        group_limit = phrase_limit * 10**6
     # A flash under 0.6s may join its neighbour a little past the screen size.
-    hold_limit = phrase_limit + 2 if (template or '') == 'editorial' else phrase_limit
+    hold_limit = phrase_limit + (layout.hold_slack if layout else 0)
     roster = [_speaker_with_at(item) for item in (_get(packaging, 'speakers', []) or [])]
     rows = _transcript_rows(transcript)
     for cue in cues:
@@ -1464,16 +1505,15 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         if not text:
             continue
         raw_original = display_text(str(_get(cue, 'original', '') or ''))
-        # English wraps in the Street stylesheet. It is not clipped to a nowrap line.
-        original = ' '.join(raw_original.split()) if (template or '') in HTML_TEMPLATE_IDS else _source_line(raw_original, source_limit)
+        # English wraps in HTML template stylesheets. It is not clipped to a nowrap line.
+        original = ' '.join(raw_original.split()) if is_html else _source_line(raw_original, source_limit)
         speaker = _agree_speaker(
             _cue_speaker_name(cue, roster, packaging),
             float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0),
             transcript, roster, word_timing,
         )
-        visual = template or ''
-        interview_burn = visual == 'street' or (
-            _get(packaging, 'template', '') == 'interview_zh' and visual not in {'editorial', 'news', 'cinema'}
+        interview_burn = (layout.strip_speaker_prefix if layout else False) or (
+            _get(packaging, 'template', '') == 'interview_zh' and not is_html
         )
         # The nameplate can stay blank without a transcript turn. The cue's own
         # speaker still marks a leading 「黄仁勋：」 that should not be burned.
@@ -1486,6 +1526,8 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         pieces = _phrases(text, phrase_limit, phrase)
         if not pieces:
             continue
+        if layout and layout.keep_punctuation:
+            pieces = _with_punctuation(pieces, display_text(text))
         timed = _timed_in_cue(cue, word_timing, scenes)
         cue_start, cue_end = float(_get(cue, 'start', 0) or 0), float(_get(cue, 'end', 0) or 0)
         lines_here = cue_lines(cue_start, cue_end, rows, scenes) if rows else None
@@ -1496,14 +1538,16 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         )
         if not spoken:
             continue
-        if (template or '') == 'editorial':
+        if layout and layout.paging_mode == 'grouped_screen':
             spoken = _split_long_screens(spoken, fps)
-        if not timed and lines_here and (template or '') == 'street':
+        if not timed and lines_here and layout and layout.bilingual_align == 'sentence_screens':
             english = _en_on_lines(original, lines_here, phrase)
         else:
             english = _en_words(original, spoken[0][1], spoken[-1][2], phrase, timed)
-        groups = _groups(spoken, group_limit, _SCREEN_SEC if (template or '') == 'editorial' else None)
-        per_group = _en_for_groups(english, groups, bool(timed)) if (template or '') == 'editorial' else None
+        screen_sec = layout.screen_sec if (layout and layout.paging_mode == 'grouped_screen') else None
+        groups = _groups(spoken, group_limit, screen_sec)
+        per_group = _en_for_groups(english, groups, bool(timed)) if (layout and layout.bilingual_align == 'synced') else None
+        en_key_propagates = layout.en_key_propagates if layout else True
         for group_index, group in enumerate(groups):
             zh = []
             group_en = per_group[group_index] if per_group is not None else [
@@ -1511,7 +1555,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
                 if word['t1'] > group[0][1] - 1e-6 and word['t0'] < group[-1][2] + 1e-6
             ]
             for piece, t0, t1, start_frame, end_frame in group:
-                key = bool(phrase and (phrase in piece or piece in phrase)) or ((template or '') != 'editorial' and any(
+                key = bool(phrase and (phrase in piece or piece in phrase)) or (en_key_propagates and any(
                     word['key'] and word['t1'] > t0 and word['t0'] < t1 for word in group_en
                 ))
                 # The preview's gold serif sits on the key words, not on the whole line.
@@ -1529,7 +1573,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
                 't0': group[0][1], 't1': group[-1][2], 'speaker': speaker,
                 'zh': zh, 'en': group_en,
             }
-            if (template or '') == 'street':
+            if layout and layout.bilingual_align == 'sentence_screens':
                 # The whole sentence stays up across its phrases, a line at a time.
                 moment['en'] = english
                 moment['en_screens'] = _en_screens(english)
@@ -1578,6 +1622,39 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     src_start = 0.0
     if scenes:
         src_start = float(_get(scenes[0], 'start', 0) or 0)
+    audience_language = str(_get(packaging, 'audience_language', '') or '')
+    source_language = str(_get(packaging, 'source_language', '') or '')
+    guest_names = _guest_names(people)
+    host_role = re.compile(r'主持|host|interviewer', re.IGNORECASE)
+    hosts = [person['name'] for person in people if person['name'] not in guest_names or host_role.search(person.get('role') or '')]
+    guests = [person for person in people if person['name'] not in hosts]
+    guest = guests[0] if len(guests) == 1 else None
+    translated = bool(source_language and audience_language and source_language != audience_language)
+    creator_pack_payload = None
+    if template and template_registry.is_html_template(template):
+        cp_spec = template_registry.get(template).base.creator_pack
+        if cp_spec is not None:
+            from backend.services.studio import creator_pack as cp_mod
+            ov = creator_pack_overrides if isinstance(creator_pack_overrides, dict) else {}
+            pack = cp_mod.load_pack(template_registry.resolve_dir(template))
+            default_host = (guest['name'] if guest else (people[0]['name'] if people else ''))
+            plan = cp_mod.resolve_render_plan(
+                theme_id=str(ov.get('theme') or cp_spec.theme),
+                layout_id=str(ov.get('layout') or cp_spec.default_layout),
+                duration_frames=total,
+                events=ov.get('events'),
+                camera_mode=str(ov.get('camera_mode') or 'none'),
+                camera_roi=ov.get('camera_roi'),
+                camera_enabled=bool(ov.get('camera', True)),
+                events_enabled=bool(ov.get('events_enabled', True)),
+                reduced_motion=bool(ov.get('reduced_motion', False)),
+                strength=float(ov.get('strength', 1.0)),
+                host=str(ov.get('host') or default_host),
+                location=str(ov.get('location') or str(_get(packaging, 'kicker', '') or '')),
+                ticker=str(ov.get('ticker') or issue),
+                pack=pack,
+            )
+            creator_pack_payload = plan.to_overlay_dict()
     return {
         'fps': fps,
         'T': duration,
@@ -1592,13 +1669,20 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         'gloss': cards,
         'number': number,
         'speakers': people,
+        # Single identified guest and the known hosts among the speakers, for card templates.
+        'guest': dict(guest) if guest else None,
+        'hosts': hosts,
         'deck': deck,
         'credit': credit,
         'issue': issue,
         'src_start_tc': _timecode(src_start),
         'stickers': [],
         'safe_area': area,
-        'audience_language': str(_get(packaging, 'audience_language', '') or ''),
+        'audience_language': audience_language,
+        'source_language': source_language,
+        # True when the captions were translated from another language (drives disclosure lines).
+        'translated': translated,
+        **({'creator_pack': creator_pack_payload} if creator_pack_payload is not None else {}),
     }
 
 
@@ -1621,9 +1705,11 @@ def paint_fill(fill: dict, packaging, template: str | None = None) -> dict:
     burned the title is not reused. A caller that does not name an HTML template and
     has captions off also clears the deck chrome.
     """
-    painted = _without_video_title(fill)
+    layout = _caption_layout(template)
+    # Card templates (e.g. interview_card) declare burn_cover_title: the headline is part of the frame.
+    painted = fill if (layout and layout.burn_cover_title) else _without_video_title(fill)
     if _get(packaging, 'captions_enabled', True) is not False:
         return painted
-    if template in HTML_TEMPLATE_IDS:
+    if template_registry.is_html_template(template):
         return painted
     return {**painted, 'kicker': '', 'deck': '', 'hook_trk': '', 'credit': ''}

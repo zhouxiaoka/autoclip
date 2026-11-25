@@ -162,3 +162,198 @@ test('by_locale slices are validated against trusted hosts and out_of_service ru
     },
   }), null)
 })
+
+test('v2 dynamic providers validate strictly, appear in catalog, and persist as compatible', () => {
+  const dynProvider = {
+    id: 'cloudgw',
+    name: { zh: '云网关', en: 'CloudGW' },
+    base_url: 'https://router.cloudgw.example/api/v1',
+    register_url: 'https://www.cloudgw.example/?from=AutoClip',
+    docs_url: 'https://console.cloudgw.example/keys',
+    hint: { zh: '测试云网关。', en: 'Test cloud gateway.' },
+    offer: { zh: '送5元', en: '$5 credit' },
+    icon_url: 'https://cdn.cloudgw.example/icon.png',
+    capabilities: ['language', 'image', 'video'],
+    candidates: { analysis: ['gpt-5-mini'], vision: ['gpt-5-mini'] },
+    group: 'popular',
+  }
+  const applied = promo.applySponsorPromo({
+    choices: ['cloudgw', 'apimart', 'other'],
+    default: 'cloudgw',
+    statuses: { cloudgw: 'healthy', apimart: 'healthy' },
+    register_urls: { cloudgw: 'https://www.cloudgw.example/?from=AutoClip' },
+    providers: [dynProvider],
+  })
+  assert.ok(applied)
+  assert.equal(applied.defaultChoice, 'cloudgw')
+  assert.equal(applied.registerUrls.cloudgw, 'https://www.cloudgw.example/?from=AutoClip')
+  assert.equal(applied.providers.length, 1)
+  assert.equal(applied.providers[0].id, 'cloudgw')
+  assert.equal(applied.providers[0].baseUrl, 'https://router.cloudgw.example/api/v1')
+
+  // Reject built-in shadowing, non-HTTPS/IP base_url, and mismatched register host
+  assert.equal(promo.applySponsorPromo({
+    choices: ['openai', 'other'],
+    default: 'openai',
+    providers: [{ ...dynProvider, id: 'openai' }],
+  }), null)
+  assert.equal(promo.applySponsorPromo({
+    choices: ['cloudgw', 'other'],
+    default: 'cloudgw',
+    providers: [{ ...dynProvider, base_url: 'http://router.cloudgw.example/api/v1' }],
+  }), null)
+  assert.equal(promo.applySponsorPromo({
+    choices: ['cloudgw', 'other'],
+    default: 'cloudgw',
+    providers: [{ ...dynProvider, base_url: 'https://127.0.0.1/v1' }],
+  }), null)
+  assert.equal(promo.applySponsorPromo({
+    choices: ['cloudgw', 'other'],
+    default: 'cloudgw',
+    register_urls: { cloudgw: 'https://evil.example/?from=AutoClip' },
+    providers: [dynProvider],
+  }), null)
+
+  // Verify catalog integration and persistence as standard "compatible" connection
+  const state = loadTs('sponsorPromoState.ts')
+  const presetsMod = loadTs('providerPresets.ts', { './sponsorPromoState': state })
+  const catalogView = loadTs('providerCatalogView.ts', {
+    '../../i18n': i18n,
+    './providerPresets': presetsMod,
+    './sponsorPromoState': state,
+  })
+  const providersMod = loadTs('providers.ts', {
+    '../../i18n': i18n,
+    './providerPresets': presetsMod,
+    './sponsorPromoState': state,
+  })
+  state.writePromoSnapshot({
+    source: 'cache',
+    choices: applied.choices,
+    defaultChoice: applied.defaultChoice,
+    statuses: applied.statuses,
+    notices: applied.notices,
+    registerUrls: applied.registerUrls,
+    providers: applied.providers,
+  })
+  assert.equal(state.promotionRegisterUrl('cloudgw', ''), 'https://www.cloudgw.example/?from=AutoClip')
+  const preset = presetsMod.getProvider('cloudgw')
+  assert.ok(preset)
+  assert.equal(preset.dynamic, true)
+  assert.equal(preset.base_url, 'https://router.cloudgw.example/api/v1')
+  assert.equal(preset.icon_url, 'https://cdn.cloudgw.example/icon.png')
+  assert.equal(catalogView.catalogProviders().some(row => row.id === 'cloudgw'), true)
+  assert.equal(providersMod.recommendedSetupProviders().includes('cloudgw'), true)
+  const created = catalogView.ensureCatalogConnection({
+    version: 1, saved: false, connections: [],
+    analysis: null, vision: null, cover: null,
+    transcription: { provider: 'whisper_local', model: 'base' },
+    cover_enabled: false, allow_send_frame: true, analysis_mode: 'auto', allow_visual_screening: true,
+    chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
+  }, preset, undefined, () => 'conn-dyn')
+  assert.equal(created.changed, true)
+  assert.equal(created.connection.provider, 'compatible')
+  assert.equal(created.connection.base_url, 'https://router.cloudgw.example/api/v1')
+  assert.equal(catalogView.matchedCatalogPreset(created.connection).id, 'cloudgw')
+  assert.equal(catalogView.findCatalogConnection(created.settings, preset).id, 'conn-dyn')
+})
+
+test('v2 dynamic providers hot-update through sponsorPromoWatch (create, update, delete) without breaking saved connections', async () => {
+  const state = loadTs('sponsorPromoState.ts')
+  const promoMod = loadTs('sponsorPromo.ts', {
+    './sponsorPromoState': state,
+    './providers': { PROVIDERS: { apimart: { sponsor: { registerUrl: 'https://go.apimart.ai/demo' } } } },
+  })
+  const presetsMod = loadTs('providerPresets.ts', { './sponsorPromoState': state })
+  const catalogView = loadTs('providerCatalogView.ts', {
+    '../../i18n': i18n,
+    './providerPresets': presetsMod,
+    './sponsorPromoState': state,
+  })
+  const providersMod = loadTs('providers.ts', {
+    '../../i18n': i18n,
+    './providerPresets': presetsMod,
+    './sponsorPromoState': state,
+  })
+
+  const dynV1 = {
+    id: 'cloudgw',
+    name: { zh: '云网关', en: 'CloudGW' },
+    base_url: 'https://router.cloudgw.example/api/v1',
+    register_url: 'https://www.cloudgw.example/?from=AutoClip',
+    docs_url: 'https://console.cloudgw.example/keys',
+    hint: { zh: '初始说明', en: 'Initial hint' },
+    capabilities: ['language'],
+    candidates: { analysis: ['gpt-5-mini'] },
+    group: 'popular',
+  }
+  const payloads = [
+    // Create (seq 10)
+    {
+      sequence: 10, revision: 1, instance: 'inst-1', pending: false, source: 'cache',
+      choices: ['cloudgw', 'apimart', 'other'], default: 'cloudgw',
+      statuses: { cloudgw: 'healthy', apimart: 'healthy' },
+      register_urls: { cloudgw: 'https://www.cloudgw.example/?from=AutoClip' },
+      providers: [dynV1],
+    },
+    // Update (seq 11)
+    {
+      sequence: 11, revision: 2, instance: 'inst-1', pending: false, source: 'cache',
+      choices: ['cloudgw', 'apimart', 'other'], default: 'cloudgw',
+      statuses: { cloudgw: 'healthy', apimart: 'healthy' },
+      register_urls: { cloudgw: 'https://www.cloudgw.example/?from=AutoClip' },
+      providers: [{ ...dynV1, name: { zh: '云网关 Pro', en: 'CloudGW Pro' }, hint: { zh: '更新说明', en: 'Updated hint' } }],
+    },
+    // Delete (seq 12)
+    {
+      sequence: 12, revision: 3, instance: 'inst-1', pending: false, source: 'cache',
+      choices: ['apimart', 'other'], default: 'apimart',
+      statuses: { apimart: 'healthy' },
+      register_urls: {},
+    },
+  ]
+  let idx = 0
+  const watch = loadTs('sponsorPromoWatch.ts', {
+    './sponsorPromo': {
+      ...promoMod,
+      loadSponsorPromo: async () => promoMod.applySponsorPromo(payloads[idx++]),
+    },
+    './sponsorPromoState': state,
+  })
+
+  let notifications = 0
+  const unsub = state.subscribePromoSnapshot(() => { notifications += 1 })
+
+  // 1. Create
+  await watch.refreshSponsorPromo('settings')
+  assert.equal(notifications, 1)
+  assert.equal(presetsMod.getProvider('cloudgw', 'en').display_name, 'CloudGW')
+  assert.equal(catalogView.catalogProviders().some(row => row.id === 'cloudgw'), true)
+  assert.equal(providersMod.recommendedSetupProviders().includes('cloudgw'), true)
+
+  // Save a user connection while cloudgw exists
+  const saved = catalogView.ensureCatalogConnection({
+    version: 1, saved: false, connections: [],
+    analysis: null, vision: null, cover: null,
+    transcription: { provider: 'whisper_local', model: 'base' },
+    cover_enabled: false, allow_send_frame: true, analysis_mode: 'auto', allow_visual_screening: true,
+    chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
+  }, presetsMod.getProvider('cloudgw', 'en'), undefined, () => 'conn-saved')
+
+  // 2. Update (hot-reload without restart)
+  await watch.refreshSponsorPromo('settings')
+  assert.equal(notifications, 2)
+  assert.equal(presetsMod.getProvider('cloudgw', 'en').display_name, 'CloudGW Pro')
+  assert.equal(presetsMod.getProvider('cloudgw', 'zh').hint, '更新说明')
+
+  // 3. Delete (hot-reload without restart) — catalog removes it, saved user connection stays intact as compatible
+  await watch.refreshSponsorPromo('settings')
+  assert.equal(notifications, 3)
+  assert.equal(presetsMod.getProvider('cloudgw'), undefined)
+  assert.equal(catalogView.catalogProviders().some(row => row.id === 'cloudgw'), false)
+  assert.equal(providersMod.recommendedSetupProviders().includes('cloudgw'), false)
+  assert.equal(saved.connection.provider, 'compatible')
+  assert.equal(saved.connection.base_url, 'https://router.cloudgw.example/api/v1')
+  assert.equal(catalogView.isUnmatchedCompatible(saved.connection), true)
+  unsub()
+})

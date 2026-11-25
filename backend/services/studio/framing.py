@@ -458,11 +458,14 @@ def _hard_cuts(video: Path, start: float, length: float) -> list[float]:
            "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo", *render_limits.output_args(), "-f", "null", "-"]
     cmd, priority = render_limits.low_priority(cmd)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, length * 4), check=False, **priority)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=max(60, length * 4), check=False, **priority,
+        )
     except subprocess.TimeoutExpired:
         return []
     cuts = []
-    for line in proc.stderr.splitlines():
+    for line in (proc.stderr or "").splitlines():
         if "pts_time:" not in line:
             continue
         try:
@@ -517,6 +520,10 @@ def _dissolve_cuts(video: Path, start: float, length: float) -> list[float]:
     """Crossfades the hard-cut detector misses, as seconds relative to `start`."""
     if length < 0.8:
         return []
+    try:
+        import numpy as np
+    except ImportError:
+        return []
     width, height = 96, 54
     rate = f"{1 / DISSOLVE_STEP:.4g}"
     cmd = [get_ffmpeg_path(), "-v", "error", "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
@@ -530,7 +537,6 @@ def _dissolve_cuts(video: Path, start: float, length: float) -> list[float]:
     count = len(raw) // size
     if proc.returncode != 0 or count < 4:
         return []
-    import numpy as np
     frames = []
     times = []
     for index in range(count):

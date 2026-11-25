@@ -11,8 +11,24 @@ Based on CPython's Lib/asyncio/proactor_events.py (PSF license).
 Revisit this private-API compatibility shim when upgrading bundled Python.
 """
 
+import errno
 import socket
 import sys
+
+_BENIGN_SHUTDOWN_ERRNOS = frozenset({
+    errno.ENOTCONN,
+    errno.EBADF,
+    10038,  # WSAENOTSOCK
+    10053,  # WSAECONNABORTED
+    10054,  # WSAECONNRESET
+    10057,  # WSAENOTCONN
+})
+
+
+def _is_benign_shutdown_error(exc: OSError) -> bool:
+    if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+        return True
+    return exc.errno in _BENIGN_SHUTDOWN_ERRNOS or getattr(exc, "winerror", None) in _BENIGN_SHUTDOWN_ERRNOS
 
 
 def _call_connection_lost(self, exc):
@@ -24,9 +40,11 @@ def _call_connection_lost(self, exc):
         if hasattr(self._sock, "shutdown") and self._sock.fileno() != -1:
             try:
                 self._sock.shutdown(socket.SHUT_RDWR)
-            except ConnectionResetError:
-                # The peer is already gone. Still close the local socket and
-                # detach from the server so wait_closed() can finish.
+            except OSError as shutdown_exc:
+                if not _is_benign_shutdown_error(shutdown_exc):
+                    raise
+                # The peer or socket is already gone (e.g. WinError 10054 / 10057 / 10038).
+                # Still close the local socket and detach from the server so wait_closed() finishes.
                 pass
         self._sock.close()
         self._sock = None

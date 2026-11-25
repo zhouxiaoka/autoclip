@@ -28,15 +28,16 @@ export default function PackagingSettings({ draft, patch }: { draft: Draft; patc
     // Lines stay in place while typing (saving drops empty ones); only an empty second line is dropped.
     update({ title_lines: next[1].trim() ? next : [next[0]] })
   }
+  const styleOptions = STYLES[packaging.template as keyof typeof STYLES]
   return <>
     <Row stack label={t('模板')} hint={t('字幕、名牌和版式由模板按发布平台自动生成。')}>
       <span className="studio-muted">{packagingLabel(packaging)}{fallbackHint ? ` · ${fallbackHint}` : ''}</span>
     </Row>
-    <Row stack label={t('样式')} hint={t('改变字幕与动效的风格，版式和配色保持一致。')}>
-      <Segmented size="sm" ariaLabel={t('样式')} value={packaging.style ?? STYLES[packaging.template][0].value}
-        options={STYLES[packaging.template].map(option => ({ value: option.value, label: t(option.label) }))}
+    {styleOptions && styleOptions.length > 0 && <Row stack label={t('样式')} hint={t('改变字幕与动效的风格，版式和配色保持一致。')}>
+      <Segmented size="sm" ariaLabel={t('样式')} value={packaging.style ?? styleOptions[0].value}
+        options={styleOptions.map(option => ({ value: option.value, label: t(option.label) }))}
         onChange={value => update({ style: value as Packaging['style'] })} />
-    </Row>
+    </Row>}
     <Row stack label={t('标题')} hint={packaging.template === 'interview_zh' ? t('整条视频顶部显示，第二行为强调色。') : t('开头约 3 秒显示。')}>
       {lines.map((line, index) => <input key={index} className="ac-input" aria-label={t('标题第 {{n}} 行', { n: index + 1 })} maxLength={max}
         value={line} placeholder={index === 0 ? t('第一行') : t('第二行（可选）')} onChange={e => setLine(index, e.target.value)} />)}

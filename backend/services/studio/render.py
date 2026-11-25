@@ -13,7 +13,7 @@ from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
 from backend.services.studio import audio
 from backend.services.studio.store import directory
-from backend.services.studio.templates.spec import HTML_TEMPLATE_IDS, STYLE_IDS
+from backend.services.studio.templates import registry as template_registry
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 from backend.core import project_cancellation
@@ -70,7 +70,7 @@ def _parse_translated_cues(translated, count):
     if not isinstance(translated, dict):
         return None, {}, 0
     title = translated.get('title')
-    title = title if isinstance(title, str) and len(title) <= 500 else None
+    title = title if isinstance(title, str) and title.strip() and len(title) <= 500 else None
     raw = translated.get('cues')
     if not isinstance(raw, list):
         raw = translated.get('subtitles')
@@ -89,7 +89,7 @@ def _parse_translated_cues(translated, count):
         if not isinstance(text, str):
             continue
         returned += 1
-        if 1 <= number <= count and number not in aligned:
+        if text.strip() and 1 <= number <= count and number not in aligned:
             aligned[number] = text
     return title, aligned, returned
 
@@ -216,7 +216,11 @@ def _decoded_video_seconds(path, fps, expected) -> float:
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
-    w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
+    source_w, source_h = info.get('width'), info.get('height')
+    # FFmpeg auto-rotates before applying the layout filter.
+    if info.get('rotation', 0) % 180 == 90:
+        source_w, source_h = source_h, source_w
+    w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (source_w, source_h))
     if not w or not h:
         raise UserFacingError('无法读取原视频尺寸')
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
@@ -260,12 +264,15 @@ def _encode_draft(
     packaged = draft.packaging is not None
     overlay_path = None
     overlay_grade = ''
+    overlay_spec = None
     overlay_job = None
-    if html_template in HTML_TEMPLATE_IDS:
+    effective_cp_overrides = draft.creator_pack
+    if template_registry.is_html_template(html_template):
         from backend.services.studio import packaging_html
         from backend.services.studio.templates.registry import TemplateRegistryError, get
         try:
-            overlay_grade = get(html_template).base.grade or ''
+            overlay_spec = get(html_template)
+            overlay_grade = overlay_spec.base.grade or ''
             overlay_packaging = draft.packaging
             if overlay_packaging is None:
                 # Standalone drafts already translated these rows for the editor's language.
@@ -275,10 +282,26 @@ def _encode_draft(
                     'captions_enabled': draft.subtitles, 'audience_language': draft.language,
                     'cues': draft_lines(entries, [scene.model_dump() for scene in draft.scenes]),
                 }
+            effective_cp_overrides = draft.creator_pack
+            if overlay_spec and overlay_spec.base.creator_pack is not None:
+                from backend.services.studio import creator_pack as cp_mod
+                cp_spec = overlay_spec.base.creator_pack
+                pack = cp_mod.load_pack(template_registry.resolve_dir(html_template))
+                clip_start = min((s.start for s in draft.scenes), default=0.0)
+                clip_end = max((s.end for s in draft.scenes), default=0.0)
+                effective_cp_overrides = cp_mod.resolve_auto_camera_overrides(
+                    draft.creator_pack,
+                    video,
+                    layout_id=cp_spec.default_layout,
+                    start=clip_start,
+                    end=clip_end if clip_end > clip_start else None,
+                    pack=pack,
+                )
             overlay_job = packaging_html.prepare_overlay(
                 project_id, html_template, overlay_packaging,
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
                 features=features, safe_area=safe_area, scenes=draft.scenes,
+                creator_pack_overrides=effective_cp_overrides,
             )
         except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise
@@ -288,7 +311,7 @@ def _encode_draft(
         overlay_path = overlay_job.path if overlay_job else None
     elif html_fallback == 'rank':
         from backend.services.studio.packaging_html import OverlayJob
-        requested = requested_template if requested_template in HTML_TEMPLATE_IDS else 'classic'
+        requested = requested_template if template_registry.is_html_template(requested_template) else 'classic'
         overlay_job = OverlayJob(None, 'classic', False, 'rank', 'none', 'skipped', requested_template=requested)
     out_dir = directory(project_id) / 'output' / 'studio'
     if not directory(project_id).is_dir():
@@ -320,14 +343,52 @@ def _encode_draft(
                         spec = {'layout': draft.layout, 'w': w, 'h': h}
                         req = ExportRequest(project_id, draft.id, layout=draft.layout)
                         scene_overlay = overlay_path
+                        camera_video = None
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
-                            if html_template == 'street' and draft.layout == 'crop':
-                                picture, label = packaging_render.street_picture(
-                                    draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
+                            if overlay_spec and overlay_spec.base.creator_pack is not None:
+                                from backend.services.studio import creator_pack as cp_mod
+                                ov = effective_cp_overrides if isinstance(effective_cp_overrides, dict) else {}
+                                cp_spec = overlay_spec.base.creator_pack
+                                pack = cp_mod.load_pack(template_registry.resolve_dir(html_template))
+                                cam_mode = str(ov.get('camera_mode') or 'none')
+                                raw_cam_path = ov.get('camera_path')
+                                if cam_mode == 'separate' and isinstance(raw_cam_path, str) and raw_cam_path.strip():
+                                    cand_cam = Path(raw_cam_path)
+                                    if cand_cam.is_file():
+                                        camera_video = cand_cam
+                                    else:
+                                        cam_mode = 'none'
+                                elif cam_mode == 'separate':
+                                    cam_mode = 'none'
+                                plan = cp_mod.resolve_render_plan(
+                                    theme_id=str(ov.get('theme') or cp_spec.theme),
+                                    layout_id=str(ov.get('layout') or cp_spec.default_layout),
+                                    duration_frames=max(1, int(round(clip_total * 30))),
+                                    events=ov.get('events'),
+                                    camera_mode=cam_mode,
+                                    camera_roi=ov.get('camera_roi'),
+                                    camera_enabled=bool(ov.get('camera', True)),
+                                    events_enabled=bool(ov.get('events_enabled', True)),
+                                    reduced_motion=bool(ov.get('reduced_motion', False)),
+                                    strength=float(ov.get('strength', 1.0)),
+                                    pack=pack,
+                                )
+                                picture, label = cp_mod.build_base_video_graph(
+                                    plan, int(info.get('width') or 0), int(info.get('height') or 0),
+                                    scene_start=scene.start, scene_end=scene.end, scene_offset=offsets[i],
+                                    camera_input_index=2 if camera_video is not None else None,
                                 )
                             else:
-                                picture, label = packaging_render.picture_only(draft, scene, w, h)
+                                use_step_window = bool(overlay_spec and overlay_spec.base.step_window)
+                                locked = overlay_spec.base.picture_layout if overlay_spec else 'auto'
+                                picture_draft = draft if locked == 'auto' or locked == draft.layout else draft.model_copy(update={'layout': locked})
+                                if use_step_window and picture_draft.layout == 'crop':
+                                    picture, label = packaging_render.street_picture(
+                                        picture_draft, scene, int(info.get('width') or 0), int(info.get('height') or 0), index=i,
+                                    )
+                                else:
+                                    picture, label = packaging_render.picture_only(picture_draft, scene, w, h)
                             # Street and editorial paint captions in the template safe zone.
                             # The cover owns the title; this overlay does not burn a headline.
                             tail, label = packaging_html.composite_tail(
@@ -358,11 +419,13 @@ def _encode_draft(
                         if scene_overlay:
                             # Overlay is the second input. Scene time is the output offset into that movie.
                             cmd += ['-ss', f'{max(0.0, offsets[i]):.3f}', '-i', str(scene_overlay)]
+                            if camera_video is not None:
+                                cmd += ['-ss', str(scene.start), '-i', str(camera_video)]
                         elif artwork:
                             cmd += ['-loop', '1', '-i', str(artwork)]
                         if backdrop:
                             cmd += ['-loop', '1', '-framerate', '30', '-i', str(backdrop)]
-                        silence_input = 1 + int(scene_overlay is not None) + int(artwork is not None) + int(backdrop is not None)
+                        silence_input = 1 + int(scene_overlay is not None) + int(camera_video is not None) + int(artwork is not None) + int(backdrop is not None)
                         if keep_audio:
                             cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
                         cmd += ['-t', str(duration)]
@@ -414,7 +477,7 @@ def _encode_draft(
 
                         def run(full, length=scene.end - scene.start):
                             full, priority = render_limits.low_priority(full)
-                            return project_cancellation.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
+                            return project_cancellation.run(full, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=max(180, length * 20), **priority)
 
                         proc = video_encoder.run_with_fallback(build, run)
                         if proc.returncode and scene_overlay:
@@ -478,7 +541,7 @@ def _encode_draft(
             outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro, report=outro_report)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
-        if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in HTML_TEMPLATE_IDS:
+        if overlay_job is not None and overlay_job.downgraded and template_registry.is_html_template(getattr(overlay_job, 'requested_template', None)):
             from backend.services.packaging_runtime import downgrade_warning
             hint = downgrade_warning(overlay_job.downgrade_reason)
             if hint and hint not in warnings:
@@ -519,7 +582,7 @@ def _encode_draft(
             result['template'] = overlay_job.template
             result['requested_template'] = overlay_job.requested_template
         else:
-            requested = requested_template if requested_template in STYLE_IDS else 'classic'
+            requested = requested_template if template_registry.is_valid_style(requested_template) else 'classic'
             result['template'] = 'classic'
             result['requested_template'] = requested
         return result

@@ -27,4 +27,19 @@ fields:
   optional: [kicker, emphasis, speakers]
 audio: {bgm: none}
 cover: {layout: cinema_3x4, from_overlay: true}
+caption_layout:
+  font_px: 40
+  inset_px: 80
+  source_limit: 34
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: false
+  en_key_propagates: true
+meta:
+  desc: {zh: 电影感宽画幅窗口与克制字幕，适合叙事与纪录片, en: Letterboxed cinema framing with restrained subtitles}
+  tags: [cinema, documentary, storytelling]
+  category: cinema
+  order: 40
+  package_version: "1.0.0"
+  preview_layout: blur
 qa: {}

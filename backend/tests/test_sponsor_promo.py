@@ -102,6 +102,7 @@ def test_packaged_config_uses_valid_https_worker_and_catalog_stays_local(profile
     packaged = load_packaged_config()
     assert packaged.enabled is True
     assert packaged.url == "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json"
+    assert packaged.v2_url == "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo-v2.json"
     assert len(base64.b64decode(packaged.public_key, validate=True)) == 32
     assert "PRIVATE" not in packaged.public_key
     assert packaged.min_sequence >= 1
@@ -110,7 +111,7 @@ def test_packaged_config_uses_valid_https_worker_and_catalog_stays_local(profile
     assert "sponsor_promo" not in source
     text = Path("backend/core/sponsor_promo.py").read_text(encoding="utf-8")
     assert "api_key" not in text
-    assert "base_url" not in text
+    assert "base_url" not in sponsor_promo.SPONSOR_KEYS
     bundled = Path("frontend/src/features/settings/firstRunGuidance.ts").read_text(encoding="utf-8")
     assert "FIRST_RUN_CHOICES = ['apimart', 'other']" in bundled
     assert sponsor_promo.BUNDLED_CHOICES == ("apimart", "other")
@@ -877,3 +878,252 @@ def test_novita_and_poyo_are_trusted_for_overseas_promo(tmp_path, profiles):
     assert en["default"] == "novita"
     assert en["register_urls"]["novita"] == "https://novita.ai/?ref=nzvindf&utm_source=affiliate"
     assert en["register_urls"]["poyo"] == "https://poyo.ai/?affiliate_code=christ520482&open_signup=1"
+
+
+def _dynamic_provider(**overrides):
+    spec = {
+        "id": "cloudgw",
+        "name": {"zh": "云网关", "en": "CloudGW"},
+        "base_url": "https://router.cloudgw.example/api/v1",
+        "register_url": "https://www.cloudgw.example/?from=AutoClip",
+        "docs_url": "https://console.cloudgw.example/keys",
+        "hint": {"zh": "测试云网关。", "en": "Test cloud gateway."},
+        "offer": {"zh": "送5元", "en": "$5 credit"},
+        "icon_url": "https://cdn.cloudgw.example/icon.png",
+        "capabilities": ["language", "image", "video"],
+        "candidates": {"analysis": ["gpt-5-mini"], "vision": ["gpt-5-mini"]},
+        "group": "popular",
+    }
+    spec.update(overrides)
+    return spec
+
+
+def test_v2_dynamic_provider_signed_promotion_and_v2_fallback(tmp_path, profiles):
+    private, public = _keys()
+    v2_payload = _payload(
+        sequence=40,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider()],
+        sponsors=[
+            {
+                "id": "cloudgw",
+                "order": 1,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["zh"],
+                "register_url": "https://www.cloudgw.example/?from=AutoClip",
+            },
+            {
+                "id": "apimart",
+                "order": 2,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["en"],
+            },
+        ],
+    )
+    requested = []
+
+    def http_v2(url, timeout, max_bytes):
+        requested.append(url)
+        return _envelope(private, v2_payload)
+
+    client = _client(
+        tmp_path / "v2",
+        private,
+        public,
+        http_v2,
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert client.refresh_sync() == "ok"
+    assert requested == ["https://static.example/autoclip/sponsor-promo-v2.json"]
+    zh_view = client.view(locale="zh")
+    assert zh_view["choices"] == ["cloudgw", "other"]
+    assert zh_view["default"] == "cloudgw"
+    assert zh_view["register_urls"]["cloudgw"] == "https://www.cloudgw.example/?from=AutoClip"
+    assert len(zh_view["providers"]) == 1
+    assert zh_view["providers"][0]["id"] == "cloudgw"
+    assert zh_view["providers"][0]["base_url"] == "https://router.cloudgw.example/api/v1"
+    en_view = client.view(locale="en")
+    assert en_view["choices"] == ["apimart", "other"]
+    assert en_view["default"] == "apimart"
+
+    # When v2_url fails (e.g., 404 before v2 is published), client falls back cleanly to v1 url.
+    fallback_urls = []
+    v1_payload = _payload(sequence=41)
+
+    def http_fallback(url, timeout, max_bytes):
+        fallback_urls.append(url)
+        if url.endswith("sponsor-promo-v2.json"):
+            raise OSError("404 not found")
+        return _envelope(private, v1_payload)
+
+    fb_client = _client(
+        tmp_path / "fallback",
+        private,
+        public,
+        http_fallback,
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert fb_client.refresh_sync() == "ok"
+    assert fallback_urls == [
+        "https://static.example/autoclip/sponsor-promo-v2.json",
+        "https://static.example/autoclip/sponsor-promo.json",
+    ]
+    assert fb_client.view()["default"] == "apimart"
+    assert "providers" not in fb_client.view()
+
+
+@pytest.mark.parametrize("bad_payload,expected_reason", [
+    # v1 schema must reject providers[]
+    (_payload(sequence=50, providers=[_dynamic_provider()]), "schema"),
+    # Built-in provider IDs can never be shadowed by dynamic providers
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(id="openai")]), "providers"),
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(id="apimart")]), "providers"),
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(id="dashscope")]), "providers"),
+    # Non-HTTPS, loopback, private IP, and /chat/completions endpoints must be rejected
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(base_url="http://router.cloudgw.example/v1")]), "providers"),
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(base_url="https://localhost/v1")]), "providers"),
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(base_url="https://127.0.0.1/v1")]), "providers"),
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(base_url="https://10.0.0.1/v1")]), "providers"),
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(base_url="https://router.cloudgw.example/v1/chat/completions")]), "providers"),
+    # HTML / script injection in localized strings must be rejected
+    (_payload(sequence=50, schema=sponsor_promo.SCHEMA_V2, providers=[_dynamic_provider(name={"zh": "<script>x</script>", "en": "Bad"})]), "providers"),
+    # Mismatched register_url host in sponsors[] for dynamic provider must be rejected
+    (_payload(
+        sequence=50,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider()],
+        sponsors=[{"id": "cloudgw", "order": 1, "status": "healthy", "register_url": "https://evil.example/?from=AutoClip"}],
+    ), "sponsors"),
+])
+def test_v2_dynamic_provider_security_rejections(tmp_path, profiles, bad_payload, expected_reason):
+    private, public = _keys()
+    client = _client(tmp_path, private, public, lambda url, timeout, max_bytes: _envelope(private, bad_payload))
+    assert client.refresh_sync() == expected_reason
+    assert client.view()["source"] == "bundled"
+
+
+def test_v2_dynamic_provider_crud_and_hot_update(tmp_path, profiles):
+    """Cloud v2 config supports full Create / Read / Update / Delete hot-updates without app restart."""
+    private, public = _keys()
+    secondary = _dynamic_provider(
+        id="cloudgw2",
+        name={"zh": "云网关二号", "en": "CloudGW2"},
+        base_url="https://api.cloudgw2.example/v1",
+        register_url="https://www.cloudgw2.example/?from=AutoClip",
+        docs_url="https://docs.cloudgw2.example/keys",
+    )
+    stage = {
+        "payload": _payload(
+            sequence=60,
+            schema=sponsor_promo.SCHEMA_V2,
+            providers=[_dynamic_provider(), secondary],
+            sponsors=[
+                {
+                    "id": "cloudgw",
+                    "order": 1,
+                    "status": "healthy",
+                    "new_user_default": True,
+                    "register_url": "https://www.cloudgw.example/?from=AutoClip",
+                },
+                {"id": "apimart", "order": 2, "status": "healthy"},
+            ],
+        )
+    }
+
+    def http(url, timeout, max_bytes):
+        return _envelope(private, stage["payload"])
+
+    client = _client(
+        tmp_path / "crud",
+        private,
+        public,
+        http,
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+
+    # Create + Read: both promoted and catalog-only dynamic providers are returned
+    assert client.refresh_sync() == "ok"
+    created = client.view(locale="zh")
+    assert [p["id"] for p in created["providers"]] == ["cloudgw", "cloudgw2"]
+    assert created["default"] == "cloudgw"
+    assert created["choices"] == ["cloudgw", "apimart", "other"]
+
+    # Update (hot-update on sequence+1): mutate fields, candidates, notice, and drop cloudgw2
+    updated_primary = _dynamic_provider(
+        name={"zh": "云网关 Pro", "en": "CloudGW Pro"},
+        base_url="https://v2.cloudgw.example/api/v1",
+        offer={"zh": "送20元", "en": "$20 credit"},
+        candidates={"analysis": ["gpt-5"], "vision": ["gpt-5"]},
+        group="recommended",
+    )
+    stage["payload"] = _payload(
+        sequence=61,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[updated_primary],
+        sponsors=[
+            {
+                "id": "cloudgw",
+                "order": 1,
+                "status": "fault",
+                "notices": {"zh": "短暂维护", "en": "Brief maintenance"},
+                "register_url": "https://www.cloudgw.example/?from=AutoClip",
+            },
+            {"id": "apimart", "order": 2, "status": "healthy", "new_user_default": True},
+        ],
+    )
+    assert client.refresh_sync() == "ok"
+    updated = client.view(locale="zh")
+    assert [p["id"] for p in updated["providers"]] == ["cloudgw"]
+    assert updated["providers"][0]["name"]["zh"] == "云网关 Pro"
+    assert updated["providers"][0]["base_url"] == "https://v2.cloudgw.example/api/v1"
+    assert updated["providers"][0]["offer"]["zh"] == "送20元"
+    assert updated["providers"][0]["candidates"]["analysis"] == ["gpt-5"]
+    assert updated["statuses"]["cloudgw"] == "fault"
+    assert updated["notices"]["cloudgw"]["zh"] == "短暂维护"
+    assert updated["default"] == "apimart"
+
+    # Delete (hot-update on sequence+2): remove all dynamic providers cleanly
+    stage["payload"] = _payload(
+        sequence=62,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[],
+        sponsors=[
+            {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True},
+        ],
+    )
+    assert client.refresh_sync() == "ok"
+    deleted = client.view(locale="zh")
+    assert "providers" not in deleted
+    assert deleted["choices"] == ["apimart", "other"]
+    assert deleted["default"] == "apimart"
+
+
+def test_fsync_dir_skips_directory_open_on_windows(tmp_path, profiles, monkeypatch):
+    """Windows forbids os.open(directory, O_RDONLY); _commit must still persist cleanly."""
+    import backend.core.sponsor_promo_client as client_mod
+
+    private, public = _keys()
+    real_open = client_mod.os.open
+
+    def win_open(path, flags, *args, **kwargs):
+        if Path(path).is_dir():
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(client_mod.sys, "platform", "win32")
+    monkeypatch.setattr(client_mod.os, "open", win_open)
+    payload = _payload(
+        sequence=70,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider()],
+        sponsors=[
+            {"id": "cloudgw", "order": 1, "status": "healthy", "new_user_default": True, "register_url": "https://www.cloudgw.example/?from=AutoClip"},
+        ],
+    )
+    client = _client(tmp_path / "win", private, public, lambda url, timeout, max_bytes: _envelope(private, payload))
+    assert client.refresh_sync() == "ok"
+    shown = client.view(locale="zh")
+    assert shown["default"] == "cloudgw"
+    assert [p["id"] for p in shown["providers"]] == ["cloudgw"]

@@ -1,14 +1,15 @@
 import { useEffect, useRef } from 'react'
-import { t } from '../../i18n'
+import { getLocale, t } from '../../i18n'
 import { trackTemplateOverride, trackTemplatePickerShown } from '../../analytics/studio'
 import { telemetryId } from '../../analytics/workflow'
 import EditingStylePicker from './EditingStylePicker'
-import { HTML_TEMPLATE_CHOICES, chosenTemplate, templateImportFields, type HtmlTemplateChoice } from './editingStyle'
+import { HTML_TEMPLATE_CHOICES, chosenTemplate, isBuiltinTemplate, templateImportFields, type BuiltinTemplateChoice, type HtmlTemplateChoice } from './editingStyle'
+import { resolveLocalizedCopy, useTemplateCatalog } from './templateCatalogClient'
 
 export { HTML_TEMPLATE_CHOICES, chosenTemplate, templateImportFields }
 export type { HtmlTemplateChoice }
 
-const COPY: Record<HtmlTemplateChoice, { name: string; hint: string }> = {
+const COPY: Record<BuiltinTemplateChoice, { name: string; hint: string }> = {
   editorial: { name: 'editing_style.editorial.name', hint: 'editing_style.editorial.desc' },
   street: { name: 'editing_style.street.name', hint: 'editing_style.street.desc' },
   news: { name: 'editing_style.news.name', hint: 'editing_style.news.desc' },
@@ -29,6 +30,7 @@ export default function TemplatePicker({
   sourceKind?: 'link' | 'file' | 'none'
 }) {
   const shown = useRef(false)
+  const { installed } = useTemplateCatalog()
   useEffect(() => {
     if (visual || shown.current) return
     shown.current = true
@@ -38,6 +40,7 @@ export default function TemplatePicker({
     return <EditingStylePicker value={value} disabled={disabled} onChange={onChange} sourceKey={sourceKey} url={url} file={file} />
   }
   const current = chosenTemplate(value)
+  const locale = getLocale()
   const choose = (next: HtmlTemplateChoice) => {
     if (disabled || next === current) return
     trackTemplateOverride({ from_template: current, to_template: next, stage: 'pre_import', input: 'mouse', flow_id: telemetryId() })
@@ -47,10 +50,15 @@ export default function TemplatePicker({
     <legend>{t('editing_style.title')}</legend>
     <p className="studio-muted">{t('editing_style.text_hint')}</p>
     <div className="studio-template-options">
-      {HTML_TEMPLATE_CHOICES.map(id => <button type="button" key={id} className={id === current ? 'studio-template-option is-selected' : 'studio-template-option'} aria-pressed={id === current} disabled={disabled} onClick={() => choose(id)}>
-        <b>{t(COPY[id].name)}</b>
-        <span>{t(COPY[id].hint)}</span>
-      </button>)}
+      {installed.map(item => {
+        const id = item.id
+        const label = isBuiltinTemplate(id) ? t(COPY[id].name) : resolveLocalizedCopy(item.name, locale, id)
+        const hint = isBuiltinTemplate(id) ? t(COPY[id].hint) : resolveLocalizedCopy(item.desc, locale, '')
+        return <button type="button" key={id} className={id === current ? 'studio-template-option is-selected' : 'studio-template-option'} aria-pressed={id === current} disabled={disabled} onClick={() => choose(id)}>
+          <b>{label}</b>
+          <span>{hint}</span>
+        </button>
+      })}
     </div>
   </fieldset>
 }

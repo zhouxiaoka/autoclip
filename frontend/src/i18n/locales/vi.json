@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "Nhập .zip",
   "editing_style.importing": "Đang nhập…",
   "editing_style.uninstall": "Gỡ mẫu",
-  "editing_style.new_count": "{{count}} mẫu mới"
+  "editing_style.new_count": "{{count}} mẫu mới",
+  "editing_style.category.all": "Tất cả",
+  "editing_style.category.gaming": "Gaming",
+  "editing_style.category.interview": "Phỏng vấn",
+  "editing_style.category.knowledge": "Ghi chú",
+  "editing_style.category.general": "Chung",
+  "editing_style.view_all": "Tất cả {{count}}",
+  "editing_style.gallery_title": "Chọn phong cách dựng",
+  "editing_style.scroll_prev": "Trước",
+  "editing_style.scroll_next": "Sau"
 }

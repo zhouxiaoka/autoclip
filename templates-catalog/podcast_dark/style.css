@@ -1,0 +1,92 @@
+/* 暗黑播客 1080x1920. Obsidian charcoal outside the 16:9 band (y 656..1264). No animation. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: transparent;
+  font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #f3f5f8;
+}
+.stage { position: relative; width: 1080px; height: 1920px; }
+
+.pane { position: absolute; left: 0; width: 1080px; background: #0f1115; }
+.pane-top { top: 0; height: 656px; }
+.pane-bottom { top: 1264px; height: 656px; }
+
+.rule { position: absolute; left: 0; width: 1080px; height: 3px; background: #38e8c6; }
+.rule-top { top: 653px; }
+.rule-bottom { top: 1264px; }
+
+.head {
+  position: absolute;
+  top: 215px;
+  left: 84px;
+  width: 912px;
+  text-align: center;
+}
+.series {
+  display: inline-block;
+  padding: 6px 18px;
+  border-radius: 6px;
+  background: rgba(56, 232, 198, 0.14);
+  border: 1px solid rgba(56, 232, 198, 0.45);
+  color: #38e8c6;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+}
+.title {
+  margin-top: 28px;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 60px;
+  color: #ffffff;
+  white-space: pre-line;
+}
+.guest {
+  margin-top: 24px;
+  font-size: 22px;
+  font-weight: 500;
+  color: rgba(243, 245, 248, 0.68);
+}
+
+.subtitle {
+  position: absolute;
+  top: 1348px;
+  left: 100px;
+  width: 880px;
+  text-align: center;
+}
+.zh {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 52px;
+  color: #ffffff;
+  white-space: pre-line;
+  max-height: 108px;
+  overflow: hidden;
+}
+.zh .hl {
+  color: #38e8c6;
+}
+.en {
+  margin: 24px auto 0;
+  max-width: 720px;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 31px;
+  color: rgba(243, 245, 248, 0.78);
+  max-height: 64px;
+  overflow: hidden;
+}
+
+.foot {
+  position: absolute;
+  top: 1592px;
+  left: 90px;
+  width: 900px;
+  text-align: center;
+  font-size: 17px;
+  color: rgba(243, 245, 248, 0.48);
+}

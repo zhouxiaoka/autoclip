@@ -105,7 +105,8 @@ export const PROVIDER_ICONS: Readonly<Partial<Record<string, ProviderIcon>>> = {
   'qwen-token-plan-cn': color(bailian),
 }
 
-export function providerIcon(id?: string | null): ProviderIcon | undefined {
-  if (!id) return undefined
-  return PROVIDER_ICONS[id]
+export function providerIcon(id?: string | null, iconUrl?: string | null): ProviderIcon | undefined {
+  if (id && PROVIDER_ICONS[id]) return PROVIDER_ICONS[id]
+  if (iconUrl && iconUrl.startsWith('https://')) return color(iconUrl)
+  return undefined
 }

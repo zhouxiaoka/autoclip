@@ -1,26 +1,137 @@
 """Pydantic contract for one packaging template.
 
-Each template lives in ``backend/assets/templates/<id>/`` and is rejected at
+Each template lives in ``backend/assets/templates/<id>/`` (built-in) or
+``<data_dir>/templates/<id>/`` (user-installed / hot-updated) and is rejected at
 load time when this model, or the page contract, does not hold. A template
 that fails validation never becomes a candidate.
 """
 from __future__ import annotations
 
-from backend.core.failure_codes import UserFacingError
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-HTML_TEMPLATE_IDS = ('editorial', 'street', 'news', 'cinema')
+from backend.core.failure_codes import UserFacingError
+
+# Built-in shipping HTML template IDs. Dynamic / user-installed templates are
+# discovered by ``registry.py`` and are not restricted to this tuple.
+BUILTIN_TEMPLATE_IDS = ('editorial', 'street', 'news', 'cinema')
+HTML_TEMPLATE_IDS = BUILTIN_TEMPLATE_IDS
 STYLE_IDS = (*HTML_TEMPLATE_IDS, 'classic')
 SAFE_AREAS = ('xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts')
 PACKAGING_FIELDS = ('title_lines', 'cues', 'kicker', 'emphasis', 'numbers', 'gloss', 'speakers', 'stickers')
+
+TEMPLATE_ID_RE = re.compile(r'^[a-z][a-z0-9_-]{1,31}$')
+RESERVED_TEMPLATE_IDS = frozenset({'classic', 'none', 'auto', 'default', 'custom', 'all', 'sync', 'install'})
+
+
+def is_valid_template_slug(value: str) -> bool:
+    return isinstance(value, str) and bool(TEMPLATE_ID_RE.match(value)) and value not in RESERVED_TEMPLATE_IDS
 
 
 class NameSpec(BaseModel):
     model_config = ConfigDict(extra='forbid')
     zh: str = Field(min_length=1, max_length=40)
     en: str = Field(min_length=1, max_length=40)
+    locales: dict[str, str] = Field(default_factory=dict)
+
+    def resolve(self, locale: str = 'zh') -> str:
+        norm = (locale or 'zh').strip().lower()
+        if norm in self.locales and self.locales[norm].strip():
+            return self.locales[norm].strip()
+        short = norm.split('-', 1)[0]
+        if short in self.locales and self.locales[short].strip():
+            return self.locales[short].strip()
+        if short == 'zh':
+            return self.zh
+        return self.en
+
+
+class LocalizedText(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    zh: str = Field(min_length=1, max_length=160)
+    en: str = Field(min_length=1, max_length=160)
+    locales: dict[str, str] = Field(default_factory=dict)
+
+    def resolve(self, locale: str = 'zh') -> str:
+        norm = (locale or 'zh').strip().lower()
+        if norm in self.locales and self.locales[norm].strip():
+            return self.locales[norm].strip()
+        short = norm.split('-', 1)[0]
+        if short in self.locales and self.locales[short].strip():
+            return self.locales[short].strip()
+        if short == 'zh':
+            return self.zh
+        return self.en
+
+
+class MetaSpec(BaseModel):
+    """Self-contained catalog, i18n, and preview metadata for dynamic templates."""
+    model_config = ConfigDict(extra='forbid')
+    desc: LocalizedText | None = None
+    tags: list[str] = Field(default_factory=list, max_length=12)
+    category: str = Field(default='general', min_length=1, max_length=32)
+    order: int = Field(default=100, ge=0, le=10000)
+    package_version: str = Field(default='1.0.0', pattern=r'^\d+\.\d+\.\d+([-.][a-zA-Z0-9.]+)?$')
+    min_app_version: str | None = Field(default=None, max_length=32)
+    author: str = Field(default='AutoClip', max_length=64)
+    preview_layout: Literal['crop', 'blur', 'fit'] = 'blur'
+
+
+class CaptionLayoutSpec(BaseModel):
+    """Declarative caption paging and bilingual alignment rules (replaces per-ID branches)."""
+    model_config = ConfigDict(extra='forbid')
+    font_px: int = Field(default=52, ge=20, le=120)
+    inset_px: int = Field(default=60, ge=0, le=200)
+    source_limit: int = Field(default=34, ge=10, le=100)
+    paging_mode: Literal['phrase', 'grouped_screen', 'sentence'] = 'phrase'
+    screen_chars: int | None = Field(default=None, ge=4, le=30)
+    screen_sec: float | None = Field(default=None, gt=0, le=10)
+    hold_slack: int = Field(default=0, ge=0, le=6)
+    bilingual_align: Literal['synced', 'per_cue', 'sentence_screens'] = 'per_cue'
+    strip_speaker_prefix: bool = False
+    en_key_propagates: bool = True
+    burn_cover_title: bool = False
+    # Keep each clause's trailing punctuation (，。？) on the caption pieces instead of stripping it.
+    keep_punctuation: bool = False
+
+
+class ScrimSpec(BaseModel):
+    """Declarative bottom gradient wash composited in ffmpeg."""
+    model_config = ConfigDict(extra='forbid')
+    enabled: bool = False
+    height: int = Field(default=1000, ge=2, le=1920)
+    color: str = Field(default='0x0C0A08', pattern=r'^0x[0-9A-Fa-f]{6}$')
+    mid_stop: float = Field(default=0.38, gt=0, lt=1)
+    mid_alpha: float = Field(default=0.38, ge=0, le=1)
+    bottom_alpha: float = Field(default=0.78, ge=0, le=1)
+
+
+class ProgressBarSpec(BaseModel):
+    """Declarative ffmpeg progress bar synced to the clip clock."""
+    model_config = ConfigDict(extra='forbid')
+    enabled: bool = False
+    height: int = Field(default=2, ge=2, le=32)
+    inset_x: int = Field(default=0, ge=0, le=300)
+    y_from_bottom: int = Field(default=0, ge=0, le=400)
+    color: str = Field(default='0xF4EFE6@0.8', pattern=r'^0x[0-9A-Fa-f]{6}(@[0-9.]+)?$')
+
+    @field_validator('height')
+    @classmethod
+    def even_height(cls, value: int) -> int:
+        if int(value) % 2:
+            raise UserFacingError('progress_bar.height 必须是偶数像素')
+        return int(value)
+
+
+class CreatorPackSpec(BaseModel):
+    """Declarative binding to a multi-theme/multi-layout Creator Pack (e.g. GTA VI)."""
+    model_config = ConfigDict(extra='forbid')
+    pack_id: str = Field(default='autoclip.gta-vi-creator', min_length=1, max_length=64)
+    theme: str = Field(default='auto', min_length=1, max_length=40)
+    default_layout: str = Field(default='auto', min_length=1, max_length=32)
+    default_effect: str | None = Field(default=None, max_length=32)
 
 
 class FitSpec(BaseModel):
@@ -101,6 +212,13 @@ class BaseSpec(BaseModel):
     zoom: ZoomSpec
     transitions: TransitionSpec
     grade: str = Field(min_length=1, max_length=400)
+    step_window: bool = False
+    # Lock the base picture layout under the overlay. 'auto' keeps the draft's own layout;
+    # 'fit' centres a 16:9 source in the 1080x608 band (y 656..1264) for window/card templates.
+    picture_layout: Literal['auto', 'crop', 'blur', 'fit'] = 'auto'
+    creator_pack: CreatorPackSpec | None = None
+    scrim: ScrimSpec | None = None
+    progress_bar: ProgressBarSpec | None = None
 
     @model_validator(mode='after')
     def head_band(self):
@@ -170,8 +288,8 @@ class CoverSpec(BaseModel):
 
 class TemplateSpec(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    id: Literal['editorial', 'street', 'news', 'cinema']
-    version: Literal[1]
+    id: str
+    version: Literal[1, 2] = 1
     name: NameSpec
     fit: FitSpec
     canvas: CanvasSpec
@@ -180,10 +298,25 @@ class TemplateSpec(BaseModel):
     fields: FieldSpec
     audio: AudioSpec
     cover: CoverSpec
+    caption_layout: CaptionLayoutSpec | None = None
+    meta: MetaSpec | None = None
     qa: dict = Field(default_factory=dict)
+
+    @field_validator('id')
+    @classmethod
+    def valid_id(cls, value: str) -> str:
+        if not is_valid_template_slug(value):
+            raise UserFacingError(f'模板 id 无效或为保留字: {value}')
+        return value
 
     @model_validator(mode='after')
     def empty_qa(self):
         if self.qa:
             raise UserFacingError('v1 不覆盖质检阈值')
         return self
+
+    def effective_caption_layout(self) -> CaptionLayoutSpec:
+        return self.caption_layout or CaptionLayoutSpec()
+
+    def effective_meta(self) -> MetaSpec:
+        return self.meta or MetaSpec()

@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "导入模板包",
   "editing_style.importing": "导入中…",
   "editing_style.uninstall": "卸载模板",
-  "editing_style.new_count": "发现 {{count}} 款新模板"
+  "editing_style.new_count": "发现 {{count}} 款新模板",
+  "editing_style.category.all": "全部",
+  "editing_style.category.gaming": "游戏直播",
+  "editing_style.category.interview": "访谈",
+  "editing_style.category.knowledge": "干货",
+  "editing_style.category.general": "通用",
+  "editing_style.view_all": "全部 {{count}} 款",
+  "editing_style.gallery_title": "选择剪辑风格",
+  "editing_style.scroll_prev": "向前翻页",
+  "editing_style.scroll_next": "向后翻页"
 }

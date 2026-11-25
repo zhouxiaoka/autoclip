@@ -268,32 +268,47 @@ def test_auto_capability_resolution(monkeypatch):
 
 
 def test_catalog_image_flag_cannot_make_a_text_only_model_ready_for_visual(monkeypatch):
-    """models.dev lists deepseek-flash as image input. Visual mode must still say it cannot see images."""
+    """models.dev or a gateway may tag a text-only model like deepseek-v4-pro as image input; visual mode must still reject it."""
     from backend.core import model_registry as registry
     from backend.services import ai_model_settings as ai
     connection = Connection(id='ai', name='DeepSeek', provider='deepseek', api_key='sk-test-key', base_url='https://api.deepseek.com')
     registry._update('metadata', {'updated_at': 10**10, 'providers': {
-        'deepseek': {'deepseek-flash': {'capability': 'multimodal', 'source': 'https://models.dev/api.json'}},
+        'deepseek': {'deepseek-v4-pro': {'capability': 'multimodal', 'source': 'https://models.dev/api.json'}},
     }})
     registry._update(registry._scope(connection), {
-        'models': [{'id': 'deepseek-flash', 'capability': 'multimodal', 'capability_source': 'provider'}],
+        'models': [{'id': 'deepseek-v4-pro', 'capability': 'multimodal', 'capability_source': 'provider'}],
         'source': 'live',
     })
     settings = document(
         connections=[connection], analysis_mode='visual',
-        analysis=Assignment(connection_id='ai', model='deepseek-flash', capability='auto'),
+        analysis=Assignment(connection_id='ai', model='deepseek-v4-pro', capability='auto'),
     )
-    assert registry.lookup_capability(connection, 'deepseek-flash') == 'multimodal'
+    assert registry.lookup_capability(connection, 'deepseek-v4-pro') == 'multimodal'
     assert ai.capability(settings, settings.analysis) == 'text'
     assert ai.vision_endpoint(settings) is None
     visual = report_for(monkeypatch, settings)['checks']['visual']
-    assert_check(visual, ok=False, code='vision_unsupported', repair='settings_vision', label='deepseek-flash')
-    # An explicit multimodal flag on this name does not override the text-only classification.
+    assert_check(visual, ok=False, code='vision_unsupported', repair='settings_vision', label='deepseek-v4-pro')
+    # An explicit multimodal flag on a text-only name does not override the text-only classification.
     forced = document(
         connections=[connection], analysis_mode='visual',
-        analysis=Assignment(connection_id='ai', model='deepseek-flash', capability='multimodal'),
+        analysis=Assignment(connection_id='ai', model='deepseek-v4-pro', capability='multimodal'),
     )
     assert report_for(monkeypatch, forced)['checks']['visual']['code'] == 'vision_unsupported'
+
+
+def test_deepseek_flash_official_vision_models_are_ready_for_visual(monkeypatch):
+    """Issue #692: DeepSeek V4 Flash vision models are officially multimodal and must not be blocked by known_text_only."""
+    from backend.services import ai_model_settings as ai
+    connection = Connection(id='ai', name='DeepSeek', provider='deepseek', api_key='sk-test-key', base_url='https://api.deepseek.com')
+    for model_id in ('deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek/deepseek-flash'):
+        settings = document(
+            connections=[connection], analysis_mode='visual',
+            analysis=Assignment(connection_id='ai', model=model_id, capability='multimodal'),
+        )
+        assert ai.capability(settings, settings.analysis) == 'multimodal', model_id
+        assert ai.vision_endpoint(settings) is not None, model_id
+        visual = report_for(monkeypatch, settings)['checks']['visual']
+        assert visual['ok'] is True, (model_id, visual)
 
 
 def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):

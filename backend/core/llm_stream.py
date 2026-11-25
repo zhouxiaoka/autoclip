@@ -702,7 +702,14 @@ def _lines(response: Any):
         yield from text.splitlines()
         return
     while True:
-        line = readline()
+        try:
+            line = readline()
+        except AttributeError as error:
+            # CPython http.client.HTTPResponse._peek_chunked raises AttributeError
+            # ('NoneType' object has no attribute 'peek') if the stream closes mid-read.
+            if getattr(response, "fp", True) is None:
+                raise ConnectionError("HTTP stream closed mid-read") from error
+            raise
         if not line:
             break
         yield line

@@ -1,7 +1,7 @@
 import { t } from '../../i18n'
 import { compareRecommended, pickerBucket, qualityFor, type LatencyTier, type SuccessTier } from './providerQuality'
 import { getCatalog, getProvider } from './providerPresets'
-import { isTrustedSponsorId, promotionCurrentlyPromoted, promotionEligible, promotionRank } from './sponsorPromoState'
+import { isTrustedSponsorId, promotionCurrentlyPromoted, promotionEligible, promotionRank, readDynamicProviders } from './sponsorPromoState'
 
 export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'apimart' | 'cometapi' | 'novita' | 'poyo' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string; success_tier?: SuccessTier; latency_tier?: LatencyTier; caveat_key?: string }
@@ -100,13 +100,15 @@ export const PROVIDERS: Record<ProviderKey, ProviderEntry> = UI_KEYS.reduce((acc
   return acc
 }, {} as Record<ProviderKey, ProviderEntry>)
 
-function recommendedCompare(a: ProviderKey, b: ProviderKey): number {
+function recommendedCompare(a: string, b: string): number {
   const left = promotionRank(a)
   const right = promotionRank(b)
   if (left !== null && right !== null && left !== right) return left - right
+  const entryA = PROVIDERS[a as ProviderKey]
+  const entryB = PROVIDERS[b as ProviderKey]
   return compareRecommended(
-    { sponsor: Boolean(PROVIDERS[a].sponsor) || promotionCurrentlyPromoted(a), success_tier: PROVIDERS[a].success_tier, success_rate: qualityFor(a)?.success_rate },
-    { sponsor: Boolean(PROVIDERS[b].sponsor) || promotionCurrentlyPromoted(b), success_tier: PROVIDERS[b].success_tier, success_rate: qualityFor(b)?.success_rate },
+    { sponsor: Boolean(entryA?.sponsor) || promotionCurrentlyPromoted(a), success_tier: entryA?.success_tier, success_rate: qualityFor(a)?.success_rate },
+    { sponsor: Boolean(entryB?.sponsor) || promotionCurrentlyPromoted(b), success_tier: entryB?.success_tier, success_rate: qualityFor(b)?.success_rate },
   )
 }
 
@@ -120,10 +122,12 @@ function visibleBucket(key: ProviderKey): ProviderGroup {
 }
 
 /** New-user recommendations. A stopped or removed sponsor stays available in the neutral list. */
-export function recommendedSetupProviders(): ProviderKey[] {
-  return (Object.keys(PROVIDERS) as ProviderKey[])
-    .filter(key => visibleBucket(key) === 'sponsor')
-    .sort(recommendedCompare)
+export function recommendedSetupProviders(): string[] {
+  const builtin = (Object.keys(PROVIDERS) as ProviderKey[]).filter(key => visibleBucket(key) === 'sponsor')
+  const dynamic = readDynamicProviders()
+    .map(dp => dp.id)
+    .filter(id => !(id in PROVIDERS) && promotionCurrentlyPromoted(id))
+  return [...builtin, ...dynamic].sort(recommendedCompare)
 }
 
 export const providerPickerOptions = () => PROVIDER_GROUPS

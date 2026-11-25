@@ -2451,5 +2451,14 @@
   "editing_style.import_zip": "ZIP importieren",
   "editing_style.importing": "Importiere…",
   "editing_style.uninstall": "Vorlage entfernen",
-  "editing_style.new_count": "{{count}} neue Vorlagen"
+  "editing_style.new_count": "{{count}} neue Vorlagen",
+  "editing_style.category.all": "Alle",
+  "editing_style.category.gaming": "Gaming",
+  "editing_style.category.interview": "Interview",
+  "editing_style.category.knowledge": "Notizen",
+  "editing_style.category.general": "Allgemein",
+  "editing_style.view_all": "Alle {{count}}",
+  "editing_style.gallery_title": "Schnittstil wählen",
+  "editing_style.scroll_prev": "Zurück",
+  "editing_style.scroll_next": "Weiter"
 }

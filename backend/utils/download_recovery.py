@@ -60,9 +60,9 @@ def _browser_cookie_permission_failure(error):
         seen.add(id(current))
         if isinstance(current, CookieLoadError):
             cookie_failure = True
-            msg = str(current).lower()
-            if any(tok in msg for tok in _COOKIE_LOCK_OR_DPAPI_TOKENS):
-                permission_or_dpapi = True
+        msg = str(current).lower()
+        if any(tok in msg for tok in _COOKIE_LOCK_OR_DPAPI_TOKENS):
+            permission_or_dpapi = True
         if isinstance(current, PermissionError):
             permission_or_dpapi = True
         pending.extend((current.__cause__, current.__context__))

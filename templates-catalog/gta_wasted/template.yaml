@@ -1,0 +1,53 @@
+id: gta_wasted
+version: 2
+name: {zh: "高能翻车分屏", en: "Wasted Impact Split"}
+fit:
+  formats: {gaming_stream: 1.0, live_replay: 1.0, vlog: 0.5}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.25
+  head_zone: [0, 730]
+  zoom:
+    mode: creep
+    creep: 0.0
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.02:saturation=1.04"
+  picture_layout: crop
+  creator_pack:
+    pack_id: autoclip.gta-vi-creator
+    theme: wasted
+    default_layout: viral_split
+    default_effect: impact-hold
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 622, alt_top: 196}
+    subtitle: {top: 700, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 72
+  inset_px: 60
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "平时 100% 满屏干净分屏，高能瞬间游戏层黑白去色 + 红黑横幅瞬时冲击", en: "Clean full-bleed split-screen with game-only B&W impact & slam banner on peak moments"}
+  tags: [gaming, livestream, split-screen, viral]
+  category: gaming
+  order: 41
+  package_version: "2.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}

@@ -134,7 +134,9 @@ def resolve_cjk_font() -> Optional[Path]:
 
 
 def _escape_filter_path(p: Path) -> str:
-    return str(p.resolve()).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+    # The filtergraph parser unquotes first, then the filter option parser handles colons and backslashes.
+    option = p.resolve().as_posix().replace("\\", r"\\").replace(":", r"\:").replace("'", r"\'")
+    return "'" + option.replace("'", r"'\''") + "'"
 
 
 def slice_srt(entries: Sequence[Dict[str, Any]], start: float, end: float, line_limit: Optional[float] = None) -> str:
@@ -263,13 +265,13 @@ def _build_filter(req: ExportRequest, spec: Dict[str, Any], srt_path: Optional[P
         from backend.services.studio.packaging_render import FONT_DIR
         nxt = "sub"
         parts.append(
-            f"[{last}]subtitles='{_escape_filter_path(srt_path)}':fontsdir='{_escape_filter_path(FONT_DIR)}':force_style='{style}'[{nxt}]"
+            f"[{last}]subtitles={_escape_filter_path(srt_path)}:fontsdir={_escape_filter_path(FONT_DIR)}:force_style='{style}'[{nxt}]"
         )
         last = nxt
     if title_path is not None and font is not None:
         nxt = "out"
         parts.append(
-            f"[{last}]drawtext=fontfile='{_escape_filter_path(font)}':textfile='{_escape_filter_path(title_path)}'"
+            f"[{last}]drawtext=fontfile={_escape_filter_path(font)}:textfile={_escape_filter_path(title_path)}"
             f":reload=0:x=(w-text_w)/2:y=h*0.08:fontsize=42:fontcolor=white:borderw=3:bordercolor=black"
             f":box=1:boxcolor=black@0.45:boxborderw=18:enable='lt(t\\,4)'[{nxt}]"
         )
@@ -339,10 +341,15 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
     font = resolve_cjk_font()
     if req.title_card and not studio and not font:
         warnings.append("没找到中文字体，已跳过标题卡")
-    tmpdir = Path(tempfile.mkdtemp(prefix="ac-export-"))
-    srt_file = None
-    title_file = None
-    try:
+    # Stage the render on the destination volume and keep cleanup best-effort.
+    # A temporary file lock must not change the outcome of an already-finished export.
+    with (
+        tempfile.TemporaryDirectory(prefix="ac-export-", ignore_cleanup_errors=True) as scratch,
+        tempfile.TemporaryDirectory(prefix=".ac-export-", dir=out_dir, ignore_cleanup_errors=True) as staged,
+    ):
+        tmpdir = Path(scratch)
+        srt_file = None
+        title_file = None
         if req.subtitles and not studio:
             entries = _load_srt_entries(req.project_id)
             source_info = _probe(video) if not spec.get('w') or not spec.get('h') else spec
@@ -360,7 +367,7 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
 
         built = _build_filter(req, spec, srt_file, title_file if req.title_card else None, font)
         ffmpeg = get_ffmpeg_path()
-        temp_output = tmpdir / 'content.mp4'
+        temp_output = Path(staged) / 'content.mp4'
         from backend.services import render_limits
         cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", *render_limits.input_args(),
                "-ss", f"{start:.3f}", "-i", str(video), "-t", f"{duration:.3f}"]
@@ -396,15 +403,13 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         }
         meta_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         return result
-    finally:
-        import shutil
-        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def _probe(path: Path) -> Dict[str, Any]:
     try:
-        cmd = [get_ffprobe_path(), "-v", "error", "-select_streams", "v:0",
-               "-show_entries", "stream=width,height,avg_frame_rate,codec_name:format=duration", "-of", "json", str(path)]
+        cmd = [get_ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+               "stream=width,height,avg_frame_rate,codec_name:stream_side_data=rotation:format=duration",
+               "-of", "json", str(path)]
         raw = subprocess.check_output(cmd, text=True, encoding="utf-8", errors="ignore", timeout=20)
         data = json.loads(raw)
         stream = (data.get("streams") or [{}])[0]
@@ -413,6 +418,7 @@ def _probe(path: Path) -> Dict[str, Any]:
         return {
             "width": stream.get("width"),
             "height": stream.get("height"),
+            "rotation": next((side["rotation"] for side in stream.get("side_data_list", []) if "rotation" in side), 0),
             "fps": round(fps, 3), "video_codec": stream.get("codec_name"),
             "duration": round(float((data.get("format") or {}).get("duration") or 0), 2),
         }

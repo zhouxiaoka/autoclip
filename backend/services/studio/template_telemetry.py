@@ -25,6 +25,16 @@ def _enum(value: object, allowed: tuple[str, ...]) -> str | None:
     return value if isinstance(value, str) and value in allowed else None
 
 
+def _template_enum(value: object) -> str | None:
+    """Accept built-in enum names plus any currently registered HTML template slug."""
+    if not isinstance(value, str):
+        return None
+    if value in TEMPLATES:
+        return value
+    from backend.services.studio.templates import registry as template_registry
+    return value if template_registry.is_html_template(value) else None
+
+
 def _count(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
@@ -55,8 +65,8 @@ def render_event(payload: dict | None) -> dict:
     """`studio_template_render_finished` properties. Unknown keys never pass through."""
     raw = payload or {}
     event = {
-        'template': _enum(raw.get('template'), TEMPLATES),
-        'requested_template': _enum(raw.get('requested_template'), TEMPLATES),
+        'template': _template_enum(raw.get('template')),
+        'requested_template': _template_enum(raw.get('requested_template')),
         'encoder': _enum(raw.get('encoder'), ENCODERS),
         'downgraded': raw.get('downgraded') if isinstance(raw.get('downgraded'), bool) else None,
         'downgrade_reason': _enum(raw.get('downgrade_reason'), DOWNGRADE_REASONS),
@@ -80,9 +90,9 @@ def override_event(payload: dict | None) -> dict:
     """`studio_template_overridden` properties."""
     raw = payload or {}
     event = {
-        'from_template': _enum(raw.get('from_template'), TEMPLATES),
-        'to_template': _enum(raw.get('to_template'), TEMPLATES),
-        'recommended': _enum(raw.get('recommended'), TEMPLATES),
+        'from_template': _template_enum(raw.get('from_template')),
+        'to_template': _template_enum(raw.get('to_template')),
+        'recommended': _template_enum(raw.get('recommended')),
         'stage': _enum(raw.get('stage'), OVERRIDE_STAGES),
         'input': _enum(raw.get('input'), OVERRIDE_INPUTS),
     }

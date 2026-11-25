@@ -1,0 +1,49 @@
+id: podcast_dark
+version: 2
+name: {zh: 暗黑播客, en: Dark Podcast}
+fit:
+  formats: {podcast_studio: 1.0, sit_down_interview: 0.9, keynote_stage: 0.75}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: window
+  face_y: 0.45
+  head_zone: [656, 1264]
+  zoom:
+    mode: creep
+    creep: 0.0
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.05:saturation=1.02"
+  picture_layout: fit
+  progress_bar: {enabled: true, height: 6, inset_x: 0, y_from_bottom: 6, color: "0x38E8C6@0.95"}
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 215, alt_top: 215}
+    subtitle: {top: 1348, max_rows: 2}
+  safe_area: douyin
+  limits: {emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: podcast_dark_3x4, from_overlay: true}
+caption_layout:
+  font_px: 34
+  inset_px: 100
+  source_limit: 58
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: 极客暗黑播客卡片 + 青色高亮字幕与底部进度条，适合科技播客切片, en: Obsidian dark podcast frame with cyan keyword highlights and progress bar}
+  tags: [podcast, tech, dark, bilingual]
+  category: podcast
+  order: 60
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: fit
+qa: {}

@@ -8,6 +8,21 @@ export interface LocalePromoSlice {
   registerUrls: Record<string, string>
 }
 
+export interface DynamicProviderSpec {
+  id: string
+  name: Record<string, string>
+  baseUrl: string
+  registerUrl: string
+  docsUrl: string
+  placeholder: string
+  capabilities: string[]
+  group: 'popular' | 'recommended'
+  hint?: Record<string, string>
+  offer?: Record<string, string>
+  iconUrl?: string
+  candidates?: Partial<Record<'analysis' | 'vision' | 'asr' | 'image', string[]>>
+}
+
 export interface PromoSnapshot {
   choices: string[]
   defaultChoice: string
@@ -15,6 +30,7 @@ export interface PromoSnapshot {
   registerUrls: Record<string, string>
   notices: Record<string, Record<string, string>>
   byLocale?: Record<string, LocalePromoSlice>
+  providers?: DynamicProviderSpec[]
   sequence?: number
   revision?: number
   instance?: string
@@ -41,8 +57,28 @@ let current: PromoSnapshot | null = null
 let activeLocale: string | null = null
 const listeners = new Set<() => void>()
 
+export function readDynamicProviders(): DynamicProviderSpec[] {
+  return current?.providers || []
+}
+
+export function findDynamicProvider(id?: string | null): DynamicProviderSpec | undefined {
+  if (!id || !current?.providers?.length) return undefined
+  return current.providers.find(item => item.id === id)
+}
+
+export function localizedDynamicText(
+  map?: Record<string, string> | string | null,
+  locale?: string | null,
+): string {
+  if (!map) return ''
+  if (typeof map === 'string') return map
+  const loc = normalizePromoLocale(locale ?? activeLocale)
+  if (loc && map[loc]) return map[loc]
+  return map.en || map.zh || Object.values(map)[0] || ''
+}
+
 export function isTrustedSponsorId(id?: string | null): id is string {
-  return !!id && TRUSTED_PROMO_IDS.has(id)
+  return !!id && (TRUSTED_PROMO_IDS.has(id) || Boolean(findDynamicProvider(id)))
 }
 
 export function normalizePromoLocale(language?: string | null): string | null {
@@ -96,17 +132,23 @@ function hostOf(url: string): string {
  * out_of_service, and a trusted id removed from the accepted choices, leave the recommendation.
  * With no snapshot, eligibility does not block measured providers.
  */
+function trustedHostFor(id: string): string {
+  if (TRUSTED_REGISTER_HOSTS[id]) return TRUSTED_REGISTER_HOSTS[id]
+  const dynamic = findDynamicProvider(id)
+  return dynamic ? hostOf(dynamic.registerUrl) : ''
+}
+
 export function promotionEligible(id: string, locale?: string | null): boolean {
   if (current?.statuses?.[id] === 'out_of_service') return false
   const slice = resolvePromoSlice(current, locale)
   if (!slice) return true
-  if (TRUSTED_PROMO_IDS.has(id) && !slice.choices.includes(id)) return false
+  if (isTrustedSponsorId(id) && !slice.choices.includes(id)) return false
   return true
 }
 
 /** Whether this id is in the promotion the user should see right now. */
 export function promotionCurrentlyPromoted(id: string, locale?: string | null): boolean {
-  if (!TRUSTED_PROMO_IDS.has(id)) return false
+  if (!isTrustedSponsorId(id)) return false
   if (current?.statuses?.[id] === 'out_of_service') return false
   const slice = resolvePromoSlice(current, locale)
   if (!slice) return PACKAGED_ACTIVE.has(id)
@@ -131,13 +173,17 @@ export function promotionRecommends(id: string, locale?: string | null): boolean
  */
 export function promotionRegisterUrl(id: string, packaged = '', locale?: string | null): string | null {
   if (!promotionCurrentlyPromoted(id, locale)) return null
+  const trustedHost = trustedHostFor(id)
+  if (!trustedHost) return null
   const slice = resolvePromoSlice(current, locale)
   const remote = slice?.registerUrls?.[id]
   if (typeof remote === 'string' && remote) {
-    return hostOf(remote) === TRUSTED_REGISTER_HOSTS[id] ? remote : null
+    return hostOf(remote) === trustedHost ? remote : null
   }
+  const dynamic = findDynamicProvider(id)
+  if (dynamic && hostOf(dynamic.registerUrl) === trustedHost) return dynamic.registerUrl
   if (current && current.source !== 'bundled') return null
-  if (!packaged || hostOf(packaged) !== TRUSTED_REGISTER_HOSTS[id]) return null
+  if (!packaged || hostOf(packaged) !== trustedHost) return null
   return packaged
 }
 

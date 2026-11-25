@@ -1,0 +1,52 @@
+id: streamer_split
+version: 2
+name: {zh: "主播上下分屏", en: "Streamer Split"}
+fit:
+  formats: {gaming_stream: 1.0, live_replay: 1.0, vlog: 0.5}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.25
+  head_zone: [0, 730]
+  zoom:
+    mode: creep
+    creep: 0.0
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.02:saturation=1.04"
+  picture_layout: crop
+  creator_pack:
+    pack_id: autoclip.gta-vi-creator
+    theme: vice-city-sunset
+    default_layout: viral_split
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 622, alt_top: 196}
+    subtitle: {top: 700, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 72
+  inset_px: 60
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "上 38% 全宽主播特写 + 下 62% 纯净游戏（自动避让双主播），中缝逐词高亮大字幕", en: "Full-bleed 38% top facecam + 62% bottom gameplay with seam kinetic captions"}
+  tags: [gaming, livestream, split-screen, viral]
+  category: gaming
+  order: 40
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}

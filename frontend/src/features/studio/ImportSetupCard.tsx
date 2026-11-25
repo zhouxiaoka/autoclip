@@ -12,7 +12,9 @@ import { useQuickConnect } from '../settings/useQuickConnect'
 import { PROVIDERS, recommendedSetupProviders, type ProviderKey } from '../settings/providers'
 import {
   NEUTRAL_PROVIDER_COPY,
+  findDynamicProvider,
   isTrustedSponsorId,
+  localizedDynamicText,
   promotionAllowsUpsell,
   promotionRecommends,
   promotionRegisterUrl,
@@ -29,9 +31,34 @@ const STEP_LABEL: Record<Step, () => string> = {
   connect: () => t('连接并保存'),
 }
 
-function selectableProvider(id: string | null): ProviderKey | null {
+function selectableProvider(id: string | null): string | null {
   if (!id) return null
-  return (Object.keys(PROVIDERS) as ProviderKey[]).find(key => key === id) || null
+  if (id in PROVIDERS) return id as ProviderKey
+  return findDynamicProvider(id)?.id || null
+}
+
+function setupRowMeta(id: string, language?: string) {
+  const builtin = PROVIDERS[id as ProviderKey]
+  if (builtin) {
+    return {
+      short: builtin.short,
+      placeholder: builtin.placeholder,
+      registerUrl: builtin.sponsor?.registerUrl || '',
+      offer: builtin.sponsor?.offer || '',
+      description: builtin.sponsor && promotionAllowsUpsell(id) ? builtin.sponsor.description : builtin.sponsor ? t(NEUTRAL_PROVIDER_COPY) : builtin.hint,
+      hasSponsor: Boolean(builtin.sponsor),
+    }
+  }
+  const dynamic = findDynamicProvider(id)
+  if (!dynamic) return undefined
+  return {
+    short: localizedDynamicText(dynamic.name, language) || dynamic.id,
+    placeholder: dynamic.placeholder || 'sk-…',
+    registerUrl: dynamic.registerUrl,
+    offer: localizedDynamicText(dynamic.offer, language),
+    description: promotionAllowsUpsell(id) ? (localizedDynamicText(dynamic.hint, language) || t(NEUTRAL_PROVIDER_COPY)) : t(NEUTRAL_PROVIDER_COPY),
+    hasSponsor: true,
+  }
 }
 
 /**
@@ -49,11 +76,11 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
   const navigate = useNavigate()
   const connect = useQuickConnect('import_card')
   const [step, setStep] = useState<Step>('provider')
-  const [provider, setProvider] = useState<ProviderKey | null>(() => selectableProvider(promotionSetupChoice(recommendedSetupProviders())))
+  const [provider, setProvider] = useState<string | null>(() => selectableProvider(promotionSetupChoice(recommendedSetupProviders())))
   const recommended = recommendedSetupProviders()
   const providers = provider && !recommended.includes(provider) ? [...recommended, provider] : recommended
   const touched = useRef(false)
-  const lockedProvider = useRef<ProviderKey | null>(null)
+  const lockedProvider = useRef<string | null>(null)
   useEffect(() => {
     if (lockedProvider.current || touched.current || step !== 'provider') return
     setProvider(selectableProvider(promotionSetupChoice(recommendedSetupProviders())))
@@ -78,7 +105,7 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
     })
   }
   const identity = lockedProvider.current || provider
-  const preset = identity ? PROVIDERS[identity] : undefined
+  const preset = identity ? setupRowMeta(identity, language) : undefined
   const index = STEPS.indexOf(step)
   const canContinue = !!provider && providers.includes(provider)
   const next = () => {
@@ -115,11 +142,11 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
   const keyHref = () => {
     const sponsor = promoId(identity)
     if (!sponsor) return null
-    return promotionRegisterUrl(sponsor, preset?.sponsor?.registerUrl || '')
+    return promotionRegisterUrl(sponsor, preset?.registerUrl || '')
   }
   const openKey = () => {
     const sponsor = promoId(identity)
-    const href = sponsor ? promotionRegisterUrl(sponsor, preset?.sponsor?.registerUrl || '') : null
+    const href = sponsor ? promotionRegisterUrl(sponsor, preset?.registerUrl || '') : null
     if (!sponsor || !href) return
     trackSponsorLinkOpened({ sponsor, target: 'register', placement: 'import_card' })
     openExternalLink(href)
@@ -135,11 +162,12 @@ export default function ImportSetupCard({ onExample, exampleBusy = false, keptMa
     </ol>
     {step === 'provider' && <div className="ac-choice-list" role="radiogroup" aria-label={t('选择服务商')} data-setup-empty={providers.length ? undefined : '1'}>
       {providers.map(id => {
-        const row = PROVIDERS[id]
+        const row = setupRowMeta(id, language)
+        if (!row) return null
         return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={provider === id} onClick={() => { touched.current = true; setProvider(id) }}>
           <span className="ac-choice-text">
-            <b>{row.short}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{row.sponsor && !promotionRecommends(id) && promotionAllowsUpsell(id) && <span className="ac-badge">{row.sponsor.offer}</span>}</b>
-            <span>{row.sponsor && promotionAllowsUpsell(id) ? row.sponsor.description : row.sponsor ? t(NEUTRAL_PROVIDER_COPY) : row.hint}</span>
+            <b>{row.short}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{row.hasSponsor && row.offer && !promotionRecommends(id) && promotionAllowsUpsell(id) && <span className="ac-badge">{row.offer}</span>}</b>
+            <span>{row.description}</span>
           </span>
           {provider === id && <Icon.Check />}
         </button>

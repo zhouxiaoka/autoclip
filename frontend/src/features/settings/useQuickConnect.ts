@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
 import type { Placement } from '../../analytics/experience'
 import { SETTINGS_SAVED_EVENT } from '../studio/settingsReturn'
 import { mainConnection } from './modelSettingsLogic'
-import type { ProviderKey } from './providers'
+import { PROVIDERS, type ProviderKey } from './providers'
 import { useModelSettings } from './useModelSettings'
 
 export function useQuickConnect(placement: Placement = 'home_setup') {
@@ -24,7 +24,10 @@ export function useQuickConnect(placement: Placement = 'home_setup') {
     try { return await model.save(patch, base) }
     finally { ownSave.current = false }
   }
-  const selectProvider = (provider: ProviderKey) => model.chooseProvider('analysis', provider)
+  const selectProvider = (provider: string) => {
+    if (provider in PROVIDERS) model.chooseProvider('analysis', provider as ProviderKey)
+    else model.ensureCatalogProvider(provider, undefined, true)
+  }
   const setKey = (value: string) => {
     const settings = model.settings
     const main = settings && mainConnection(settings)

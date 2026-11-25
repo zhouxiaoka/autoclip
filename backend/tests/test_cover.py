@@ -416,7 +416,7 @@ def test_model_catalog_marks_vision_and_image_models():
     from backend.core import model_catalog as mc
     assert mc.supports_vision("gemini-3.8-flash") and mc.supports_vision("claude-sonnet-5-5")
     assert mc.supports_vision("doubao-seed-2-1-lite-260915") and mc.supports_vision("qwen-vl-plus")
-    assert not mc.supports_vision("deepseek-flash") and not mc.supports_vision("qwen-plus")
+    assert not mc.supports_vision("deepseek-v4-pro") and not mc.supports_vision("qwen-plus")
     assert mc.IMAGE_MODELS["dashscope"][0].startswith("wanx") and "deepseek" not in mc.IMAGE_MODELS
 
 

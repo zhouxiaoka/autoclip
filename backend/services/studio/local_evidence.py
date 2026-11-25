@@ -1,4 +1,5 @@
 """Bounded local subtitle evidence, without model calls or transcription."""
+from codecs import BOM_UTF16_BE, BOM_UTF16_LE, BOM_UTF32_BE, BOM_UTF32_LE
 from pathlib import Path
 import pysrt
 
@@ -18,7 +19,14 @@ def inspect_subtitles(video: Path, duration: float):
     if len(raw) > MAX_SUBTITLE_BYTES:
         return {**evidence, 'subtitle_status': 'too_large'}
     try:
-        cues = pysrt.from_string(raw.decode('utf-8-sig'))
+        # Match pysrt.open's BOM detection while keeping the bounded read above.
+        if raw.startswith((BOM_UTF32_BE, BOM_UTF32_LE)):
+            encoding = 'utf-32'
+        elif raw.startswith((BOM_UTF16_BE, BOM_UTF16_LE)):
+            encoding = 'utf-16'
+        else:
+            encoding = 'utf-8-sig'
+        cues = pysrt.from_string(raw.decode(encoding))
     except (ValueError, UnicodeError):
         return {**evidence, 'subtitle_status': 'invalid'}
     ranges = sorted({(cue.start.ordinal / 1000, cue.end.ordinal / 1000)

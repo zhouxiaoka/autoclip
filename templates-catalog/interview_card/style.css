@@ -1,0 +1,93 @@
+/* 访谈卡片 1080x1920. Opaque navy outside the 16:9 video band (y 656..1264). No animation. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: transparent;
+  font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #ffffff;
+}
+.stage { position: relative; width: 1080px; height: 1920px; }
+
+.pane { position: absolute; left: 0; width: 1080px; background: #1a2550; }
+.pane-top { top: 0; height: 656px; }
+.pane-bottom { top: 1264px; height: 656px; }
+
+.rule { position: absolute; left: 0; width: 1080px; height: 4px; background: #e5603a; }
+.rule-top { top: 652px; }
+.rule-bottom { top: 1264px; }
+
+.head {
+  position: absolute;
+  top: 226px;
+  left: 90px;
+  width: 900px;
+  text-align: center;
+}
+.series {
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 32px;
+  color: rgba(255, 255, 255, 0.72);
+  min-height: 32px;
+}
+.title {
+  margin-top: 26px;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 48px;
+  letter-spacing: 0.5px;
+  white-space: pre-line;
+}
+.guest {
+  margin-top: 30px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 30px;
+}
+.role {
+  margin-top: 16px;
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 26px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.subtitle {
+  position: absolute;
+  top: 1350px;
+  left: 190px;
+  width: 700px;
+  text-align: center;
+}
+.zh {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 48px;
+  white-space: pre-line;
+  text-wrap: balance;
+  max-height: 96px;
+  overflow: hidden;
+}
+.en {
+  margin: 30px auto 0;
+  max-width: 470px;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 30px;
+  color: rgba(255, 255, 255, 0.86);
+  max-height: 60px;
+  overflow: hidden;
+}
+
+.foot {
+  position: absolute;
+  top: 1586px;
+  left: 90px;
+  width: 900px;
+  text-align: center;
+  font-size: 16px;
+  line-height: 28px;
+  color: rgba(255, 255, 255, 0.6);
+}

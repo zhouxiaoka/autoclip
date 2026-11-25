@@ -103,7 +103,8 @@ def test_blank_model_is_rejected_and_catalog_classes_are_local():
     else:
         raise AssertionError("an empty model must not be stored as a selected model")
     assert supports_vision("gemini-3.8-flash")
-    assert not supports_vision("deepseek-v4-flash")
+    assert supports_vision("deepseek-v4-flash")
+    assert not supports_vision("deepseek-v4-pro")
     assert is_chat_model("deepseek-v4-flash", "apimart", official=False)
     assert is_image_model("gpt-image-1")
     assert is_non_chat_family("gpt-4o-realtime-preview")

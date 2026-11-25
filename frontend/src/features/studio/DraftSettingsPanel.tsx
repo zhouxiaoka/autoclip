@@ -1,10 +1,11 @@
 import { Select, Switch } from 'antd'
-import { t } from '../../i18n'
+import { getLocale, t } from '../../i18n'
 import { pipInstallErrorText } from '../../utils/pipInstallError'
 import { Btn, ProgressLine, Row, Segmented, StatusDot } from '../../ui'
 import { CropPoint, Draft, FramingStatus, Scene, cropAt, frameModeAt, languages, shotIndexAt, subtitleStyles } from './types'
 import { titlePresets, titleVersions, isArtworkStyle, titleDesignThumbnails } from './titlePresets'
-import { HTML_TEMPLATE_CHOICES } from './editingStyle'
+import { isBuiltinTemplate } from './editingStyle'
+import { resolveLocalizedCopy, useTemplateCatalog } from './templateCatalogClient'
 import PackagingSettings from './PackagingSettings'
 
 const ACCENT_DEFAULT: Record<string, string> = { comic: '#ffe52d', neon: '#ccff00', editorial: '#ff4826', pixel: '#ed327c', frosted: '#00e6dc' }
@@ -38,6 +39,8 @@ export default function DraftSettingsPanel({ draft, patch, templateEditable, sce
   onPortrait: () => void
   coverControl?: React.ReactNode
 }) {
+  const { installed } = useTemplateCatalog()
+  const locale = getLocale()
   const showTemplate = templateEditable && draft.aspect === 'portrait'
   const designed = showTemplate && !!draft.html_template && draft.html_template !== 'classic'
   const artwork = isArtworkStyle(draft.title_style)
@@ -60,7 +63,10 @@ export default function DraftSettingsPanel({ draft, patch, templateEditable, sce
 
       {showTemplate && <Row label={t('editing_style.title')}>
         <Select aria-label={t('editing_style.title')} value={draft.html_template || 'classic'}
-          options={HTML_TEMPLATE_CHOICES.map(value => ({ value, label: t(`editing_style.${value}.name`) }))}
+          options={installed.map(item => ({
+            value: item.id,
+            label: isBuiltinTemplate(item.id) ? t(`editing_style.${item.id}.name`) : resolveLocalizedCopy(item.name, locale, item.id),
+          }))}
           onChange={html_template => patch({ html_template })} />
       </Row>}
       {!draft.packaging && <Row label={t("字幕")} hint={t("把字幕压进画面，整条成片统一样式。")}>
