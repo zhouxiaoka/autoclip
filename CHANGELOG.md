@@ -7,9 +7,22 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.6.1] - 2026-11-25
+
 ### 新增
 
-- 自定义 OpenAI 兼容连接支持 HTTP Header 键值对、`reasoning_effort` 和服务商附加 JSON 参数；模型列表、连接测试及文字/视觉调用使用同一配置，Header 值不会随公开设置返回。未配置时保持原行为。（#640）
+- 支持签名 `v2` 云端动态服务商配置：无需发版即可热更新增、删、改、查 OpenAI 兼容服务商及其多语言信息、推荐顺序与状态通知；已保存的兼容连接在服务商下线后仍保持可用。
+- 支持云端动态模板库与社区模板导入：内置滚动 `templates-catalog` 目录、支持导入/卸载 `.zip` 自定义模板包（13 语），新增 GTA VI 创作者包及 3 款游戏分屏 / 画中画模板，并优化单行模板轮播与 YuNet 主播摄像头 ROI 自动识别。
+- 自定义 OpenAI 兼容连接支持 HTTP Header 键值对、`reasoning_effort` 和服务商附加 JSON 参数；模型列表、连接测试及文字/视觉调用使用同一配置，Header 值不会随公开设置返回。未配置时保持原行为。（#640 / #643）
+- 服务商列表新增未保存修改提示徽章（#668），并支持 DeepSeek Flash 官方视觉模型识别（#692）。
+
+### 修复与改进
+
+- 修复日语假名全角字幕排版计算（#669）及 10 项社区提交的边界与稳定性问题（#678–#687）。
+- 修复 9 项线上 Sentry 报错，涵盖异步下载与子进程超时容错、Windows 关停套接字异常收敛、SSE 响应断连处理、字幕与媒体边缘空值防御，以及前端设置与播放器边界异常。
+- 仓库默认说明统一为英文主 README，并将 12 语说明与辅助脚本归档整理至 `docs/`、`docker/` 与 `scripts/`。
 
 ## [1.6.0] - 2026-11-23
 
@@ -740,7 +753,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.0...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.1...HEAD
+- [1.6.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.0...v1.6.1
 - [1.6.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.9...v1.6.0
 - [1.5.9]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.8...v1.5.9
 - [1.5.8]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...v1.5.8
