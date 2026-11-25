@@ -1,4 +1,5 @@
 """Bounded still-frame analysis through Gemini-native or OpenAI-compatible endpoints."""
+from backend import __version__
 from backend.core.failure_codes import UserFacingError
 from backend.core.llm_stream import StreamError
 from backend.core import gemini_transport
@@ -215,12 +216,14 @@ def vision_call(content, config=None, *, allow_event_list=False):
     body = build_body(model)
     native = gemini_transport.is_official_gemini(config.get('provider', ''), base)
     from backend.core.custom_request_options import merge_headers
-    headers = merge_headers({**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}, config.get('http_headers'))
+    # Some gateway firewalls reject urllib's default agent even when text probes succeed.
+    user_agent = {'User-Agent': f'autoclip/{__version__} (+https://github.com/zhouxiaoka/autoclip)'}
+    headers = merge_headers({**user_agent, **({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}, config.get('http_headers'))
 
     def request(payload):
         if native:
             url, native_headers, native_body = gemini_transport.request(base, key, payload)
-            return urllib.request.Request(url, data=json.dumps(native_body).encode(), headers=native_headers)
+            return urllib.request.Request(url, data=json.dumps(native_body).encode(), headers={**user_agent, **native_headers})
         return urllib.request.Request(base.rstrip('/') + '/chat/completions', data=json.dumps(payload).encode(), headers=headers)
 
     def load(payload):
