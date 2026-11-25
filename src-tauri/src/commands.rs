@@ -348,7 +348,8 @@ fn percent_decode(input: &str) -> String {
 
 fn unique_download_path(dir: &Path, filename: &str) -> PathBuf {
     let candidate = dir.join(filename);
-    if !candidate.exists() {
+    // A dangling symlink still occupies its name: create_new would otherwise retry it forever.
+    if candidate.symlink_metadata().is_err() {
         return candidate;
     }
     let stem = Path::new(filename)
@@ -363,7 +364,7 @@ fn unique_download_path(dir: &Path, filename: &str) -> PathBuf {
     let mut counter = 1;
     loop {
         let next = dir.join(format!("{stem} ({counter}){ext}"));
-        if !next.exists() {
+        if next.symlink_metadata().is_err() {
             return next;
         }
         counter += 1;
@@ -463,6 +464,39 @@ mod download_tests {
         assert_ne!(a.path, b.path);
         assert_eq!(std::fs::read(a.path).unwrap().len(), 32 * 8192);
         assert_eq!(std::fs::read(b.path).unwrap().len(), 32 * 8192);
+        // An explicitly supplied local pipeline manifest adds end-to-end media/save checks.
+        // Without it, all ordinary fixture/concurrency assertions above still execute.
+        if let Ok(manifest_path) = std::env::var("AUTOCLIP_NATIVE_PIPELINE_MANIFEST") {
+            let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+            let custom = Path::new(manifest["custom_directory"].as_str().unwrap());
+            let config = Path::new(manifest["preferences_file"].as_str().unwrap());
+            std::fs::create_dir_all(custom).unwrap();
+            if !manifest["restart"].as_bool().unwrap_or(false) {
+                crate::export_directory::save(config, Some(custom)).unwrap();
+            }
+            let restored = crate::export_directory::destination(config, || panic!("a persisted pipeline destination cannot use Downloads")).unwrap();
+            assert_eq!(restored, custom);
+            let mut results = Vec::new();
+            for row in manifest["artifacts"].as_array().unwrap() {
+                let response = local_client().unwrap().get(local_http_url(row["url"].as_str().unwrap()).unwrap()).send().await.unwrap();
+                assert!(response.status().is_success());
+                let name = filename_from_disposition(response.headers().get(reqwest::header::CONTENT_DISPOSITION).and_then(|value| value.to_str().ok()));
+                let saved = save_response(response, &restored, &name).await.unwrap();
+                let expected = std::fs::read(row["expected_file"].as_str().unwrap()).unwrap();
+                assert!(!expected.is_empty());
+                assert_eq!(Path::new(&saved.path).parent().unwrap(), custom);
+                assert_eq!(std::fs::read(&saved.path).unwrap(), expected);
+                results.push(serde_json::json!({"kind":row["kind"],"saved_path":saved.path,"expected_file":row["expected_file"],"bytes":saved.size_bytes}));
+            }
+            if let Some(previous) = manifest["previous_result"].as_str() {
+                let previous: serde_json::Value = serde_json::from_slice(&std::fs::read(previous).unwrap()).unwrap();
+                for old in previous.as_array().unwrap() {
+                    assert_eq!(std::fs::read(old["saved_path"].as_str().unwrap()).unwrap(), std::fs::read(old["expected_file"].as_str().unwrap()).unwrap());
+                    assert!(results.iter().all(|new| new["saved_path"] != old["saved_path"]));
+                }
+            }
+            std::fs::write(manifest["result_file"].as_str().unwrap(), serde_json::to_vec_pretty(&results).unwrap()).unwrap();
+        }
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -490,6 +524,27 @@ mod download_tests {
         std::fs::create_dir_all(&dir).unwrap();
         assert!(save_response(response_from_fixture(64 * 8192).await, &dir, "kit.zip").await.is_err());
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn dangling_symlink_names_do_not_block_or_redirect_a_download() {
+        use std::os::unix::fs::symlink;
+        let dir = std::env::temp_dir().join(format!("autoclip-dangling-export-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let missing = dir.join("missing-original.mp4");
+        symlink(&missing, dir.join("clip.mp4")).unwrap();
+        symlink(&missing, dir.join("clip (1).mp4")).unwrap();
+        let outcome = tokio::time::timeout(std::time::Duration::from_secs(2),
+            save_response(response_from_fixture(32 * 8192).await, &dir, "clip.mp4")).await;
+        let saved = outcome.expect("dangling symlinks must not cause an endless create-new retry").unwrap();
+        assert_eq!(Path::new(&saved.path).file_name().unwrap(), "clip (2).mp4");
+        assert_eq!(std::fs::read(&saved.path).unwrap(), vec![42; 32 * 8192]);
+        assert!(!missing.exists());
+        assert!(dir.join("clip.mp4").symlink_metadata().unwrap().file_type().is_symlink());
+        assert!(dir.join("clip (1).mp4").symlink_metadata().unwrap().file_type().is_symlink());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
