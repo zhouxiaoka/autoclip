@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import threading
 import uuid
 from dataclasses import dataclass
@@ -444,6 +445,8 @@ class SponsorPromoClient:
         self._fsync_dir(path.parent)
 
     def _fsync_dir(self, directory: Path) -> None:
+        if sys.platform == "win32" or os.name == "nt" or not hasattr(os, "O_DIRECTORY"):
+            return
         fd = os.open(directory, os.O_RDONLY)
         try:
             os.fsync(fd)

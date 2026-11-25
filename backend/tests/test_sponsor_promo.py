@@ -1098,3 +1098,32 @@ def test_v2_dynamic_provider_crud_and_hot_update(tmp_path, profiles):
     assert "providers" not in deleted
     assert deleted["choices"] == ["apimart", "other"]
     assert deleted["default"] == "apimart"
+
+
+def test_fsync_dir_skips_directory_open_on_windows(tmp_path, profiles, monkeypatch):
+    """Windows forbids os.open(directory, O_RDONLY); _commit must still persist cleanly."""
+    import backend.core.sponsor_promo_client as client_mod
+
+    private, public = _keys()
+    real_open = client_mod.os.open
+
+    def win_open(path, flags, *args, **kwargs):
+        if Path(path).is_dir():
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(client_mod.sys, "platform", "win32")
+    monkeypatch.setattr(client_mod.os, "open", win_open)
+    payload = _payload(
+        sequence=70,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider()],
+        sponsors=[
+            {"id": "cloudgw", "order": 1, "status": "healthy", "new_user_default": True, "register_url": "https://www.cloudgw.example/?from=AutoClip"},
+        ],
+    )
+    client = _client(tmp_path / "win", private, public, lambda url, timeout, max_bytes: _envelope(private, payload))
+    assert client.refresh_sync() == "ok"
+    shown = client.view(locale="zh")
+    assert shown["default"] == "cloudgw"
+    assert [p["id"] for p in shown["providers"]] == ["cloudgw"]

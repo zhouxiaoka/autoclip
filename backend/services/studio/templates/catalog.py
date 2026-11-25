@@ -149,6 +149,9 @@ def read_cached_catalog(*, user_root: Path | None = None) -> tuple[CatalogManife
         return None, {}
 
 
+_cache_write_lock = threading.Lock()
+
+
 def _write_cached_catalog(manifest: CatalogManifest, *, etag: str = '', user_root: Path | None = None) -> None:
     path = _cache_path(user_root)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,9 +160,15 @@ def _write_cached_catalog(manifest: CatalogManifest, *, etag: str = '', user_roo
         'fetched_at': time.time(),
         'manifest': manifest.model_dump(mode='json'),
     }
-    tmp = path.with_suffix('.tmp')
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    tmp.replace(path)
+    encoded = json.dumps(payload, ensure_ascii=False, indent=2)
+    with _cache_write_lock:
+        tmp = path.with_name(f'{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp')
+        try:
+            tmp.write_text(encoded, encoding='utf-8')
+            tmp.replace(path)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 def _http_get(url: str, *, headers: dict[str, str] | None = None, timeout: float = CATALOG_TIMEOUT_SEC, max_bytes: int = MAX_CATALOG_BYTES) -> tuple[int, bytes, dict[str, str]]:

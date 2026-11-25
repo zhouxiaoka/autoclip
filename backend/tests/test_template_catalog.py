@@ -193,3 +193,31 @@ def test_all_shipping_catalog_templates_pass_factory_verify():
         spec, info = template_factory.verify_folder(catalog_root / name)
         assert spec.id == name
         assert set(info['previews']) == {'poster.webp', 'preview.mp4', 'preview.webm'}
+
+
+def test_concurrent_catalog_cache_writes_do_not_race(tmp_path):
+    """Concurrent background sync + manual /templates/sync must not race on a shared .tmp file."""
+    import threading
+    from backend.services.studio.templates import catalog
+
+    manifest = catalog.CatalogManifest(version=1, templates=[])
+    errors: list[Exception] = []
+
+    def worker(idx: int) -> None:
+        try:
+            for step in range(25):
+                catalog._write_cached_catalog(manifest, etag=f'W/"{idx}-{step}"', user_root=tmp_path)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    loaded, meta = catalog.read_cached_catalog(user_root=tmp_path)
+    assert loaded is not None
+    assert meta['etag'].startswith('W/"')
+    assert list(tmp_path.glob('*.tmp')) == []
