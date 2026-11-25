@@ -194,7 +194,7 @@ def test_foreign_database_and_future_ledger_are_not_modified(client, source, mon
     monkeypatch.setattr(jobs, 'inspect_project', lambda *a, **k: pytest.fail('must not dispatch'))
     assert upload(client, source).status_code == 503 and path.read_bytes() == before
     path.unlink()
-    conn = receipts.connect(path); conn.execute('PRAGMA user_version=2'); conn.close()
+    conn = receipts.connect(path); conn.execute('PRAGMA user_version=3'); conn.close()
     before = path.read_bytes()
     assert upload(client, source).status_code == 503 and path.read_bytes() == before
 
@@ -214,3 +214,58 @@ def test_duplicate_receipt_fields_are_invalid_not_last_value_wins(client, source
 def test_actual_readiness_advertises_the_keyed_import_protocol(client,monkeypatch):
     monkeypatch.setattr(readiness,'report',lambda:{'checks':{},'ready':False})
     assert client.get('/studio/readiness').json()['batch_import_receipts'] is True
+
+
+@pytest.mark.parametrize('damage',['truncate','drop_table'])
+def test_existing_ledger_damage_refuses_reinitialization_and_replay(client,source,monkeypatch,damage):
+    from backend.services.studio import import_receipts as receipts
+    calls=[]
+    monkeypatch.setattr(jobs,'inspect_project',lambda pid,*a,**k:calls.append(pid) or 'run-one')
+    first=upload(client,source)
+    assert first.status_code==200 and upload(client,source).json()==first.json()
+    if damage=='truncate': receipts.ledger_path().write_bytes(b'')
+    else:
+        conn=receipts.connect(receipts.ledger_path());conn.execute('DROP TABLE import_receipts');conn.commit();conn.close()
+    response=upload(client,source)
+    assert response.status_code==503 and response.json()['detail']['import_state']=='unknown'
+    assert len(calls)==1
+    with database.session_scope() as db:
+        assert db.query(Project).filter(Project.id!='p1').count()==1
+
+
+@pytest.mark.parametrize('damage',['delete_rows','delete_file','delete_file_and_marker'])
+def test_lost_receipt_records_cannot_repeat_a_known_project(client,source,monkeypatch,damage):
+    from backend.services.studio import import_receipts as receipts
+    calls=[]
+    monkeypatch.setattr(jobs,'inspect_project',lambda pid,*a,**k:calls.append(pid) or 'run-one')
+    first=upload(client,source);assert first.status_code==200
+    assert first.json()['project_id']==receipts.operation_project_id('operation-one')
+    if damage=='delete_rows':
+        conn=receipts.connect(receipts.ledger_path());conn.execute('DELETE FROM import_receipts');conn.commit();conn.close()
+    else:
+        receipts.ledger_path().unlink()
+        if damage=='delete_file_and_marker':receipts.initialized_marker(receipts.ledger_path()).unlink()
+    response=upload(client,source)
+    assert response.status_code==503 and response.json()['detail']['import_state']=='unknown'
+    assert len(calls)==1
+    if damage!='delete_rows':assert not receipts.ledger_path().exists()
+    with database.session_scope() as db:assert db.query(Project).filter(Project.id!='p1').count()==1
+
+
+def test_unreleased_v1_ledger_is_preserved_not_automatically_migrated(client,source,monkeypatch):
+    from backend.services.studio import import_receipts as receipts
+    conn=receipts.connect(receipts.ledger_path());conn.execute('PRAGMA user_version=1');conn.close()
+    before=receipts.ledger_path().read_bytes()
+    monkeypatch.setattr(jobs,'inspect_project',lambda *a,**k:pytest.fail('must not dispatch'))
+    assert upload(client,source).status_code==503 and receipts.ledger_path().read_bytes()==before
+
+
+def test_source_directory_still_blocks_replay_when_project_and_receipt_rows_are_missing(client,source,monkeypatch):
+    from backend.services.studio import import_receipts as receipts
+    calls=[]
+    monkeypatch.setattr(jobs,'inspect_project',lambda pid,*a,**k:calls.append(pid) or 'run-one')
+    first=upload(client,source).json()
+    conn=receipts.connect(receipts.ledger_path());conn.execute('DELETE FROM import_receipts');conn.commit();conn.close()
+    with database.session_scope() as db:
+        db.delete(db.get(Project,first['project_id']));db.commit()
+    assert upload(client,source).status_code==503 and len(calls)==1

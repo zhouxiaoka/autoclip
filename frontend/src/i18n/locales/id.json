@@ -2510,5 +2510,6 @@
   "batchImport.production.failed": "Production failed",
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
-  "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts."
+  "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
 }

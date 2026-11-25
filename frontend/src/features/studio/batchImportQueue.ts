@@ -14,6 +14,22 @@ export function isBatchProjectId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
 }
 
+/** Both APIs are secure random sources; randomUUID alone is absent in some HTTP/WebView contexts. */
+export function hasImportOperationRandom(): boolean {
+  return typeof globalThis.crypto?.randomUUID === 'function' || typeof globalThis.crypto?.getRandomValues === 'function'
+}
+
+export function importOperationId(): string {
+  const random = globalThis.crypto
+  if (typeof random?.randomUUID === 'function') return random.randomUUID()
+  if (typeof random?.getRandomValues !== 'function') throw new Error('secure import identifier unavailable')
+  const bytes = random.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`
+}
+
 /** Window-only queue. A lost initial POST response is not an idempotent retry contract. */
 export class BatchImportQueue {
   items: BatchItem[] = []
@@ -86,6 +102,6 @@ export function batchImportBody(item: BatchItem, settings: BatchSettings, flowId
   if (item.window === 'first') { body.append('source_window_start', '0'); body.append('source_window_end', '1800') }
   body.append('features', JSON.stringify(features)); body.append('flow_id', flowId)
   // Independent of analytics IDs; browser-level retransmission reuses this same body.
-  body.append('import_operation_id', globalThis.crypto.randomUUID())
+  body.append('import_operation_id', importOperationId())
   return body
 }

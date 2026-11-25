@@ -7,7 +7,7 @@ import { featureSnapshot, flagEnabled } from '../../analytics/flags'
 import { telemetryId } from '../../analytics/workflow'
 import { studioApi } from './api'
 import { submissionBlock } from './importReadiness'
-import { batchImportBody, BatchImportQueue, isBatchProjectId, type BatchItem } from './batchImportQueue'
+import { batchImportBody, BatchImportQueue, hasImportOperationRandom, isBatchProjectId, type BatchItem } from './batchImportQueue'
 import PlatformPicker from './PlatformPicker'
 import ImportPreferences from './ImportPreferences'
 import { templateImportFields } from './TemplatePicker'
@@ -105,6 +105,7 @@ export default function BatchVideoImport({ onClose, onImported }: { onClose: () 
       const reason = submissionBlock(report, !!item.subtitle, true, { source: 'file' })
       if (reason) return { status: 'blocked', issue: `batchImport.${reason}` }
       if (!queue.maySubmit()) return { status: 'blocked', issue: 'batchImport.paused' }
+      if (!hasImportOperationRandom()) return { status: 'blocked', issue: 'batchImport.secureRandomUnavailable' }
       const template = templateImportFields(flagEnabled('pkg_templates_v1'), snapshot.options.html_template, undefined).html_template
       const body = batchImportBody(item, snapshot, telemetryId(), featureSnapshot(), template)
       try {

@@ -2510,5 +2510,6 @@
   "batchImport.production.failed": "制作失败",
   "batchImport.status.failed": "上传请求失败",
   "batchImport.failedHint": "服务器返回了上传错误。请先核对项目列表；此项不会自动重发，其他等待项可单独继续。",
-  "batchImport.backendUpgradeRequired": "请先更新后端再批量导入：当前服务未确认支持安全的导入回执。"
+  "batchImport.backendUpgradeRequired": "请先更新后端再批量导入：当前服务未确认支持安全的导入回执。",
+  "batchImport.secureRandomUnavailable": "当前浏览器无法安全生成导入标识，请使用更新的桌面应用或浏览器。"
 }

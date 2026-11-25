@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import uuid
+from sqlalchemy.exc import IntegrityError
+from backend.models.project import Project
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -18,6 +21,8 @@ from backend.services.studio import store
 
 
 _ID = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
+_LEDGER_VERSION = 2  # v2 binds new operations to project primary keys; unreleased v1 is not auto-migrated.
+_INITIALIZED = b'STUDIO_IMPORT_RECEIPTS_V2\n'
 
 
 def uncertain(status=409):
@@ -29,24 +34,75 @@ def ledger_path() -> Path:
     return store.get_projects_directory().parent / 'studio-import-receipts.sqlite3'
 
 
+def operation_project_id(key: str) -> str:
+    """A project PK is the last side-effect guard even if receipt rows are lost."""
+    digest = hashlib.sha256(('studio-import-operation-v1:' + key).encode()).digest()
+    return str(uuid.UUID(bytes=digest[:16], version=4))
+
+
+def initialized_marker(path: Path) -> Path:
+    return path.with_suffix('.initialized')
+
+
+def ensure_initialized_marker(path: Path):
+    marker = initialized_marker(path)
+    try:
+        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    except FileExistsError:
+        if marker.is_symlink() or marker.read_bytes() != _INITIALIZED:
+            raise sqlite3.DatabaseError('receipt initialization marker invalid')
+        return
+    try:
+        os.write(fd, _INITIALIZED)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    if os.name != 'nt':
+        parent = os.open(marker.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+
+
 def connect(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_symlink():
         raise OSError('receipt ledger must not be a symlink')
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o600)
-    os.close(fd)
+    if not path.exists() and os.path.lexists(initialized_marker(path)):
+        raise sqlite3.DatabaseError('initialized receipt ledger missing')
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        created = True
+    except FileExistsError:
+        fd = os.open(path, os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0))
+        created = False
+    try:
+        if not created and os.fstat(fd).st_size == 0:
+            raise sqlite3.DatabaseError('existing receipt ledger is empty')
+    finally:
+        os.close(fd)
     conn = sqlite3.connect(path, timeout=5)
     try:
         conn.execute('PRAGMA synchronous=FULL')
         marker = conn.execute('PRAGMA application_id').fetchone()[0]
         version = conn.execute('PRAGMA user_version').fetchone()[0]
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if marker not in (0, 1094928722) or version not in (0, 1) or tables - {'import_receipts'}:
-            raise sqlite3.DatabaseError('receipt ledger identity mismatch')
-        conn.execute('PRAGMA application_id=1094928722')
-        conn.execute('PRAGMA user_version=1')
-        conn.execute('CREATE TABLE IF NOT EXISTS import_receipts (operation TEXT PRIMARY KEY, payload TEXT NOT NULL, receipt TEXT)')
-        conn.commit()
+        if created:
+            if marker != 0 or version != 0 or tables:
+                raise sqlite3.DatabaseError('new receipt ledger identity mismatch')
+            conn.execute('BEGIN IMMEDIATE')
+            conn.execute('PRAGMA application_id=1094928722')
+            conn.execute(f'PRAGMA user_version={_LEDGER_VERSION}')
+            conn.execute('CREATE TABLE import_receipts (operation TEXT PRIMARY KEY, payload TEXT NOT NULL, receipt TEXT)')
+            conn.commit()
+        else:
+            if marker != 1094928722 or version != _LEDGER_VERSION or tables != {'import_receipts'}:
+                raise sqlite3.DatabaseError('existing receipt ledger structure invalid')
+            columns = [(row[1], row[2], row[3], row[5]) for row in conn.execute('PRAGMA table_info(import_receipts)')]
+            if columns != [('operation', 'TEXT', 0, 1), ('payload', 'TEXT', 1, 0), ('receipt', 'TEXT', 0, 0)]:
+                raise sqlite3.DatabaseError('existing receipt ledger columns invalid')
+        ensure_initialized_marker(path)
     except BaseException:
         conn.close()
         raise
@@ -149,14 +205,29 @@ def idempotent_import(fn):
             operation = hashlib.sha256(key.encode()).hexdigest()
             payload = await fingerprint(kwargs)
             path = ledger_path()
+            project_id = operation_project_id(key)
+            db = kwargs['db']
+            if not path.exists():
+                exists = db.get(Project, project_id) is not None
+                db.rollback()  # A read-only probe must not hold a SQLite snapshot during creation.
+                if exists or store.directory(project_id).exists():
+                    raise uncertain(503)
             try:
                 receipt = await run_in_threadpool(claim, path, operation, payload)
             except (OSError, sqlite3.Error):
                 raise uncertain(503) from None
             if receipt is not None:
                 return receipt
+            exists = db.get(Project, project_id) is not None
+            db.rollback()
+            if exists or store.directory(project_id).exists():
+                raise uncertain(503)  # Missing receipt rows are not permission to repeat a known project.
             # Do not release this reservation on exceptions: project/dispatch may already exist.
-            receipt = await fn(*args, **kwargs)
+            try:
+                receipt = await fn(*args, **kwargs)
+            except IntegrityError:
+                # Another worker/data-directory may have won the project's unique PK.
+                raise uncertain(503) from None
             try:
                 await run_in_threadpool(complete, path, operation, payload, receipt)
             except (OSError, sqlite3.Error):

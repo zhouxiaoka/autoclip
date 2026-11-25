@@ -50,9 +50,12 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         super().__init__(repository)
         self.db = db
     
-    def create_project(self, project_data: ProjectCreate) -> Project:
-        """Create a new project with business logic."""
-        project = self.create(**self.project_fields(project_data))
+    def create_project(self, project_data: ProjectCreate, *, project_id: Optional[str] = None) -> Project:
+        """Create a project; a keyed import may bind its existing unique primary key."""
+        fields = self.project_fields(project_data)
+        if project_id is not None:
+            fields['id'] = project_id
+        project = self.create(**fields)
         _remember_input_origin(project)
         return project
 

@@ -9,7 +9,7 @@ async function fixture(options = {}) {
   const { Window } = await import('happy-dom'), window = new Window({ url: 'http://localhost/' })
   const originals = {}, calls = [], routes = [], events = []
   let report = ok(), requested = 0
-  const globals = { crypto: require('node:crypto').webcrypto, window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, localStorage: window.localStorage, File: window.File, FormData: window.FormData, URL: window.URL, IS_REACT_ACT_ENVIRONMENT: true }
+  const globals = { crypto: options.crypto || require('node:crypto').webcrypto, window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, localStorage: window.localStorage, File: window.File, FormData: window.FormData, URL: window.URL, IS_REACT_ACT_ENVIRONMENT: true }
   for (const [key, value] of Object.entries(globals)) { originals[key] = Object.getOwnPropertyDescriptor(globalThis, key); Object.defineProperty(globalThis, key, { value, writable: true, configurable: true }) }
   const create = window.document.createElement.bind(window.document)
   window.URL.createObjectURL = () => 'blob:isolated'; window.URL.revokeObjectURL = () => {}
@@ -220,4 +220,22 @@ test('old or malformed backend capabilities block before any upload', async () =
       assert.equal(view.calls.length,0);assert.equal(view.queue.items[0].status,'blocked');assert.equal(view.queue.items[0].issue,'batchImport.backendUpgradeRequired')
     } finally {await view.close()}
   }
+})
+
+
+test('secure getRandomValues supports environments without randomUUID', async () => {
+  const native=require('node:crypto').webcrypto
+  const view=await fixture({crypto:{getRandomValues:native.getRandomValues.bind(native)}})
+  try {await view.pick([view.file('a.mp4'),view.file('b.mp4')]);await consent(view);await click(button(view.host,'batchImport.start'))
+    assert.equal(view.calls.length,2);assert.ok(view.queue.items.every(item=>item.status==='submitted'))
+    assert.notEqual(view.calls[0].get('import_operation_id'),view.calls[1].get('import_operation_id'))
+  } finally {await view.close()}
+})
+
+
+test('missing all secure random APIs blocks before POST rather than becoming unknown', async () => {
+  const view=await fixture({crypto:{}})
+  try {await view.pick([view.file('a.mp4'),view.file('b.mp4')]);await consent(view);await click(button(view.host,'batchImport.start'))
+    assert.equal(view.calls.length,0);assert.equal(view.queue.items[0].status,'blocked');assert.equal(view.queue.items[0].issue,'batchImport.secureRandomUnavailable')
+  } finally {await view.close()}
 })

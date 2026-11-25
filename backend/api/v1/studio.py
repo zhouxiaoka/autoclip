@@ -400,7 +400,11 @@ async def import_visual(
                     await video.close()
                 return {'project_id': str(project.id), 'analysis_run_id': None}
         else:
-            project = ProjectService(db).create_project(data)
+            if isinstance(import_operation_id, str):
+                from backend.services.studio.import_receipts import operation_project_id
+                project = ProjectService(db).create_project(data, project_id=operation_project_id(import_operation_id))
+            else:
+                project = ProjectService(db).create_project(data)
     except BaseException:
         if staged is not None:
             staged.unlink(missing_ok=True)
