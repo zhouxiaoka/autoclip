@@ -124,7 +124,10 @@ def download_with_recovery(url: str, options: dict):
                 retried_subtitles = True
                 opts.update(writesubtitles=False, writeautomaticsub=False)
                 continue
-            if youtube and not retried_format and any(code in text for code in ('http error 403', 'http error 500', 'requested format is not available')):
+            if youtube and not retried_format and any(code in text for code in (
+                'http error 403', 'http error 500', 'http error 502', 'http error 503',
+                'requested format is not available', 'the downloaded file is empty',
+            )):
                 retried_format = True
                 opts['format'] = 'bestvideo[height<=1080][protocol*=m3u8]+bestaudio[protocol*=m3u8]/best[height<=1080][protocol*=m3u8]/best[ext=mp4]/best'
                 continue

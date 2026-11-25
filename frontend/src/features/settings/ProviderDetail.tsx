@@ -21,6 +21,7 @@ import { providerIcon } from './providerIcons'
 import ProviderQualityMarks from './providerQualityMarks'
 import { enabledModelIds } from './modelVisibility'
 import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
+import { rechargeTarget } from '../studio/failureAction'
 
 const CAP_KEY: Record<string, string> = {
   language: 'settings.providers.filter.language',
@@ -249,9 +250,19 @@ export default function ProviderDetail({
                     )}
                   </div>
                 </details>
-                {status === 'failed' && (
-                  <p className="ac-note ac-note--error" role="alert">{validationCopy(connection.validation_error_type)}</p>
-                )}
+                {status === 'failed' && (() => {
+                  const quotaTarget = connection.validation_error_type === 'insufficient_quota' ? rechargeTarget(preset.id) : null
+                  return (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      <p className="ac-note ac-note--error" role="alert" style={{ margin: 0 }}>{validationCopy(connection.validation_error_type)}</p>
+                      {quotaTarget && (
+                        <Btn size="sm" className="ac-btn--pill" data-testid="provider-quota-recharge" onClick={() => openExternalLink(quotaTarget.url)}>
+                          {t('去充值')} <Icon.External size={12} />
+                        </Btn>
+                      )}
+                    </div>
+                  )
+                })()}
                 {status === 'transient' && (
                   <p className="ac-note" role="status">{validationCopy(connection.validation_error_type)}</p>
                 )}

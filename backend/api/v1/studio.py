@@ -323,12 +323,13 @@ async def import_visual(
             raise
         return {'project_id': pid, 'analysis_run_id': run_id}
     if url:
+        url = url.strip()
         parsed = urlparse(url)
         host = (parsed.hostname or '').lower()
         if parsed.scheme != 'https' or parsed.username or parsed.password or not any(host == d or host.endswith('.' + d) for d in ('youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv')):
             raise HTTPException(422, '仅支持 HTTPS 的 B 站或 YouTube 视频链接')
     ext = Path(video.filename or '').suffix.lower() if video else '.mp4'
-    if ext not in ('.mp4', '.mov', '.mkv', '.webm', '.avi'):
+    if ext not in ('.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.flv', '.ts', '.mts', '.m2ts', '.mpg', '.mpeg', '.wmv'):
         raise HTTPException(422, '不支持的视频格式')
     first_chunk = await video.read(1024 * 1024) if video else None
     if video and not first_chunk:

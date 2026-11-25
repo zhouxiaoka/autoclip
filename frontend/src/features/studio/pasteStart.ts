@@ -3,7 +3,7 @@
 export const UNDO_MS = 3000
 export type StartTrigger = 'paste' | 'drop' | 'button'
 
-const VIDEO = /\.(mp4|mov|mkv|webm|avi)$/i
+const VIDEO = /\.(mp4|mov|mkv|webm|avi|m4v|flv|ts|mts|m2ts|mpg|mpeg|wmv)$/i
 
 export function importUrlKind(text: string): 'youtube' | 'bilibili' | null {
   const value = text.trim()
@@ -19,17 +19,24 @@ export function importUrlKind(text: string): 'youtube' | 'bilibili' | null {
 }
 
 const URL_TOKEN = /https?:\/\/[^\s"'<>`]+/gi
+const BARE_IMPORT_URL = /(?:^|[\s"'<>`])((?:(?:www|m|music)\.)?(?:youtube\.com|youtu\.be|bilibili\.com|b23\.tv)\/[^\s"'<>`]+)/gi
 const TRAILING_PUNCT = /[.,;:!?)\]】》」"'、，。！？]+$/
 
-/** Extract a single supported YouTube/Bilibili URL from plain links or share text (e.g. Bilibili `【标题】 https://b23.tv/...`). */
+/** Extract a single supported YouTube/Bilibili URL from plain links, bare domain links, or share text (e.g. Bilibili `【标题】 https://b23.tv/...`). */
 export function extractImportUrl(text: string): string | null {
   const raw = (text || '').trim()
   if (!raw) return null
   const matches = raw.match(URL_TOKEN)
-  if (!matches || matches.length !== 1) return null
-  const candidate = matches[0].replace(TRAILING_PUNCT, '')
-  const upgraded = candidate.replace(/^http:\/\//i, 'https://')
-  return importUrlKind(upgraded) ? upgraded : null
+  if (matches) {
+    if (matches.length !== 1) return null
+    const candidate = matches[0].replace(TRAILING_PUNCT, '')
+    const upgraded = candidate.replace(/^http:\/\//i, 'https://')
+    return importUrlKind(upgraded) ? upgraded : null
+  }
+  const bare = [...raw.matchAll(BARE_IMPORT_URL)].map(m => m[1])
+  if (bare.length !== 1) return null
+  const candidate = `https://${bare[0].replace(TRAILING_PUNCT, '')}`
+  return importUrlKind(candidate) ? candidate : null
 }
 
 export function isVideoFile(file: { name?: string; type?: string } | null | undefined): boolean {

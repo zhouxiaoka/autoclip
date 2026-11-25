@@ -935,12 +935,12 @@ def _content_drafts(project_id, plan, video, platforms=()):
     prefs = Preferences.model_validate(plan['preferences'])
     if route == 'subtitle' or prefs.goal == 'content':
         from backend.services.platform_strategy import long_form_minimum
+        from backend.services.studio.planning import VISUAL_MAX_SOURCE_SEC
         min_sec, label = long_form_minimum(platforms)
         # Pass the minimum only when a long platform asked for it. A two-argument mock
         # still matches every short-platform import.
         if not min_sec and prefs.goal == 'highlight' and (plan.get('local_evidence') or {}).get('commentary'):
             from backend.services.studio.game_highlights import subtitle_drafts
-            from backend.services.studio.planning import VISUAL_MAX_SOURCE_SEC
             selection = []
             can_frame_review = (
                 (plan.get('analysis_preferences') or {}).get('analysis_mode') == 'auto'
@@ -951,20 +951,38 @@ def _content_drafts(project_id, plan, video, platforms=()):
                                      auto_frame_review=can_frame_review,
                                      selection_log=selection)
             return (drafts, [], {'selection': selection}) if selection else drafts
-        clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
-        source_duration = float(intelligence._probe(video).get('duration') or 0)
-        drafts = _drafts_from_content_clips(
-            project_id,
-            clips,
-            prefs,
-            source_duration,
-            window=(plan.get('overrides') or {}).get('source_window'),
-            origin='auto-content',
-            include_score=True,
-        )
-        if not drafts:
-            raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
-        return drafts
+        try:
+            clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
+        except ContentPipelineFailure as error:
+            source_duration = float(intelligence._probe(video).get('duration') or 0)
+            analysis_mode = (plan.get('analysis_preferences') or {}).get('analysis_mode') or 'auto'
+            requested_goal = (plan.get('overrides') or {}).get('goal') or 'auto'
+            can_visual_fallback = (
+                error.code == 'transcription_empty'
+                and analysis_mode != 'subtitle'
+                and requested_goal != 'content'
+                and 0 < source_duration <= VISUAL_MAX_SOURCE_SEC
+                and intelligence.source_frame_analysis_allowed()
+            )
+            if not can_visual_fallback:
+                raise
+            logger.info('Transcription empty on %s; falling back to visual highlight analysis', project_id)
+            route = 'visual'
+            prefs = prefs.model_copy(update={'goal': 'highlight'})
+        else:
+            source_duration = float(intelligence._probe(video).get('duration') or 0)
+            drafts = _drafts_from_content_clips(
+                project_id,
+                clips,
+                prefs,
+                source_duration,
+                window=(plan.get('overrides') or {}).get('source_window'),
+                origin='auto-content',
+                include_score=True,
+            )
+            if not drafts:
+                raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
+            return drafts
     if route != 'visual':
         raise UserFacingError('没有可用的自动分析路径，请检查模型设置后重试')
     if not intelligence.ready():

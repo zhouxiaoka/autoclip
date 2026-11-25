@@ -14,6 +14,7 @@ import {
 import { offerPastedKey } from './keyGuideWatch'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 import { NEUTRAL_PROVIDER_COPY, isTrustedSponsorId, promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
+import { rechargeTarget } from '../studio/failureAction'
 
 const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
 const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
@@ -126,7 +127,16 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
     </Row>}
     {showHint && <p className="ac-note">{keyHintCopy(liveHint)}</p>}
     {shownError && <p className={transient ? 'ac-note' : 'ac-note ac-note--error'} role={transient ? 'status' : 'alert'}>{validationCopy(shownError)}</p>}
-    {failed && keyLink && KEY_ERRORS.has(errorType) && <p className="ac-note">
+    {failed && errorType === 'insufficient_quota' && placement === 'home_setup' && (() => {
+      const target = rechargeTarget(key)
+      if (!target) return null
+      return (
+        <p className="ac-note">
+          <a className="ac-link" data-testid="provider-fields-quota-recharge" href={target.url} onClick={e => { e.preventDefault(); openExternalLink(target.url) }}>{t('去充值')} ↗</a>
+        </p>
+      )
+    })()}
+    {failed && keyLink && KEY_ERRORS.has(errorType) && errorType !== 'insufficient_quota' && <p className="ac-note">
       <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a>
     </p>}
   </>

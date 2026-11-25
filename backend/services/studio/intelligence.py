@@ -48,7 +48,10 @@ def source_frame_analysis_allowed():
     except ValueError:
         return False
 
-_THINK_BLOCK_RE = re.compile(r'<think\b[^>]*>[\s\S]*?</think>', re.IGNORECASE)
+_THINK_BLOCK_RE = re.compile(
+    r'<(?:think|thought|thinking)\b[^>]*>[\s\S]*?</(?:think|thought|thinking)>',
+    re.IGNORECASE,
+)
 _FENCED_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]*?)```', re.IGNORECASE)
 
 

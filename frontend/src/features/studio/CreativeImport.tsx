@@ -397,7 +397,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     const nextUrl = next?.url ?? url
     const nextSource = next?.file ? 'file' : next?.url ? 'link' : effectiveSource
     if (nextSource === 'file' ? !nextFile && !activeRemote : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
-    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink || (previewUrlRef.current === nextUrl.trim() && preview?.preview_route === 'platform_subtitle') })
+    const previewNeedsLocalAsr = previewUrlRef.current === nextUrl.trim() && preview?.preview_route === 'local_transcription'
+    const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: !previewNeedsLocalAsr && (allowLink || (previewUrlRef.current === nextUrl.trim() && preview?.preview_route === 'platform_subtitle')) })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
     const check = readiness?.checks?.transcription
@@ -522,16 +523,16 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       preview = await runInspect(normalizedUrl, 'blur')
       if (starting.current) return
       if (!preview && !inspectTimedOut.current) return
-      if (preview?.preview_route === 'local_transcription'
-        && readiness?.checks?.transcription?.ok === false
-        && !subtitle
-        && !readiness?.checks?.transcription?.skippable
-        && isRecoveryCode(readiness?.checks?.transcription?.code)) {
-        const check = readiness?.checks?.transcription
-        resumeSubmit.current = true
-        recover.open(check!.code, check!.model)
-        return
-      }
+    }
+    if (source === 'link' && preview?.preview_route === 'local_transcription'
+      && readiness?.checks?.transcription?.ok === false
+      && !subtitle
+      && !readiness?.checks?.transcription?.skippable
+      && isRecoveryCode(readiness?.checks?.transcription?.code)) {
+      const check = readiness?.checks?.transcription
+      resumeSubmit.current = true
+      recover.open(check!.code, check!.model)
+      return
     }
     if (platforms.includes('youtube_long') && !confirmed) {
       if (!readyToStart(trigger, undefined, fresh ?? readiness, preview)) return
@@ -596,7 +597,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
         body.append('source_window_end', String(windowChoice.end))
       }
       if (subtitle) body.append('subtitle', subtitle)
-      body.append('name', activeRemote ? activeRemote.title : file && effectiveSource === 'file' ? file.name.replace(/\.[^.]+$/, '') : t("智能剪辑"))
+      body.append('name', (activeRemote ? activeRemote.title : file && effectiveSource === 'file' ? file.name.replace(/\.[^.]+$/, '') : t("智能剪辑")).slice(0, 180))
       if (effectiveSource === 'file' && file) body.append('video', file)
       else if (!activeRemote) { body.append('url', normalizedUrl || url.trim()); if (browser) body.append('browser', browser) }
       body.append('flow_id', flowId)
@@ -716,7 +717,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           <p className="ac-dropzone-hint">{t('粘贴链接，或拖入一个视频文件。')}</p>
           <label className="studio-field ac-dropzone-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={event => { setPending(null); clearPreview(); setUrl(event.target.value); if (event.target.value) { setFile(null); setSource('link') } }} onBlur={event => { const value = event.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} disabled={busy}/></label>
           {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" disabled={busy} onClick={() => setFile(null)}>{t('移除')}</button></p>}
-          <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
+          <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi,.m4v,.flv,.ts,.mts,.m2ts,.mpg,.mpeg,.wmv" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
         </div>}
         <div style={{ marginTop: 10 }}>{replayPicker}</div>
       </> : <>
@@ -731,7 +732,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           : source === 'file' ? (
             <div className="studio-file">
               <input type="file" hidden ref={videoInput} aria-label={t('视频文件')}
-                accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy}
+                accept="video/mp4,video/webm,video/quicktime,.mkv,.avi,.m4v,.flv,.ts,.mts,.m2ts,.mpg,.mpeg,.wmv" disabled={busy}
                 onChange={event => {
                   const picked = event.currentTarget.files?.[0]
                   event.currentTarget.value = ''

@@ -270,7 +270,7 @@ def project_inputs(project_id: str, *, entry: Entry = 'content', goal: Optional[
     """Inputs of a project already on disk (raw/input.* + raw/input.srt), or None when it has no local video."""
     from backend.core.path_utils import get_project_raw_directory
     raw = get_project_raw_directory(project_id)
-    video = next((raw / f'input{ext}' for ext in ('.mp4', '.mov', '.mkv', '.webm', '.avi')
+    video = next((raw / f'input{ext}' for ext in ('.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.flv', '.ts', '.mts', '.m2ts', '.mpg', '.mpeg', '.wmv')
                   if (raw / f'input{ext}').is_file()), None)
     if video is None:
         return None

@@ -11,6 +11,7 @@ export function resolveLanguage(preference: string | null, browserLanguages: rea
       return 'zh-TW'
     }
     const base = normalized.split('-')[0]
+    if (base === 'in') return 'id'
     if (supportedLanguages.includes(base as Language)) return base as Language
   }
   return 'en'
