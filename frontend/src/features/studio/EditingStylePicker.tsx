@@ -620,11 +620,29 @@ export default function EditingStylePicker({
         const name = resolveLocalizedCopy(item.name, locale, id)
         const desc = resolveLocalizedCopy(item.desc, locale, '')
         const poster = posterForTemplate(id, item)
+        const remoteVideo = item.preview_mp4_url || item.preview_webm_url || ''
         const busy = installingId === id
-        return <div key={id} data-style={id} className="studio-style-card studio-style-card--remote">
+        return <div
+          key={id}
+          data-style={id}
+          className="studio-style-card studio-style-card--remote"
+          onMouseEnter={e => {
+            if (reducedMotion || !remoteVideo) return
+            const v = e.currentTarget.querySelector('video')
+            if (v) { v.currentTime = 0; v.classList.add('is-playing'); void v.play().catch(() => {}) }
+          }}
+          onMouseLeave={e => {
+            const v = e.currentTarget.querySelector('video')
+            if (v) { v.pause(); v.classList.remove('is-playing') }
+          }}
+        >
           <div className="studio-style-thumb">
             <img src={poster} alt="" />
+            {remoteVideo ? (
+              <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
+            ) : null}
             <span className="studio-style-badge">{t('editing_style.remote_badge')}</span>
+            {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
             <button type="button" className="studio-style-preview-btn" disabled={disabled || Boolean(installingId)} onClick={() => void onInstallRemote(id)}>
               {busy ? t('editing_style.installing') : t('editing_style.install')}
             </button>
@@ -690,11 +708,28 @@ export default function EditingStylePicker({
           const name = resolveLocalizedCopy(item.name, locale, id)
           const desc = resolveLocalizedCopy(item.desc, locale, '')
           const poster = posterForTemplate(id, item)
+          const remoteVideo = item.preview_mp4_url || item.preview_webm_url || ''
           const busy = installingId === id
-          return <div key={id} className="studio-style-card studio-style-card--remote">
+          return <div
+            key={id}
+            className="studio-style-card studio-style-card--remote"
+            onMouseEnter={e => {
+              if (reducedMotion || !remoteVideo) return
+              const v = e.currentTarget.querySelector('video')
+              if (v) { v.currentTime = 0; v.classList.add('is-playing'); void v.play().catch(() => {}) }
+            }}
+            onMouseLeave={e => {
+              const v = e.currentTarget.querySelector('video')
+              if (v) { v.pause(); v.classList.remove('is-playing') }
+            }}
+          >
             <div className="studio-style-thumb">
               <img src={poster} alt="" />
+              {remoteVideo ? (
+                <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
+              ) : null}
               <span className="studio-style-badge">{t('editing_style.remote_badge')}</span>
+              {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
               <button type="button" className="studio-style-preview-btn" disabled={Boolean(installingId)} onClick={() => void onInstallRemote(id).then(() => setGalleryOpen(false))}>
                 {busy ? t('editing_style.installing') : t('editing_style.install')}
               </button>
