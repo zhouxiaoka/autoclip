@@ -3,6 +3,9 @@ import { t } from '../i18n'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Btn, Dialog, ProgressLine } from '../ui'
 import { isDesktopMode } from '../utils/desktopMode'
+import { useProjectStore } from '../store/useProjectStore'
+import { getKeepAwakeController } from '../features/studio/keepAwake'
+import { runningCount } from '../features/studio/quitGuard'
 import {
   type AppUpdate,
   checkForUpdate,
@@ -356,7 +359,9 @@ export const UpdateReminder: React.FC = () => {
 export const UpdateToast: React.FC = () => {
   useTranslation()
   const update = useAppUpdate()
+  const projects = useProjectStore(state => state.projects)
   const { toastVisible, phase, snooze } = update
+  const activeRuns = runningCount(projects, getKeepAwakeController().getSources())
   useEffect(() => {
     if (!toastVisible) return
     const onKey = (event: KeyboardEvent) => {
@@ -382,6 +387,11 @@ export const UpdateToast: React.FC = () => {
     <div className="ac-update-toast" role="status" aria-live="polite" data-phase={update.phase}>
       <h3>{title}</h3>
       <p>{description}</p>
+      {update.phase === 'ready' && activeRuns > 0 && (
+        <p className="ac-note ac-note--error" data-testid="update-active-runs-warning">
+          {t('当前有项目正在制作，建议完成后再重启更新。')}
+        </p>
+      )}
       {update.phase !== 'failed' && <UpdateNotesDisclosure rawNotes={update.rawNotes} fallbackNotes={update.notes} />}
       {update.phase === 'downloading' && (
         <div className="ac-update-progress">
@@ -394,10 +404,10 @@ export const UpdateToast: React.FC = () => {
           <Btn size="sm" variant="text" onClick={update.disableReminders}>{t('不再提醒')}</Btn>
         )}
         {update.phase !== 'restarting' && (
-          <Btn size="sm" onClick={update.snooze}>{t('暂不')}</Btn>
+          <Btn size="sm" variant={update.phase === 'ready' && activeRuns > 0 ? 'cta' : undefined} onClick={update.snooze}>{t('暂不')}</Btn>
         )}
         {update.phase === 'ready' && (
-          <Btn size="sm" variant="cta" onClick={() => void update.restart()}>{t('更新并重启')}</Btn>
+          <Btn size="sm" variant={activeRuns > 0 ? undefined : 'cta'} onClick={() => void update.restart()}>{t('更新并重启')}</Btn>
         )}
         {update.phase === 'failed' && (
           <Btn size="sm" variant="cta" onClick={() => void update.retry()}>{t('重试')}</Btn>

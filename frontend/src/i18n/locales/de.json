@@ -2461,5 +2461,6 @@
   "editing_style.gallery_title": "Schnittstil wählen",
   "editing_style.scroll_prev": "Zurück",
   "editing_style.scroll_next": "Weiter",
-  "查看更新内容": "Neuerungen anzeigen"
+  "查看更新内容": "Neuerungen anzeigen",
+  "当前有项目正在制作，建议完成后再重启更新。": "Ein Projekt wird gerade verarbeitet. Warte bis zum Abschluss, bevor du für das Update neu startest."
 }

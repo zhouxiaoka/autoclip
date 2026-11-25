@@ -56,15 +56,19 @@ def _is_local_analysis_provider() -> bool:
         from backend.services import ai_model_settings as ai
         settings = ai.load()
         binding = getattr(settings, "analysis", None)
-        if not binding or not getattr(binding, "connection_id", None):
-            return False
-        conn = next((c for c in (getattr(settings, "connections", None) or ()) if getattr(c, "id", None) == binding.connection_id), None)
-        if conn is None:
-            return False
-        provider = (getattr(conn, "provider", None) or "").strip().lower()
-        if provider in {"ollama", "lmstudio"}:
-            return True
-        return is_local_url(getattr(conn, "base_url", None) or "")
+        if binding and getattr(binding, "connection_id", None):
+            conn = next((c for c in (getattr(settings, "connections", None) or ()) if getattr(c, "id", None) == binding.connection_id), None)
+            if conn is not None:
+                provider = (getattr(conn, "provider", None) or "").strip().lower()
+                if provider in {"ollama", "lmstudio"}:
+                    return True
+                return is_local_url(getattr(conn, "base_url", None) or "")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from backend.core.llm_manager import get_llm_manager
+        from backend.core.local_presets import is_local_model
+        return bool(is_local_model(get_llm_manager().settings))
     except Exception:  # noqa: BLE001
         return False
 

@@ -2461,5 +2461,6 @@
   "editing_style.gallery_title": "Choisir un style",
   "editing_style.scroll_prev": "Précédent",
   "editing_style.scroll_next": "Suivant",
-  "查看更新内容": "Voir les nouveautés"
+  "查看更新内容": "Voir les nouveautés",
+  "当前有项目正在制作，建议完成后再重启更新。": "Un projet est en cours. Attendez qu’il se termine avant de redémarrer pour mettre à jour."
 }

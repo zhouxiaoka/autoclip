@@ -134,3 +134,87 @@ def test_extended_video_extensions_in_studio_and_preflight(tmp_path):
     for ext in (".m4v", ".flv", ".ts", ".wmv"):
         assert f"'{ext}'" in studio_src
     assert "url = url.strip()" in studio_src
+
+
+def test_clip_finder_accepts_english_titles_and_string_row_indices_for_english_video():
+    from backend.pipeline import clip_finder
+    from backend.pipeline.quality import to_srt_time
+
+    entries = [
+        {"index": i + 1, "start_time": to_srt_time(i * 5.0), "end_time": to_srt_time((i + 1) * 5.0), "text": f"English line {i}."}
+        for i in range(120)
+    ]
+    calls = []
+
+    def fake_call(prompt, payload):
+        calls.append(payload)
+        return {
+            "clips": [
+                {"start": "10", "end": 25.0, "title": "Why Startups Fail Early", "reason": "Clear punchline", "score": 0.9},
+                {"start_row": "40", "end_row": "45", "title": "Twenty-five second insight", "reason": "Tight point", "score": 0.85},
+                {"start": 100, "end": 120, "title": "End-of-window clamp", "reason": "Off-by-one end", "score": 0.8},
+            ]
+        }
+
+    clips = clip_finder.find_clips(entries, fake_call, threshold=0.7)
+    assert len(calls) == 1, "English video with English titles must succeed on first pass without retrying"
+    assert len(clips) == 3
+    assert clips[0]["generated_title"] == "Why Startups Fail Early"
+
+
+def test_gemini_default_model_404_fallback_and_thinking_budget():
+    import io
+    import json
+    import requests
+    from backend.core import job_budget, llm_providers, model_catalog
+
+    assert model_catalog.default_model_for("gemini") == "gemini-2.5-flash"
+    provider = llm_providers.GeminiProvider("AIza-test-key", model_name="gemini-3.8-flash")
+    assert llm_providers.GeminiProvider("AIza-test-key").model_name == "gemini-2.5-flash"
+
+    seen = []
+
+    def fake_post(url, headers=None, json=None, auth=None, timeout=None, stream=False):
+        seen.append((url, json))
+        resp = requests.Response()
+        resp.url = url
+        if "gemini-3.8-flash" in url:
+            resp.status_code = 404
+            resp.raw = io.BytesIO(b'{"error":{"message":"model not found"}}')
+        else:
+            resp.status_code = 200
+            resp.raw = io.BytesIO(
+                b'{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}'
+            )
+        return resp
+
+    with patch.object(requests, "post", side_effect=fake_post), job_budget.bound_clip_job():
+        res = provider.call("hello")
+
+    assert res.content == "ok"
+    assert res.model == "gemini-2.5-flash"
+    assert len(seen) == 2
+    assert "gemini-3.8-flash" in seen[0][0]
+    assert "gemini-2.5-flash" in seen[1][0]
+    assert seen[1][1]["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+
+
+def test_ollama_thinking_disabled_and_job_budget_legacy_fallback():
+    from backend.core import job_budget, llm_providers
+
+    req = llm_providers.guarded_chat_kwargs(
+        "http://127.0.0.1:11434/v1",
+        {"model": "qwen3.5:4b", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert req["extra_body"]["think"] is False
+    stripped = llm_providers._strip_thinking_extra_body(req)
+    assert stripped is not None and "extra_body" not in stripped
+
+    # Legacy settings fallback when ai_model_settings.load() returns None
+    fake_mgr = type("Mgr", (), {"settings": {"llm_provider": "openai", "openai_base_url": "http://127.0.0.1:11434/v1"}})()
+    with (
+        patch("backend.services.ai_model_settings.load", return_value=None),
+        patch("backend.core.llm_manager.get_llm_manager", return_value=fake_mgr),
+    ):
+        assert job_budget._is_local_analysis_provider() is True
+

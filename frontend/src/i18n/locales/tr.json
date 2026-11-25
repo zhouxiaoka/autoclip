@@ -2461,5 +2461,6 @@
   "editing_style.gallery_title": "Kurgu Stili Seç",
   "editing_style.scroll_prev": "Önceki",
   "editing_style.scroll_next": "Sonraki",
-  "查看更新内容": "Yenilikleri gör"
+  "查看更新内容": "Yenilikleri gör",
+  "当前有项目正在制作，建议完成后再重启更新。": "Devam eden bir proje var. Güncellemek için yeniden başlatmadan önce bitmesini beklemeniz önerilir."
 }

@@ -172,4 +172,6 @@ test('parseUpdateNotes extracts localized bullet lists without truncation and Up
   assert.ok(promptSrc.includes('<details className="ac-update-details"'), 'notes should be collapsed by default in <details>')
   assert.ok(promptSrc.includes('<ul className="ac-update-list">'), 'notes should render as a bullet list')
   assert.equal(promptSrc.includes('<details className="ac-update-details" open'), false, 'notes disclosure must not default to open')
+  assert.ok(promptSrc.includes('data-testid="update-active-runs-warning"'), 'UpdateToast must warn before restarting during active projects')
+  assert.ok(promptSrc.includes('runningCount(projects, getKeepAwakeController().getSources())'), 'UpdateToast must check active producing projects')
 })

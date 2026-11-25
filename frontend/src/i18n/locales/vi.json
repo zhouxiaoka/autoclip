@@ -2461,5 +2461,6 @@
   "editing_style.gallery_title": "Chọn phong cách dựng",
   "editing_style.scroll_prev": "Trước",
   "editing_style.scroll_next": "Sau",
-  "查看更新内容": "Xem nội dung cập nhật"
+  "查看更新内容": "Xem nội dung cập nhật",
+  "当前有项目正在制作，建议完成后再重启更新。": "Đang có dự án đang xử lý. Bạn nên chờ hoàn tất trước khi khởi động lại để cập nhật."
 }

@@ -76,6 +76,9 @@ def request(base_url: str, api_key: str, payload: dict) -> tuple[str, dict, dict
             config[target] = payload[source]
     if (payload.get('response_format') or {}).get('type') in ('json_object', 'json_schema'):
         config['responseMimeType'] = 'application/json'
+    thinking_budget = payload.get('thinking_budget')
+    if isinstance(thinking_budget, int) and not isinstance(thinking_budget, bool) and thinking_budget >= 0:
+        config['thinkingConfig'] = {'thinkingBudget': thinking_budget}
     if config:
         body['generationConfig'] = config
     model = quote(payload['model'].removeprefix('models/'), safe='')

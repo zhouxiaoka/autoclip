@@ -128,20 +128,48 @@ def windows(rows: list[dict[str, Any]], size: WindowSize = CLOUD_WINDOW) -> list
     return out
 
 
+def _parse_row_index(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if re.fullmatch(r'-?\d+(?:\.0+)?', text):
+            return int(float(text))
+    return None
+
+
+def _window_is_cjk(rows: list[dict[str, Any]], first: int, last: int) -> bool:
+    span = max(1, last - first + 1)
+    cjk_rows = sum(1 for i in range(first, last + 1) if CJK.search(str(rows[i].get('text') or '')))
+    return cjk_rows * 4 >= span
+
+
 def _parse(raw: Any, first: int, last: int, rows, profile: DurationProfile) -> list[dict[str, Any]]:
     items = (raw or {}).get('clips') if isinstance(raw, dict) else raw
     if not isinstance(items, list):
         raise ValueError('response has no clips list')
+    min_allowed = min(profile.min_clip_sec * 0.5, 20.0) if profile.min_clip_sec >= 20 else profile.min_clip_sec * 0.5
     clips = []
     for item in items:
         if not isinstance(item, dict):
             continue
-        start, end = item.get('start'), item.get('end')
+        start = _parse_row_index(item.get('start') if 'start' in item else (item.get('start_row') if 'start_row' in item else item.get('start_line')))
+        end = _parse_row_index(item.get('end') if 'end' in item else (item.get('end_row') if 'end_row' in item else item.get('end_line')))
         title = re.sub(r'[*_`#]+', '', str(item.get('title') or '')).strip()
-        if not (isinstance(start, int) and isinstance(end, int)) or not first <= start <= end <= last or not title:
+        if start is None or end is None or not title:
+            continue
+        if first - 2 <= start < first:
+            start = first
+        if last < end <= last + 2:
+            end = last
+        if not first <= start <= end <= last:
             continue
         length = rows[end]['end'] - rows[start]['start']
-        if length < profile.min_clip_sec * 0.5 or length > profile.max_clip_sec * 1.5:
+        if length < min_allowed or length > profile.max_clip_sec * 1.5:
             continue  # refine_timeline adjusts lengths near the limits; far off means the model misread
         try:
             score = max(0.0, min(1.0, float(item.get('score'))))
@@ -151,7 +179,7 @@ def _parse(raw: Any, first: int, last: int, rows, profile: DurationProfile) -> l
                       'reason': str(item.get('reason') or '').strip()[:120], 'score': score})
     if items and not clips:
         raise ValueError('no valid clips in response')
-    if clips and sum(bool(CJK.search(c['title'])) for c in clips) < len(clips) / 2:
+    if clips and _window_is_cjk(rows, first, last) and sum(bool(CJK.search(c['title'])) for c in clips) < len(clips) / 2:
         raise ValueError('title 与 reason 必须用中文写')
     return clips
 
