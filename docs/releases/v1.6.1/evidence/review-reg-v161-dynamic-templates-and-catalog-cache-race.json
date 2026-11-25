@@ -22,7 +22,7 @@
       "windows-x64",
       "macos-arm64"
     ],
-    "label": "v161-dynamic-templates-and-catalog-cache-race"
+    "label": "regression v161-dynamic-templates-and-catalog-cache-race"
   },
   "required_assertions": [
     "reg-v161-dynamic-templates-and-catalog-cache-race:passed"
@@ -33,7 +33,7 @@
   ],
   "origin": {
     "path": "evidence/origin-reg-v161-dynamic-templates-and-catalog-cache-race.json",
-    "sha256": "e1e9759a097fcfa4da1db4026fa8dd87b908457df88f221c346b0a6440a929ef"
+    "sha256": "24e187ee75b66d3aaa46a12c6f98db190032665c5f304a2c58c5279d76a66f6e"
   },
   "diff": {
     "path": "evidence/diff-55f39be5-to-55f39be5.json",

@@ -22,7 +22,7 @@
       "windows-x64",
       "macos-arm64"
     ],
-    "label": "v161-custom-headers-and-deepseek-vision"
+    "label": "regression v161-custom-headers-and-deepseek-vision"
   },
   "required_assertions": [
     "reg-v161-custom-headers-and-deepseek-vision:passed"
@@ -33,7 +33,7 @@
   ],
   "origin": {
     "path": "evidence/origin-reg-v161-custom-headers-and-deepseek-vision.json",
-    "sha256": "e6bdbcef3a18a8732954e996beea3c48ec83a4b1ea8252eaf74bf510e6de3057"
+    "sha256": "3befc55b11ca4e54f6d345d5cb1e6846430c5c5acfae362feda3b25b15b90724"
   },
   "diff": {
     "path": "evidence/diff-55f39be5-to-55f39be5.json",

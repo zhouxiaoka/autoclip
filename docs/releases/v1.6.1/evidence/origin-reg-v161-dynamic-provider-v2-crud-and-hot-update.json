@@ -14,7 +14,7 @@
     "windows-x64",
     "macos-arm64"
   ],
-  "label": "v161-dynamic-provider-v2-crud-and-hot-update",
+  "label": "regression v161-dynamic-provider-v2-crud-and-hot-update",
   "completed_at": "2026-11-25T06:24:32Z",
   "assertions": [
     "reg-v161-dynamic-provider-v2-crud-and-hot-update:passed"

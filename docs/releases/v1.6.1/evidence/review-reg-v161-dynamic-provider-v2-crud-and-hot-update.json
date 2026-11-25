@@ -22,7 +22,7 @@
       "windows-x64",
       "macos-arm64"
     ],
-    "label": "v161-dynamic-provider-v2-crud-and-hot-update"
+    "label": "regression v161-dynamic-provider-v2-crud-and-hot-update"
   },
   "required_assertions": [
     "reg-v161-dynamic-provider-v2-crud-and-hot-update:passed"
@@ -33,7 +33,7 @@
   ],
   "origin": {
     "path": "evidence/origin-reg-v161-dynamic-provider-v2-crud-and-hot-update.json",
-    "sha256": "caa20778d46e5adadc97ef945052f68d662c2f049e5c3af67f20fd02e812d73e"
+    "sha256": "98934f9e90d25847c5dca2e3c33c8f3f0833d9765ffb0281ee9e7e45ba21426c"
   },
   "diff": {
     "path": "evidence/diff-55f39be5-to-55f39be5.json",
