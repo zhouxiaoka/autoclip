@@ -87,7 +87,6 @@ def fetch_youtube_apify(
         'searchQueries': queries,
         'maxResults': 0,
         'maxResultsShorts': max(1, int(limit_per_query)),
-        'sortingOrder': 'views',
     }
     try:
         items = _http_json(endpoint, payload=payload, timeout=90.0)
@@ -101,13 +100,14 @@ def fetch_youtube_apify(
             continue
         vid = str(raw.get('id') or raw.get('videoId') or '').strip()
         url = str(raw.get('url') or (f'https://www.youtube.com/shorts/{vid}' if vid else '')).strip()
-        if not url:
+        title = str(raw.get('title') or '').strip()
+        if not url or '/results?' in url or not title:
             continue
         out.append(CandidateVideo(
             id=vid or url.rsplit('/', 1)[-1],
             platform='youtube',
             track=track,
-            title=str(raw.get('title') or '').strip(),
+            title=title,
             url=url,
             author=str(raw.get('channelName') or raw.get('author') or '').strip(),
             views=int(raw.get('viewCount') or raw.get('views') or 0),
