@@ -85,5 +85,7 @@ export function batchImportBody(item: BatchItem, settings: BatchSettings, flowId
   if (template) body.append('html_template', template)
   if (item.window === 'first') { body.append('source_window_start', '0'); body.append('source_window_end', '1800') }
   body.append('features', JSON.stringify(features)); body.append('flow_id', flowId)
+  // Independent of analytics IDs; browser-level retransmission reuses this same body.
+  body.append('import_operation_id', globalThis.crypto.randomUUID())
   return body
 }

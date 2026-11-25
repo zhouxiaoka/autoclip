@@ -4,12 +4,12 @@ const path = require('node:path')
 const React = require('react'), { act } = React, h = React.createElement
 const { loadTs } = require('./load-ts.cjs')
 const studio = path.resolve(__dirname, '../src/features/studio')
-const ok = () => ({ analysis_mode: 'auto', ready: true, checks: Object.fromEntries(['analysis','transcription','visual','ffmpeg'].map(key => [key, { ok: true, code: 'configured', repair: 'none' }])) })
+const ok = () => ({ analysis_mode: 'auto', ready: true, batch_import_receipts: true, checks: Object.fromEntries(['analysis','transcription','visual','ffmpeg'].map(key => [key, { ok: true, code: 'configured', repair: 'none' }])) })
 async function fixture(options = {}) {
   const { Window } = await import('happy-dom'), window = new Window({ url: 'http://localhost/' })
   const originals = {}, calls = [], routes = [], events = []
   let report = ok(), requested = 0
-  const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, localStorage: window.localStorage, File: window.File, FormData: window.FormData, URL: window.URL, IS_REACT_ACT_ENVIRONMENT: true }
+  const globals = { crypto: require('node:crypto').webcrypto, window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, localStorage: window.localStorage, File: window.File, FormData: window.FormData, URL: window.URL, IS_REACT_ACT_ENVIRONMENT: true }
   for (const [key, value] of Object.entries(globals)) { originals[key] = Object.getOwnPropertyDescriptor(globalThis, key); Object.defineProperty(globalThis, key, { value, writable: true, configurable: true }) }
   const create = window.document.createElement.bind(window.document)
   window.URL.createObjectURL = () => 'blob:isolated'; window.URL.revokeObjectURL = () => {}
@@ -196,6 +196,28 @@ test('invalid project receipts stop after one upload and never replay that file'
       await view.pick([view.file('a.mp4'),view.file('b.mp4')]);await consent(view);await click(button(view.host,'batchImport.start'))
       assert.equal(view.calls.length,1);assert.equal(view.queue.items[0].status,'unknown');assert.equal(view.queue.items[1].status,'waiting')
       await click(button(view.host,'batchImport.start'));assert.deepEqual(view.calls.map(body=>body.get('video').name),['a.mp4','b.mp4'])
+    } finally {await view.close()}
+  }
+})
+
+
+test('one stable operation token per initial body; pending server receipt pauses without replay', async () => {
+  const view=await fixture({upload:async (_body,n) => { if(n===1)throw {response:{status:409,data:{detail:{import_state:'unknown'}}}};return {project_id:'p-2'} }})
+  try {
+    await view.pick([view.file('a.mp4'),view.file('b.mp4')]);await consent(view);await click(button(view.host,'batchImport.start'))
+    assert.equal(view.calls.length,1);assert.equal(view.queue.items[0].status,'unknown');assert.equal(view.queue.items[1].status,'waiting')
+    const first=view.calls[0].get('import_operation_id');assert.ok(first);assert.notEqual(first,view.calls[0].get('flow_id'))
+    await click(button(view.host,'batchImport.start'));assert.deepEqual(view.calls.map(body=>body.get('video').name),['a.mp4','b.mp4'])
+    assert.notEqual(first,view.calls[1].get('import_operation_id'));assert.equal(view.queue.items[0].status,'unknown')
+  } finally {await view.close()}
+})
+
+
+test('old or malformed backend capabilities block before any upload', async () => {
+  for (const value of [undefined,false,'true',null]) {
+    const view=await fixture({readiness:r=>({...r,batch_import_receipts:value})})
+    try {await view.pick([view.file('a.mp4'),view.file('b.mp4')]);await consent(view);await click(button(view.host,'batchImport.start'))
+      assert.equal(view.calls.length,0);assert.equal(view.queue.items[0].status,'blocked');assert.equal(view.queue.items[0].issue,'batchImport.backendUpgradeRequired')
     } finally {await view.close()}
   }
 })

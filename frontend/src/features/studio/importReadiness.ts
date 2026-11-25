@@ -16,6 +16,8 @@ export interface ReadinessCheck {
 export interface ImportReadiness {
   analysis_mode: AnalysisMode
   ready: boolean
+  /** Required by batch submissions so an older backend cannot silently ignore operation IDs. */
+  batch_import_receipts?: boolean
   /** Older or partial backends may omit the object or single checks (AUTOCLIP-FRONTEND-C). */
   checks?: {
     analysis?: ReadinessCheck | null

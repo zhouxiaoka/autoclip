@@ -2509,5 +2509,6 @@
   "batchImport.production.partial": "部分制作成功",
   "batchImport.production.failed": "制作失败",
   "batchImport.status.failed": "上传请求失败",
-  "batchImport.failedHint": "服务器返回了上传错误。请先核对项目列表；此项不会自动重发，其他等待项可单独继续。"
+  "batchImport.failedHint": "服务器返回了上传错误。请先核对项目列表；此项不会自动重发，其他等待项可单独继续。",
+  "batchImport.backendUpgradeRequired": "請先更新後端再批次匯入：目前服務尚未確認支援安全的匯入回執。"
 }

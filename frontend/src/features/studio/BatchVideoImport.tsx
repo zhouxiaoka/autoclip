@@ -101,6 +101,7 @@ export default function BatchVideoImport({ onClose, onImported }: { onClose: () 
       if (!report?.checks?.analysis || !report.checks.transcription || !report.checks.visual || !report.checks.ffmpeg) {
         return { status: 'blocked', issue: 'batchImport.readinessUnknown' }
       }
+      if (report.batch_import_receipts !== true) return { status: 'blocked', issue: 'batchImport.backendUpgradeRequired' }
       const reason = submissionBlock(report, !!item.subtitle, true, { source: 'file' })
       if (reason) return { status: 'blocked', issue: `batchImport.${reason}` }
       if (!queue.maySubmit()) return { status: 'blocked', issue: 'batchImport.paused' }
@@ -113,7 +114,8 @@ export default function BatchVideoImport({ onClose, onImported }: { onClose: () 
         void onImported().catch(() => undefined)
         return { projectId: receipt.project_id }
       } catch (error) {
-        const response = (error as { response?: { status?: number } } | null)?.response
+        const response = (error as { response?: { status?: number; data?: { detail?: { import_state?: unknown } } } } | null)?.response
+        if (response?.data?.detail?.import_state === 'unknown') return { status: 'unknown', issue: 'batchImport.unknownHint' }
         if (typeof response?.status === 'number') return { status: 'failed', issue: 'batchImport.failedHint' }
         return { status: 'unknown', issue: 'batchImport.unknownHint' }
       }
