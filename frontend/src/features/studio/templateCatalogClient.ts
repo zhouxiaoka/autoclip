@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getLocale } from '../../i18n'
 import { buildApiUrl, isApiReady, waitForApiReady } from '../../utils/apiConfig'
 import { HTML_TEMPLATE_CHOICES } from './editingStyle'
 
@@ -15,12 +16,14 @@ export type TemplateCatalogItem = {
   tags: string[]
   category: string
   order: number
+  featured?: boolean
   version: string
   source: 'builtin' | 'installed' | 'remote'
   installed: boolean
   removable: boolean
   update_available: boolean
   latest_version: string
+  badge?: string | null
   size_bytes?: number
   poster_url: string | null
   preview_mp4_url: string | null
@@ -106,7 +109,8 @@ export async function fetchTemplateCatalog(force = false): Promise<TemplateCatal
   const run = (async () => {
     try {
       await ensureApi()
-      const res = await fetch(buildApiUrl('/studio/templates'))
+      const locale = encodeURIComponent(getLocale())
+      const res = await fetch(buildApiUrl(`/studio/templates?locale=${locale}`))
       if (!res.ok) return currentItems
       const data = await res.json() as TemplateCatalogResponse
       return applyResponse(data)
@@ -122,7 +126,8 @@ export async function fetchTemplateCatalog(force = false): Promise<TemplateCatal
 
 export async function syncTemplateCatalog(): Promise<TemplateCatalogItem[]> {
   await ensureApi()
-  const res = await fetch(buildApiUrl('/studio/templates/sync?force=true'), { method: 'POST' })
+  const locale = encodeURIComponent(getLocale())
+  const res = await fetch(buildApiUrl(`/studio/templates/sync?force=true&locale=${locale}`), { method: 'POST' })
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}))
     throw new Error(detail?.detail || 'sync failed')

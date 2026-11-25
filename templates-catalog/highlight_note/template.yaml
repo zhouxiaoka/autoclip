@@ -1,0 +1,48 @@
+id: highlight_note
+version: 2
+name: {zh: 荧光便利贴, en: Highlight Note}
+fit:
+  formats: {vlog: 1.0, keynote_stage: 0.9, podcast_studio: 0.8, sit_down_interview: 0.8}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.36
+  head_zone: [240, 1180]
+  zoom:
+    mode: creep
+    creep: 0.03
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.04:saturation=1.03"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 190, alt_top: 190}
+    subtitle: {top: 1260, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 56
+  inset_px: 80
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "荧光黄便利贴标题 + 白底块状逐词高亮字幕，适合效率、认知与干货口播", en: "Yellow highlighter tape headline + crisp white sticker block captions for productivity & knowledge shorts"}
+  tags: [knowledge, productivity, captions, viral, notes]
+  category: knowledge
+  order: 45
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}
