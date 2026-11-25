@@ -33,7 +33,13 @@ pub fn read(path: &Path) -> Result<Option<PathBuf>, String> {
     if bytes.len() as u64 > MAX_BYTES {
         return Err("export_directory_config_invalid".into());
     }
-    let prefs: Preferences = serde_json::from_slice(&bytes)
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "export_directory_config_invalid".to_string())?;
+    // Option fields default to None when absent in serde; only an explicit null may reset the destination.
+    if value.get("directory").is_none() {
+        return Err("export_directory_config_invalid".into());
+    }
+    let prefs: Preferences = serde_json::from_value(value)
         .map_err(|_| "export_directory_config_invalid".to_string())?;
     if prefs.schema_version != 1 {
         return Err("export_directory_config_invalid".into());
@@ -180,6 +186,15 @@ mod tests {
         assert!(save(&invalid_target, Some(&directory)).is_err());
         assert!(invalid_target.is_dir());
         assert!(!fs::read_dir(&temp.0).unwrap().any(|entry| entry.unwrap().file_name().to_string_lossy().ends_with(".tmp")));
+    }
+
+    #[test]
+    fn existing_configuration_requires_an_explicit_directory_field() {
+        let temp = Sandbox::new();
+        fs::write(temp.config(), r#"{"schema_version":1}"#).unwrap();
+        assert_eq!(destination(&temp.config(), || panic!("incomplete configuration must not use Downloads")).unwrap_err(), "export_directory_config_invalid");
+        fs::write(temp.config(), r#"{"schema_version":1,"directory":null}"#).unwrap();
+        assert_eq!(read(&temp.config()).unwrap(), None);
     }
 
     #[test]
