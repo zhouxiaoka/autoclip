@@ -9,6 +9,11 @@ export type BatchItem = {
 export type BatchSettings = { options: ImportOptions; platforms: string[] }
 export type BatchOutcome = { projectId: string } | { issue: string; status: 'blocked' | 'unknown' | 'failed' }
 
+/** Project IDs are opaque single path segments; malformed replies cannot release the next upload. */
+export function isBatchProjectId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
+}
+
 /** Window-only queue. A lost initial POST response is not an idempotent retry contract. */
 export class BatchImportQueue {
   items: BatchItem[] = []
@@ -53,6 +58,9 @@ export class BatchImportQueue {
         let outcome: BatchOutcome
         try { outcome = await worker({ ...item }, settings) }
         catch { outcome = { status: 'unknown', issue: 'batchImport.unknownHint' } }
+        if ('projectId' in outcome && !isBatchProjectId(outcome.projectId)) {
+          outcome = { status: 'unknown', issue: 'batchImport.unknownHint' }
+        }
         this.items = this.items.map(value => value.id !== item.id ? value : 'projectId' in outcome
           ? { ...value, status: 'submitted', projectId: outcome.projectId, issue: undefined }
           : { ...value, ...outcome })

@@ -7,7 +7,7 @@ import { featureSnapshot, flagEnabled } from '../../analytics/flags'
 import { telemetryId } from '../../analytics/workflow'
 import { studioApi } from './api'
 import { submissionBlock } from './importReadiness'
-import { batchImportBody, BatchImportQueue, type BatchItem } from './batchImportQueue'
+import { batchImportBody, BatchImportQueue, isBatchProjectId, type BatchItem } from './batchImportQueue'
 import PlatformPicker from './PlatformPicker'
 import ImportPreferences from './ImportPreferences'
 import { templateImportFields } from './TemplatePicker'
@@ -109,7 +109,7 @@ export default function BatchVideoImport({ onClose, onImported }: { onClose: () 
       try {
         const receipt = await studioApi.import(body)
         // Invalid/lost receipts may already have created a project; initial upload cannot be replayed safely.
-        if (!receipt?.project_id) return { status: 'unknown', issue: 'batchImport.unknownHint' }
+        if (!isBatchProjectId(receipt?.project_id)) return { status: 'unknown', issue: 'batchImport.unknownHint' }
         void onImported().catch(() => undefined)
         return { projectId: receipt.project_id }
       } catch (error) {

@@ -187,3 +187,15 @@ test('YouTube landscape is confirmed explicitly and known short-only files are n
     assert.equal(view.calls.length,0);assert.equal(view.queue.items[0].status,'blocked')
   } finally {await view.close()}
 })
+
+
+test('invalid project receipts stop after one upload and never replay that file', async () => {
+  for (const id of [{invalid:true},42,true,[], ' ', 'bad id', '../settings', 'https://example.invalid/project']) {
+    const view=await fixture({upload:async(body,n)=>({project_id:n===1?id:'p-2'})})
+    try {
+      await view.pick([view.file('a.mp4'),view.file('b.mp4')]);await consent(view);await click(button(view.host,'batchImport.start'))
+      assert.equal(view.calls.length,1);assert.equal(view.queue.items[0].status,'unknown');assert.equal(view.queue.items[1].status,'waiting')
+      await click(button(view.host,'batchImport.start'));assert.deepEqual(view.calls.map(body=>body.get('video').name),['a.mp4','b.mp4'])
+    } finally {await view.close()}
+  }
+})
