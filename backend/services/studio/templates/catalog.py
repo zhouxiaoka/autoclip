@@ -40,7 +40,7 @@ from backend.services.studio.templates.spec import LocalizedText, NameSpec, is_v
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CATALOG_URL = 'https://github.com/zhouxiaoka/autoclip-templates/releases/latest/download/catalog.json'
+DEFAULT_CATALOG_URL = 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog/catalog.json'
 CATALOG_CACHE_TTL_SEC = 3600
 CATALOG_TIMEOUT_SEC = 5.0
 ARCHIVE_TIMEOUT_SEC = 30.0
