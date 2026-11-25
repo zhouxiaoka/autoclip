@@ -16,6 +16,7 @@ export type TemplateCatalogItem = {
   tags: string[]
   category: string
   order: number
+  featured?: boolean
   version: string
   source: 'builtin' | 'installed' | 'remote'
   installed: boolean

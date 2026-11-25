@@ -327,3 +327,53 @@ def test_template_factory_build_ingest_payload():
     assert body['badge'] == 'new'
     assert body['auto_publish'] is True
     assert body['sha256'] == 'b' * 64
+
+
+def test_catalog_overrides_builtin_order_featured_locale_and_unlisted(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    sha = 'c' * 64
+    base_url = 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog'
+    payload = {
+        'schema_version': 1,
+        'catalog_revision': 8,
+        'updated_at': '2026-11-25T13:00:00Z',
+        'templates': [
+            {
+                'id': 'cloud_top',
+                'version': '1.0.0',
+                'name': {'zh': '云端置顶', 'en': 'Cloud Top'},
+                'sha256': sha,
+                'download_url': f'{base_url}/cloud_top-1.0.0.zip',
+                'order': 5,
+                'featured': True,
+                'badge': 'new',
+            },
+        ],
+        'overrides': {
+            'editorial': {'order': 10, 'featured': True, 'badge': 'hot', 'target_locales': [], 'status': 'published'},
+            'street': {'order': 20, 'target_locales': ['zh'], 'status': 'published'},
+            'news': {'order': 90, 'status': 'unlisted'},
+            'classic': {'order': 950, 'status': 'unlisted'},
+        },
+        'removed_ids': ['news'],
+    }
+    catalog.sync_catalog(
+        force=True,
+        url=f'{base_url}/catalog.json',
+        fetcher=lambda _u, **_kw: (200, json.dumps(payload).encode('utf-8'), {}),
+    )
+
+    en_items = catalog.list_template_items(include_remote=True, locale='en-US', app_version='1.6.2')['templates']
+    en_ids = [item['id'] for item in en_items]
+    # Cloud featured (order 5) comes BEFORE built-in featured editorial (order 10) -> true interleaved equality!
+    assert en_ids[:2] == ['cloud_top', 'editorial']
+    assert 'street' not in en_ids  # zh-only override hides street for en-US
+    assert 'news' not in en_ids  # unlisted + removed_ids hides news from picker
+    assert 'classic' not in en_ids  # unlisted hides classic from picker
+    # Built-in news files remain renderable for existing drafts!
+    assert registry.is_html_template('news')
+    editorial_item = next(item for item in en_items if item['id'] == 'editorial')
+    assert editorial_item['featured'] is True and editorial_item['badge'] == 'hot' and editorial_item['order'] == 10
+
+    zh_items = catalog.list_template_items(include_remote=True, locale='zh-CN', app_version='1.6.2')['templates']
+    assert 'street' in [item['id'] for item in zh_items]

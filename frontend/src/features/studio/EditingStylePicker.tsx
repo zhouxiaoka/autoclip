@@ -101,15 +101,11 @@ export default function EditingStylePicker({
     ]
     return ordered.length > 1 ? ['all', ...ordered] : []
   }, [installed, remote])
-  const visibleInstalled = useMemo(
-    () => activeCategory === 'all' ? installed : installed.filter(item => itemCategory(item) === activeCategory),
-    [installed, activeCategory],
+  const visibleAll = useMemo(
+    () => activeCategory === 'all' ? catalogItems : catalogItems.filter(item => itemCategory(item) === activeCategory),
+    [catalogItems, activeCategory],
   )
-  const visibleRemote = useMemo(
-    () => activeCategory === 'all' ? remote : remote.filter(item => itemCategory(item) === activeCategory),
-    [remote, activeCategory],
-  )
-  const totalCount = installed.length + remote.length
+  const totalCount = catalogItems.length
   const installedIds = installed.map(item => item.id)
 
   const updateScrollArrows = useCallback(() => {
@@ -126,7 +122,7 @@ export default function EditingStylePicker({
     const onResize = () => updateScrollArrows()
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
-  }, [updateScrollArrows, visibleInstalled.length, visibleRemote.length, sourceKey])
+  }, [updateScrollArrows, visibleAll.length, sourceKey])
 
   const scrollRow = (dir: -1 | 1) => {
     const el = rowRef.current
@@ -550,8 +546,43 @@ export default function EditingStylePicker({
         aria-disabled={disabled || undefined}
         onScroll={updateScrollArrows}
       >
-        {visibleInstalled.map(item => {
+        {visibleAll.map(item => {
         const id = item.id
+        if (!item.installed) {
+          const name = resolveLocalizedCopy(item.name, locale, id)
+          const desc = resolveLocalizedCopy(item.desc, locale, '')
+          const poster = posterForTemplate(id, item)
+          const remoteVideo = item.preview_mp4_url || item.preview_webm_url || ''
+          const busy = installingId === id
+          return <div
+            key={id}
+            data-style={id}
+            className="studio-style-card studio-style-card--remote"
+            onMouseEnter={e => {
+              if (reducedMotion || !remoteVideo) return
+              const v = e.currentTarget.querySelector('video')
+              if (v) { v.currentTime = 0; v.classList.add('is-playing'); void v.play().catch(() => {}) }
+            }}
+            onMouseLeave={e => {
+              const v = e.currentTarget.querySelector('video')
+              if (v) { v.pause(); v.classList.remove('is-playing') }
+            }}
+          >
+            <div className="studio-style-thumb">
+              <img src={poster} alt="" />
+              {remoteVideo ? (
+                <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
+              ) : null}
+              <span className="studio-style-badge">{item.badge ? item.badge.toUpperCase() : t('editing_style.remote_badge')}</span>
+              {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
+              <button type="button" className="studio-style-preview-btn" disabled={disabled || Boolean(installingId)} onClick={() => void onInstallRemote(id)}>
+                {busy ? t('editing_style.installing') : t('editing_style.install')}
+              </button>
+            </div>
+            <div className="studio-style-name">{name}</div>
+            <div className="studio-style-desc">{desc}</div>
+          </div>
+        }
         const on = id === selected
         const recommendedCard = recommendation?.template === id
         const name = styleName(id)
@@ -619,42 +650,6 @@ export default function EditingStylePicker({
           <div className="studio-style-desc">{desc}</div>
         </div>
       })}
-      {visibleRemote.map(item => {
-        const id = item.id
-        const name = resolveLocalizedCopy(item.name, locale, id)
-        const desc = resolveLocalizedCopy(item.desc, locale, '')
-        const poster = posterForTemplate(id, item)
-        const remoteVideo = item.preview_mp4_url || item.preview_webm_url || ''
-        const busy = installingId === id
-        return <div
-          key={id}
-          data-style={id}
-          className="studio-style-card studio-style-card--remote"
-          onMouseEnter={e => {
-            if (reducedMotion || !remoteVideo) return
-            const v = e.currentTarget.querySelector('video')
-            if (v) { v.currentTime = 0; v.classList.add('is-playing'); void v.play().catch(() => {}) }
-          }}
-          onMouseLeave={e => {
-            const v = e.currentTarget.querySelector('video')
-            if (v) { v.pause(); v.classList.remove('is-playing') }
-          }}
-        >
-          <div className="studio-style-thumb">
-            <img src={poster} alt="" />
-            {remoteVideo ? (
-              <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
-            ) : null}
-            <span className="studio-style-badge">{item.badge ? item.badge.toUpperCase() : t('editing_style.remote_badge')}</span>
-            {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
-            <button type="button" className="studio-style-preview-btn" disabled={disabled || Boolean(installingId)} onClick={() => void onInstallRemote(id)}>
-              {busy ? t('editing_style.installing') : t('editing_style.install')}
-            </button>
-          </div>
-          <div className="studio-style-name">{name}</div>
-          <div className="studio-style-desc">{desc}</div>
-        </div>
-      })}
       </div>
     </div>
     <Modal
@@ -683,8 +678,42 @@ export default function EditingStylePicker({
         </div>
       ) : null}
       <div className="studio-style-modal-grid">
-        {visibleInstalled.map(item => {
+        {visibleAll.map(item => {
           const id = item.id
+          if (!item.installed) {
+            const name = resolveLocalizedCopy(item.name, locale, id)
+            const desc = resolveLocalizedCopy(item.desc, locale, '')
+            const poster = posterForTemplate(id, item)
+            const remoteVideo = item.preview_mp4_url || item.preview_webm_url || ''
+            const busy = installingId === id
+            return <div
+              key={id}
+              className="studio-style-card studio-style-card--remote"
+              onMouseEnter={e => {
+                if (reducedMotion || !remoteVideo) return
+                const v = e.currentTarget.querySelector('video')
+                if (v) { v.currentTime = 0; v.classList.add('is-playing'); void v.play().catch(() => {}) }
+              }}
+              onMouseLeave={e => {
+                const v = e.currentTarget.querySelector('video')
+                if (v) { v.pause(); v.classList.remove('is-playing') }
+              }}
+            >
+              <div className="studio-style-thumb">
+                <img src={poster} alt="" />
+                {remoteVideo ? (
+                  <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
+                ) : null}
+                <span className="studio-style-badge">{item.badge ? item.badge.toUpperCase() : t('editing_style.remote_badge')}</span>
+                {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
+                <button type="button" className="studio-style-preview-btn" disabled={Boolean(installingId)} onClick={() => void onInstallRemote(id).then(() => setGalleryOpen(false))}>
+                  {busy ? t('editing_style.installing') : t('editing_style.install')}
+                </button>
+              </div>
+              <div className="studio-style-name">{name}</div>
+              <div className="studio-style-desc">{desc}</div>
+            </div>
+          }
           const on = id === selected
           const recommendedCard = recommendation?.template === id
           const name = styleName(id)
@@ -700,43 +729,12 @@ export default function EditingStylePicker({
           >
             <div className="studio-style-thumb">
               <img src={poster} alt="" />
-              {recommendedCard ? <span className="studio-style-badge">{t('editing_style.badge')}</span> : null}
-              <span className={`studio-style-radio${on ? ' is-on' : ''}`} aria-hidden="true">{on ? '✓' : ''}</span>
-            </div>
-            <div className="studio-style-name">{name}</div>
-            <div className="studio-style-desc">{desc}</div>
-          </div>
-        })}
-        {visibleRemote.map(item => {
-          const id = item.id
-          const name = resolveLocalizedCopy(item.name, locale, id)
-          const desc = resolveLocalizedCopy(item.desc, locale, '')
-          const poster = posterForTemplate(id, item)
-          const remoteVideo = item.preview_mp4_url || item.preview_webm_url || ''
-          const busy = installingId === id
-          return <div
-            key={id}
-            className="studio-style-card studio-style-card--remote"
-            onMouseEnter={e => {
-              if (reducedMotion || !remoteVideo) return
-              const v = e.currentTarget.querySelector('video')
-              if (v) { v.currentTime = 0; v.classList.add('is-playing'); void v.play().catch(() => {}) }
-            }}
-            onMouseLeave={e => {
-              const v = e.currentTarget.querySelector('video')
-              if (v) { v.pause(); v.classList.remove('is-playing') }
-            }}
-          >
-            <div className="studio-style-thumb">
-              <img src={poster} alt="" />
-              {remoteVideo ? (
-                <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
+              {recommendedCard ? (
+                <span className="studio-style-badge">{t('editing_style.badge')}</span>
+              ) : item.badge ? (
+                <span className="studio-style-badge">{item.badge.toUpperCase()}</span>
               ) : null}
-              <span className="studio-style-badge">{item.badge ? item.badge.toUpperCase() : t('editing_style.remote_badge')}</span>
-              {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
-              <button type="button" className="studio-style-preview-btn" disabled={Boolean(installingId)} onClick={() => void onInstallRemote(id).then(() => setGalleryOpen(false))}>
-                {busy ? t('editing_style.installing') : t('editing_style.install')}
-              </button>
+              <span className={`studio-style-radio${on ? ' is-on' : ''}`} aria-hidden="true">{on ? '✓' : ''}</span>
             </div>
             <div className="studio-style-name">{name}</div>
             <div className="studio-style-desc">{desc}</div>
