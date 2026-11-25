@@ -51,7 +51,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     selected_tracks = [t.strip() for t in args.tracks.split(',') if t.strip()] if args.tracks else list(tracks_cfg.keys())
     limit = int(args.limit or defaults.get('limit_per_query', 5))
     max_dur = float(defaults.get('max_duration_sec', 120))
-    actor = str(defaults.get('apify_youtube_actor') or 'streamers~youtube-shorts-scraper')
+    actor = str(defaults.get('apify_youtube_actor') or 'streamers~youtube-scraper')
     source_mode = args.source
 
     candidates: list[CandidateVideo] = []

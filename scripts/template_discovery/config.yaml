@@ -6,7 +6,7 @@ defaults:
   max_duration_sec: 120
   min_views: 50000
   download_clips: false
-  apify_youtube_actor: "streamers~youtube-shorts-scraper"
+  apify_youtube_actor: "streamers~youtube-scraper"
 
 tracks:
   gaming:

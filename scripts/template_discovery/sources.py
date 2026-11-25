@@ -68,7 +68,7 @@ def fetch_youtube_apify(
     *,
     track: str,
     limit_per_query: int = 5,
-    actor: str = 'streamers~youtube-shorts-scraper',
+    actor: str = 'streamers~youtube-scraper',
     token: str | None = None,
 ) -> list[CandidateVideo]:
     """Fetch trending YouTube Shorts via Apify synchronous dataset run.
@@ -85,8 +85,9 @@ def fetch_youtube_apify(
     )
     payload = {
         'searchQueries': queries,
+        'maxResults': 0,
         'maxResultsShorts': max(1, int(limit_per_query)),
-        'maxResults': max(1, int(limit_per_query)),
+        'sortingOrder': 'views',
     }
     try:
         items = _http_json(endpoint, payload=payload, timeout=90.0)
