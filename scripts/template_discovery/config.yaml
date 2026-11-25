@@ -12,6 +12,8 @@ tracks:
   gaming:
     label: "游戏直播切片"
     category: "gaming"
+    bilibili_tids: 4
+    bilibili_exclude_types: ["舞蹈", "宅舞", "街舞", "明星舞蹈", "翻跳", "动物"]
     existing_templates:
       - streamer_split
       - gta_wasted
@@ -22,13 +24,16 @@ tracks:
       - "CaseOh funny gaming clip shorts"
       - "Jynxzi clutch clip shorts"
     bilibili_queries:
-      - "游戏直播切片 竖屏 高能"
-      - "GTA 搞笑切片 竖屏"
-      - "恐怖游戏 主播 尖叫 切片"
+      - "GTA6 切片 竖屏"
+      - "无畏契约 主播 高能 切片"
+      - "CS2 主播 搞笑 切片"
+      - "黑神话 影之刃零 实机 切片"
 
   interview:
     label: "AI / 科技访谈"
     category: "interview"
+    bilibili_tids: 188
+    bilibili_exclude_types: ["舞蹈", "宅舞", "鬼畜"]
     existing_templates:
       - editorial
       - interview_card
@@ -38,18 +43,21 @@ tracks:
       - "Lex Fridman AI clip shorts"
       - "Y Combinator founder advice shorts"
     bilibili_queries:
-      - "AI 访谈 双语字幕 竖屏"
+      - "AI 访谈 双语字幕"
       - "硅谷 科技大佬 访谈 切片"
 
   knowledge:
     label: "知识干货口播"
     category: "knowledge"
+    bilibili_tids: 36
+    bilibili_exclude_types: ["舞蹈", "宅舞", "明星舞蹈"]
     existing_templates:
       - street
       - xhs_note
+      - highlight_note
     youtube_queries:
       - "Ali Abdaal productivity tips shorts"
       - "tech explainer kinetic captions shorts"
     bilibili_queries:
       - "干货 口播 竖屏 字幕"
-      - "认知 思维 爆款 竖屏"
+      - "效率 认知 思维 干货"

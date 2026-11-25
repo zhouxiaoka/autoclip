@@ -181,23 +181,33 @@ def fetch_bilibili_search(
     track: str,
     limit_per_query: int = 5,
     max_duration_sec: float = 180.0,
+    tids: int | None = None,
+    exclude_types: list[str] | None = None,
 ) -> list[CandidateVideo]:
-    """Fetch high-view Bilibili videos via public search API (sorted by clicks)."""
+    """Fetch high-view Bilibili videos via public search API (sorted by clicks).
+
+    Supports Bilibili main partition filtering via ``tids`` (e.g. 4=Gaming, 36=Knowledge,
+    188=Tech) and explicit sub-partition exclusion via ``exclude_types`` (e.g. Dance).
+    """
     out: list[CandidateVideo] = []
     seen: set[str] = set()
+    blocked_types = [t.strip() for t in (exclude_types or ['舞蹈', '宅舞', '街舞', '明星舞蹈']) if t.strip()]
     headers = {
         'User-Agent': USER_AGENT,
         'Referer': 'https://search.bilibili.com/',
         'Cookie': os.getenv('BILIBILI_COOKIE', 'buvid3=autoclip-discovery'),
     }
     for q in queries:
-        qs = urllib.parse.urlencode({
+        params: dict[str, Any] = {
             'search_type': 'video',
             'keyword': q,
             'order': 'click',
             'page': 1,
-            'page_size': max(5, int(limit_per_query) * 2),
-        })
+            'page_size': max(8, int(limit_per_query) * 3),
+        }
+        if tids is not None and int(tids) > 0:
+            params['tids'] = int(tids)
+        qs = urllib.parse.urlencode(params)
         url = f'https://api.bilibili.com/x/web-interface/search/type?{qs}'
         try:
             body = _http_json(url, headers=headers, timeout=15.0)
@@ -213,6 +223,9 @@ def fetch_bilibili_search(
                 continue
             bvid = str(raw.get('bvid') or '').strip()
             if not bvid or bvid in seen:
+                continue
+            typename = str(raw.get('typename') or '')
+            if any(bad in typename for bad in blocked_types):
                 continue
             dur = _parse_duration(raw.get('duration'))
             if max_duration_sec > 0 and dur > max_duration_sec:
@@ -234,6 +247,7 @@ def fetch_bilibili_search(
                 duration_sec=dur,
                 thumbnail_url=pic,
                 query=q,
+                extra={'typename': typename},
             ))
             added += 1
             if added >= limit_per_query:

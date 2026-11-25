@@ -52,15 +52,26 @@ def test_fetch_bilibili_search_parses_and_filters():
                     'bvid': 'BV1test1234',
                     'title': '<em class="keyword">GTA</em> 爆笑切片',
                     'author': '主播切片君',
+                    'typename': '单机游戏',
                     'play': 320_000,
                     'like': 18_000,
                     'duration': '0:42',
                     'pic': '//i0.hdslb.com/bfs/archive/test.jpg',
                 },
                 {
+                    'bvid': 'BV1dance99',
+                    'title': '竖屏热舞翻跳',
+                    'author': '舞见',
+                    'typename': '宅舞',
+                    'play': 900_000,
+                    'duration': '0:30',
+                    'pic': '//i0.hdslb.com/bfs/archive/dance.jpg',
+                },
+                {
                     'bvid': 'BV1toolong',
                     'title': '超长完整录播',
                     'author': '录播组',
+                    'typename': '单机游戏',
                     'play': 500_000,
                     'duration': '55:00',
                     'pic': '//i0.hdslb.com/bfs/archive/long.jpg',
@@ -68,12 +79,21 @@ def test_fetch_bilibili_search_parses_and_filters():
             ],
         },
     }
-    with patch.object(sources, '_http_json', return_value=fake_resp):
-        res = sources.fetch_bilibili_search(['GTA 切片'], track='gaming', max_duration_sec=120)
+    captured_urls: list[str] = []
+
+    def fake_http(url, **kwargs):
+        captured_urls.append(url)
+        return fake_resp
+
+    with patch.object(sources, '_http_json', side_effect=fake_http):
+        res = sources.fetch_bilibili_search(
+            ['GTA 切片'], track='gaming', max_duration_sec=120, tids=4, exclude_types=['舞蹈', '宅舞'],
+        )
     assert len(res) == 1
     assert res[0].id == 'BV1test1234'
     assert res[0].title == 'GTA 爆笑切片'
     assert res[0].thumbnail_url == 'https://i0.hdslb.com/bfs/archive/test.jpg'
+    assert 'tids=4' in captured_urls[0]
 
 
 def test_layout_signals_detects_split_seam_and_sandwich_bars():

@@ -74,7 +74,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             candidates.extend(yt_hits)
 
         if source_mode in ('auto', 'bilibili') and bili_queries:
-            candidates.extend(fetch_bilibili_search(bili_queries, track=tname, limit_per_query=limit, max_duration_sec=max_dur))
+            candidates.extend(fetch_bilibili_search(
+                bili_queries,
+                track=tname,
+                limit_per_query=limit,
+                max_duration_sec=max_dur,
+                tids=tcfg.get('bilibili_tids'),
+                exclude_types=tcfg.get('bilibili_exclude_types'),
+            ))
 
     out_dir = Path(args.out).resolve()
     existing = _shipping_template_ids()
