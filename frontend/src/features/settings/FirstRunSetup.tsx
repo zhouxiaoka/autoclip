@@ -17,6 +17,8 @@ import { setClipboardBannerSuppressed } from './keyGuideBus'
 import { readSponsorPromo, subscribeSponsorPromo } from './sponsorPromoWatch'
 import {
   NEUTRAL_PROVIDER_COPY,
+  findDynamicProvider,
+  localizedDynamicText,
   promotionAllowsUpsell,
   promotionRecommends,
   promotionRegisterUrl,
@@ -34,18 +36,26 @@ import {
 } from './firstRunGuidance'
 
 
-function optionTitle(id: string): (() => string) | null {
+function optionTitle(id: string, language?: string): (() => string) | null {
   if (id === 'other') return () => t('其他服务商')
-  if (!firstRunSponsor(id) || !PROVIDERS[id as keyof typeof PROVIDERS]) return null
-  return () => PROVIDERS[id as keyof typeof PROVIDERS].short
+  if (!firstRunSponsor(id)) return null
+  if (PROVIDERS[id as keyof typeof PROVIDERS]) return () => PROVIDERS[id as keyof typeof PROVIDERS].short
+  const dynamic = findDynamicProvider(id)
+  if (!dynamic) return null
+  return () => localizedDynamicText(dynamic.name, language) || dynamic.id
 }
 
-function choiceDetail(id: string, otherName: string): string {
+function choiceDetail(id: string, otherName: string, language?: string): string {
   if (id === 'other') return t('建议先连接 {{name}}', { name: otherName })
   const preset = PROVIDERS[id as keyof typeof PROVIDERS]
-  if (preset?.sponsor && promotionAllowsUpsell(id)) return preset.sponsor.description
-  if (preset?.sponsor) return t(NEUTRAL_PROVIDER_COPY)
-  return preset?.hint || ''
+  if (preset) {
+    if (preset.sponsor && promotionAllowsUpsell(id)) return preset.sponsor.description
+    if (preset.sponsor) return t(NEUTRAL_PROVIDER_COPY)
+    return preset.hint || ''
+  }
+  const dynamic = findDynamicProvider(id)
+  if (!dynamic) return ''
+  return promotionAllowsUpsell(id) ? (localizedDynamicText(dynamic.hint, language) || t(NEUTRAL_PROVIDER_COPY)) : t(NEUTRAL_PROVIDER_COPY)
 }
 
 /** Latest accepted choices. A locked selection stays even after it leaves the promotion. */
@@ -166,17 +176,20 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
       setStep('connect')
       return
     }
-    const sponsor = firstRunSponsor(choice) as keyof typeof PROVIDERS | null
-    if (!sponsor || !PROVIDERS[sponsor]) return
+    const sponsor = firstRunSponsor(choice)
+    const builtin = sponsor ? PROVIDERS[sponsor as keyof typeof PROVIDERS] : undefined
+    const dynamic = sponsor && !builtin ? findDynamicProvider(sponsor) : undefined
+    if (!sponsor || (!builtin && !dynamic)) return
     action('one_click', sponsor)
     const snap = readPromoSnapshot()
-    const packaged = !snap || snap.source === 'bundled' ? (PROVIDERS[sponsor].sponsor?.registerUrl || '') : ''
+    const packaged = !snap || snap.source === 'bundled' ? (builtin?.sponsor?.registerUrl || dynamic?.registerUrl || '') : ''
     const href = promotionRegisterUrl(sponsor, packaged)
     if (href) {
       trackSponsorLinkOpened({ sponsor, target: 'register', placement: 'home_setup' })
       openExternalLink(href)
     }
-    m.chooseProvider('analysis', sponsor)
+    if (builtin) m.chooseProvider('analysis', sponsor as keyof typeof PROVIDERS)
+    else m.selectProvider(sponsor)
     stepRef.current = 'connect'
     setStep('connect')
   }
@@ -184,11 +197,19 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   const model = settings.analysis?.model
   const status = !main || !connectionReady(main) ? t('请先粘贴服务商的 API 密钥')
     : t('自动匹配剪辑、画面理解、转写和封面模型。有云端转写时，音频会发送给这家服务商。')
-  const sponsorId = firstRunSponsor(choice) as keyof typeof PROVIDERS | null
+  const sponsorId = firstRunSponsor(choice)
+  const builtinSelected = sponsorId ? PROVIDERS[sponsorId as keyof typeof PROVIDERS] : undefined
+  const dynamicSelected = sponsorId && !builtinSelected ? findDynamicProvider(sponsorId) : undefined
   const snapNow = readPromoSnapshot()
-  const packagedNow = !snapNow || snapNow.source === 'bundled' ? (sponsorId && PROVIDERS[sponsorId] ? PROVIDERS[sponsorId].sponsor?.registerUrl || '' : '') : ''
+  const packagedNow = !snapNow || snapNow.source === 'bundled' ? (builtinSelected?.sponsor?.registerUrl || dynamicSelected?.registerUrl || '') : ''
   const liveLink = sponsorId ? promotionRegisterUrl(sponsorId, packagedNow) : null
-  const sponsorName = choice === 'other' ? otherName : (sponsorId && PROVIDERS[sponsorId] ? PROVIDERS[sponsorId].short : '')
+  const sponsorName = choice === 'other'
+    ? otherName
+    : builtinSelected
+      ? builtinSelected.short
+      : dynamicSelected
+        ? localizedDynamicText(dynamicSelected.name, language) || dynamicSelected.id
+        : ''
   const label = choice !== 'other' && sponsorId && !liveLink
     ? { key: '下一步' }
     : firstRunPrimaryLabel(choice, sponsorName)
@@ -223,15 +244,17 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
         </> : <>
           <div className="ac-choice-list" role="radiogroup" aria-label={t('选择 AI 服务商')}>
             {choices.map(id => {
-              const title = optionTitle(id)
+              const title = optionTitle(id, language)
               if (!title) return null
               const preset = id === 'other' ? undefined : PROVIDERS[id as keyof typeof PROVIDERS]
+              const dynamic = id === 'other' || preset ? undefined : findDynamicProvider(id)
+              const offerText = preset?.sponsor?.offer || (dynamic ? localizedDynamicText(dynamic.offer, language) : '')
               const promoted = id !== 'other' && promotionAllowsUpsell(id)
               return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={choice === id}
                 onClick={() => { touched.current = true; choiceRef.current = id; setChoice(id) }}>
                 <span className="ac-choice-text">
-                  <b>{title()}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{promoted && !promotionRecommends(id) && preset?.sponsor && <span className="ac-badge">{`${t('赞助')} · ${preset.sponsor.offer}`}</span>}</b>
-                  <span>{choiceDetail(id, otherName)}</span>
+                  <b>{title()}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{promoted && !promotionRecommends(id) && offerText && <span className="ac-badge">{`${t('赞助')} · ${offerText}`}</span>}</b>
+                  <span>{choiceDetail(id, otherName, language)}</span>
                 </span>
                 {choice === id && <Icon.Check />}
               </button>

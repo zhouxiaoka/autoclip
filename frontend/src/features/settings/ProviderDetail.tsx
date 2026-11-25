@@ -122,7 +122,7 @@ export default function ProviderDetail({
   const showModels = kind !== 'local_asr' && kind !== 'guide'
   const showConnectPanel = kind !== 'local_asr'
   const name = t(displayNameOf(preset))
-  const icon = providerIcon(preset.id)
+  const icon = providerIcon(preset.id, preset.icon_url)
   const testing = m.testing
   const listing = connection && busy[connection.id]
   const status = connection?.validation_status

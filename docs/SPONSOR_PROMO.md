@@ -33,9 +33,18 @@ v1.5.8 和当前 RC（`8fb72a745d8080225e371d60ee325f5431b6e195`）的服务商�
 
 生产静态文件地址：
 
-`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json`
+- `v1`（兼容 v1.6.0 等存量客户端）：`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json`
+- `v2`（支持签名动态下发新的 OpenAI 兼容服务商，不可达时自动回退到 `v1`）：`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo-v2.json`
 
-只放这一个 JSON。签名在文件内部，不跟随跳转。TLS 负责传输，Ed25519 负责内容。私钥留在维护者自己的密码管理器里，不进仓库、不进客户端、不进日志。
+只放静态签名 JSON。签名在文件内部，不跟随跳转。TLS 负责传输，Ed25519 负责内容。私钥留在维护者自己的密码管理器里，不进仓库、不进客户端、不进日志。
+
+## `v2` 动态上新 OpenAI 兼容服务商（免发版）
+
+从支持 `autoclip.sponsor-promo/v2` 的客户端起，签名载荷可额外携带 `providers` 数组（最多 16 项），动态声明新的 OpenAI 兼容服务商，并在同一份签名载荷的 `sponsors` 里直接编排推荐位、语种分流与默认项：
+
+- **安全边界**：动态 `id` 不允许与内置服务商重名（无法劫持/覆写任何内置预设）；`base_url`、`register_url`、`docs_url` 与可选 `icon_url` 必须是公网 `https://` 域名（拒绝内网 IP、`localhost`、凭据和 `/chat/completions` 后缀）；已保存的用户连接、密钥、接口地址和运行中任务不受影响。
+- **持久化方式**：用户连接动态服务商后，以标准 OpenAI 兼容连接（`provider: "compatible"` + `base_url` + `api_key`）落盘，后续即使离线或云端撤下推广也可正常继续使用。
+- **向下兼容**：旧版客户端（如 `v1.6.0`）继续读取 `sponsor-promo.json`（`v1`），不会因 `v2` 新增字段或新服务商而拒收。
 
 ## 签名和回滚
 

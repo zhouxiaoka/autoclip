@@ -43,6 +43,7 @@ class PromoConfig:
     max_bytes: int = 65536
     timeout_seconds: float = 4
     refresh_seconds: float = 21600
+    v2_url: str = ""
 
 
 def load_packaged_config() -> PromoConfig:
@@ -57,9 +58,11 @@ def parse_config(raw: Any) -> PromoConfig:
         return PromoConfig(False, "", "")
     enabled = raw.get("enabled") is True
     url = raw.get("url") if isinstance(raw.get("url"), str) else ""
+    v2_raw = raw.get("v2_url") if isinstance(raw.get("v2_url"), str) else ""
     key = raw.get("public_key") if isinstance(raw.get("public_key"), str) else ""
     if not enabled or not _https_url(url) or not _public_key(key):
         return PromoConfig(False, "", "")
+    v2_url = v2_raw if v2_raw and _https_url(v2_raw) else ""
     return PromoConfig(
         enabled=True,
         url=url,
@@ -68,6 +71,7 @@ def parse_config(raw: Any) -> PromoConfig:
         max_bytes=raw.get("max_bytes") if type(raw.get("max_bytes")) is int and 1024 <= raw["max_bytes"] <= 65536 else 65536,
         timeout_seconds=float(raw["timeout_seconds"]) if isinstance(raw.get("timeout_seconds"), (int, float)) and 0 < float(raw["timeout_seconds"]) <= 10 else 4,
         refresh_seconds=float(raw["refresh_seconds"]) if isinstance(raw.get("refresh_seconds"), (int, float)) and float(raw["refresh_seconds"]) >= 60 else 21600,
+        v2_url=v2_url,
     )
 
 
@@ -282,6 +286,11 @@ class SponsorPromoClient:
 
     def _download(self) -> Any:
         getter = self._http_get or _bounded_get
+        if self.config.v2_url:
+            try:
+                return getter(self.config.v2_url, timeout=self.config.timeout_seconds, max_bytes=self.config.max_bytes)
+            except Exception:
+                logger.info("sponsor promo v2 fetch unavailable, falling back to v1")
         return getter(self.config.url, timeout=self.config.timeout_seconds, max_bytes=self.config.max_bytes)
 
     def _shown(self, state: Optional[dict], health: str, *, locale: Optional[str] = None) -> dict:

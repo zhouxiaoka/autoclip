@@ -76,8 +76,8 @@ function CustomCard({
   )
 }
 
-function ProviderMark({ presetId, letter }: { presetId: string; letter: string }) {
-  const icon = providerIcon(presetId)
+function ProviderMark({ presetId, iconUrl, letter }: { presetId: string; iconUrl?: string; letter: string }) {
+  const icon = providerIcon(presetId, iconUrl)
   if (!icon) return <span className="ac-provider-mark" aria-hidden>{letter}</span>
   return (
     <span className={`ac-provider-mark has-icon is-${icon.tone}`} aria-hidden>
@@ -108,7 +108,7 @@ function ProviderCard({
       aria-current={selected || undefined}
       onClick={() => onOpen(preset.id)}
     >
-      <ProviderMark presetId={preset.id} letter={initialLetter(preset)} />
+      <ProviderMark presetId={preset.id} iconUrl={preset.icon_url} letter={initialLetter(preset)} />
       <span className="ac-provider-card-body">
         <span className="ac-provider-card-title">
           {t(displayNameOf(preset))}
