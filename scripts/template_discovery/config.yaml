@@ -1,0 +1,55 @@
+# Automated Viral Template Discovery configuration.
+# Edit keywords, thresholds, or add new tracks without touching Python code.
+
+defaults:
+  limit_per_query: 5
+  max_duration_sec: 120
+  min_views: 50000
+  download_clips: false
+  apify_youtube_actor: "streamers~youtube-shorts-scraper"
+
+tracks:
+  gaming:
+    label: "游戏直播切片"
+    category: "gaming"
+    existing_templates:
+      - streamer_split
+      - gta_wasted
+      - streamer_pip
+    youtube_queries:
+      - "IShowSpeed GTA clip shorts"
+      - "Kai Cenat gaming reaction shorts"
+      - "CaseOh funny gaming clip shorts"
+      - "Jynxzi clutch clip shorts"
+    bilibili_queries:
+      - "游戏直播切片 竖屏 高能"
+      - "GTA 搞笑切片 竖屏"
+      - "恐怖游戏 主播 尖叫 切片"
+
+  interview:
+    label: "AI / 科技访谈"
+    category: "interview"
+    existing_templates:
+      - editorial
+      - interview_card
+      - podcast_dark
+    youtube_queries:
+      - "Dwarkesh podcast AI clip shorts"
+      - "Lex Fridman AI clip shorts"
+      - "Y Combinator founder advice shorts"
+    bilibili_queries:
+      - "AI 访谈 双语字幕 竖屏"
+      - "硅谷 科技大佬 访谈 切片"
+
+  knowledge:
+    label: "知识干货口播"
+    category: "knowledge"
+    existing_templates:
+      - street
+      - xhs_note
+    youtube_queries:
+      - "Ali Abdaal productivity tips shorts"
+      - "tech explainer kinetic captions shorts"
+    bilibili_queries:
+      - "干货 口播 竖屏 字幕"
+      - "认知 思维 爆款 竖屏"
