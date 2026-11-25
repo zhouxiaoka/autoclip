@@ -533,3 +533,28 @@ def test_b3_success_rate_sql_figure_11_parallel_stability_metric():
     assert row["stability_flow_rate"] == 0.5
 
 
+def test_b2_render_replace_output_retries_windows_sharing_lock(tmp_path, monkeypatch):
+    from backend.services.studio import render
+
+    src = tmp_path / "ready.mp4"
+    dst = tmp_path / "out.mp4"
+    src.write_bytes(b"mp4-bytes")
+
+    real_replace = render.os.replace
+    calls = {"n": 0}
+
+    def flaky_replace(a, b):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            err = PermissionError("sharing violation")
+            err.winerror = 32
+            raise err
+        return real_replace(a, b)
+
+    monkeypatch.setattr(render.os, "replace", flaky_replace)
+    render._replace_output(src, dst)
+    assert calls["n"] == 3
+    assert dst.read_bytes() == b"mp4-bytes"
+    assert not src.exists()
+
+

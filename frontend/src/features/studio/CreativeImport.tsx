@@ -783,6 +783,20 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
         </div>)}
       </div>}
+      {effectiveSource === 'file' && !!file && !subtitle && typeof longGate.durationSec === 'number' && longGate.durationSec > FIRST_WINDOW_END_SEC && !String(transcriber?.code || '').startsWith('cloud') && !shouldSuggestFirstWindow(hasSuccessHistory(), longGate.durationSec) && (
+        <div className="studio-url-preview" role="status" data-testid="file-long-local-asr-tip">
+          <p className="studio-url-preview-warn" role="note">{t('视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。')}</p>
+          <div className="studio-actions studio-url-preview-actions">
+            <Btn size="sm" variant="default" disabled={busy || !settled} data-testid="file-long-local-window-partial" onClick={() => {
+              firstWindowDecided.current = true
+              sourceWindowOverride.current = { start: 0, end: FIRST_WINDOW_END_SEC }
+              setOptions(prev => ({ ...prev, source_window: { start: 0, end: FIRST_WINDOW_END_SEC } }))
+              setPending(null)
+              void submit('button', undefined, true)
+            }}>{t('只处理前 30 分钟')}</Btn>
+          </div>
+        </div>
+      )}
       {(source === 'link' && (previewLoading || urlPreview)) && <UrlPreview
         preview={urlPreview}
         loading={previewLoading}
