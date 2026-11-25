@@ -138,3 +138,38 @@ test('CreativeImport pre-intercepts local_transcription preview even when previe
     'CreativeImport must clamp project name length below backend max_length=200',
   )
 })
+
+test('parseUpdateNotes extracts localized bullet lists without truncation and UpdatePrompt collapses notes by default', () => {
+  const schedule = require('../src/desktop/updateSchedule.ts')
+  const bilingual = [
+    '#### 中文',
+    '- 修复 Gemini 接入与默认模型回退（#657）',
+    '- 优化本地 `Ollama` 超时预算与思考模型解析',
+    '',
+    '#### English',
+    '- Fixed Gemini setup and automatic fallback to an available model (#657)',
+    '- Improved local `Ollama` timeout budget and thinking-model JSON parsing',
+  ].join('\n')
+
+  assert.deepEqual(schedule.parseUpdateNotes(bilingual, 'zh'), [
+    '修复 Gemini 接入与默认模型回退',
+    '优化本地 Ollama 超时预算与思考模型解析',
+  ])
+  assert.deepEqual(schedule.parseUpdateNotes(bilingual, 'en'), [
+    'Fixed Gemini setup and automatic fallback to an available model',
+    'Improved local Ollama timeout budget and thinking-model JSON parsing',
+  ])
+  assert.deepEqual(schedule.parseUpdateNotes(bilingual, 'ja'), [
+    'Fixed Gemini setup and automatic fallback to an available model',
+    'Improved local Ollama timeout budget and thinking-model JSON parsing',
+  ])
+  assert.deepEqual(schedule.parseUpdateNotes('AutoClip Desktop v1.6.2', 'en'), [])
+
+  const promptSrc = fs.readFileSync(
+    path.join(__dirname, '../src/desktop/UpdatePrompt.tsx'),
+    'utf8',
+  )
+  assert.ok(promptSrc.includes('<details className="ac-update-details"'), 'notes should be collapsed by default in <details>')
+  assert.ok(promptSrc.includes('<ul className="ac-update-list">'), 'notes should render as a bullet list')
+  assert.equal(promptSrc.includes('<details className="ac-update-details" open'), false, 'notes disclosure must not default to open')
+})

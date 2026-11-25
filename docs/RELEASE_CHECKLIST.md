@@ -35,7 +35,7 @@
 - [ ] main CI 绿：`gh run list --branch main --limit 1`
 - [ ] `python scripts/bump_version.py --check` 版本号一致
 - [ ] 本地统一检查：`python scripts/quality_gate.py --report /absolute/local/evidence/quality.json`；记录提交和未提交改动
-- [ ] 通读 `CHANGELOG.md [未发布]`：面向用户、能对应到 issue / PR、没有内部路径 / 密钥
+- [ ] 通读 `CHANGELOG.md [未发布]`：面向用户、能对应到 issue / PR、没有内部路径 / 密钥；并为应用内更新弹窗单独写一段简洁的 `### 要点`（含 `#### 中文` 与 `#### English`，各 3–5 条纯面向用户的短条目，不写内部架构/签名协议/Sentry/CI/PR 编号，供 `write_updater_manifest.py` 写入 `latest.json`）
 - [ ] 服务商实测档位：有 PostHog 凭证时跑 `python scripts/provider_quality_report.py`，用近 14 天设备级成功率与成功耗时 p50 核对 `backend/presets/provider_quality.json`；没有凭证时脚本只打印 HogQL，不阻塞发版
 
 ### 3.2 标签前：内部构建与双平台产品验收

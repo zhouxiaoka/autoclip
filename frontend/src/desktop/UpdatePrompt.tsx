@@ -14,6 +14,7 @@ import {
   applyDownloadEvent,
   areRemindersEnabled,
   displayError,
+  parseUpdateNotes,
   previewNotes,
   rememberReminder,
   SNOOZE_KEY,
@@ -29,6 +30,7 @@ export type AppUpdateController = {
   version: string
   currentVersion: string
   notes: string
+  rawNotes: string
   percent: number | null
   error: string
   toastVisible: boolean
@@ -89,7 +91,12 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [desktop, setDesktop] = useState(Boolean(previewKind))
   const [version, setVersion] = useState(previewKind ? '1.4.0' : '')
   const [currentVersion, setCurrentVersion] = useState(previewKind ? '1.3.1' : '')
-  const [notes, setNotes] = useState(previewKind === 'downloading' || previewKind === 'ready' ? '后台下载新版本，准备好后提示重启。' : '')
+  const [rawNotes, setRawNotes] = useState(
+    previewKind === 'downloading' || previewKind === 'ready' || previewKind === 'available'
+      ? '#### 中文\n- 提升剪辑稳定性与导出成功率\n- 优化模型连接与本地转写体验\n\n#### English\n- Improved clipping reliability and export success rate\n- Smoother model setup and local transcription'
+      : '',
+  )
+  const notes = useMemo(() => previewNotes(rawNotes), [rawNotes])
   const [percent, setPercent] = useState<number | null>(previewKind === 'downloading' ? 42 : previewKind === 'ready' ? 100 : null)
   const [error, setError] = useState(previewKind === 'failed' ? 'offline' : '')
   const [toastVisible, setToastVisible] = useState(previewKind === 'ready' || previewKind === 'failed')
@@ -106,7 +113,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     live.current = found
     if (previous && previous !== found) void previous.close().catch(() => undefined)
     setVersion(found.version)
-    setNotes(previewNotes(found.body))
+    setRawNotes(found.body || '')
     setError('')
     setPercent(null)
     setPhase('downloading')
@@ -152,7 +159,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!found) {
         setPhase('idle')
         setVersion('')
-        setNotes('')
+        setRawNotes('')
         setToastVisible(false)
         setReminderVisible(false)
         const previous = live.current
@@ -226,7 +233,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     live.current = found
     if (previous && previous !== found) void previous.close().catch(() => undefined)
     setVersion(found.version)
-    setNotes(previewNotes(found.body))
+    setRawNotes(found.body || '')
     setError('')
     setReminderVisible(true)
     const storage = localStore()
@@ -281,11 +288,11 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [offerReminder, previewKind])
 
   const value = useMemo<AppUpdateController>(() => ({
-    phase, desktop, preview: Boolean(previewKind), version, currentVersion, notes, percent, error, toastVisible,
+    phase, desktop, preview: Boolean(previewKind), version, currentVersion, notes, rawNotes, percent, error, toastVisible,
     reminderVisible, remindersEnabled,
     checkNow, snooze, showToast, openUpdate, restart, retry,
     setRemindersEnabled, dismissReminder, acceptReminder, disableReminders,
-  }), [phase, desktop, previewKind, version, currentVersion, notes, percent, error, toastVisible, reminderVisible, remindersEnabled, checkNow, snooze, showToast, openUpdate, restart, retry, setRemindersEnabled, dismissReminder, acceptReminder, disableReminders])
+  }), [phase, desktop, previewKind, version, currentVersion, notes, rawNotes, percent, error, toastVisible, reminderVisible, remindersEnabled, checkNow, snooze, showToast, openUpdate, restart, retry, setRemindersEnabled, dismissReminder, acceptReminder, disableReminders])
 
   return (
     <UpdateContext.Provider value={value}>
@@ -299,6 +306,23 @@ export function useAppUpdate(): AppUpdateController {
   const value = useContext(UpdateContext)
   if (!value) throw new Error('useAppUpdate must be used within UpdateProvider')
   return value
+}
+
+function UpdateNotesDisclosure({ rawNotes, fallbackNotes }: { rawNotes?: string; fallbackNotes?: string }) {
+  const { i18n } = useTranslation()
+  const items = useMemo(
+    () => parseUpdateNotes(rawNotes || fallbackNotes, i18n.language),
+    [rawNotes, fallbackNotes, i18n.language],
+  )
+  if (!items.length) return null
+  return (
+    <details className="ac-update-details" data-testid="update-notes-disclosure">
+      <summary className="ac-update-summary">{t('查看更新内容')}</summary>
+      <ul className="ac-update-list">
+        {items.map((item, idx) => <li key={idx}>{item}</li>)}
+      </ul>
+    </details>
+  )
 }
 
 export const UpdateReminder: React.FC = () => {
@@ -324,7 +348,7 @@ export const UpdateReminder: React.FC = () => {
         </>
       )}
     >
-      {update.notes ? <p className="ac-update-notes">{update.notes}</p> : null}
+      <UpdateNotesDisclosure rawNotes={update.rawNotes} fallbackNotes={update.notes} />
     </Dialog>
   )
 }
@@ -358,7 +382,7 @@ export const UpdateToast: React.FC = () => {
     <div className="ac-update-toast" role="status" aria-live="polite" data-phase={update.phase}>
       <h3>{title}</h3>
       <p>{description}</p>
-      {update.notes && update.phase !== 'failed' && <p className="ac-update-notes">{update.notes}</p>}
+      {update.phase !== 'failed' && <UpdateNotesDisclosure rawNotes={update.rawNotes} fallbackNotes={update.notes} />}
       {update.phase === 'downloading' && (
         <div className="ac-update-progress">
           <ProgressLine percent={update.percent ?? 0} />

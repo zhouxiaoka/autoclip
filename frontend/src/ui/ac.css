@@ -204,6 +204,48 @@
 .ac-update-notes {
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
+.ac-update-details {
+  margin-top: 12px;
+  border-radius: 10px;
+}
+.ac-update-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  color: var(--ac-sub);
+  user-select: none;
+  padding: 2px 0;
+}
+.ac-update-summary::-webkit-details-marker { display: none; }
+.ac-update-summary::before {
+  content: '▸';
+  font-size: 11px;
+  color: var(--ac-muted);
+  transition: transform 150ms ease;
+}
+.ac-update-details[open] > .ac-update-summary::before { transform: rotate(90deg); }
+.ac-update-summary:hover { color: var(--ac-ink); }
+.ac-update-list {
+  margin: 8px 0 0;
+  padding: 10px 12px 10px 26px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--ac-line);
+  border-radius: 10px;
+  background: var(--ac-bg);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ac-sub);
+}
+.ac-update-list li {
+  margin: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+.ac-update-list li + li { margin-top: 6px; }
 .ac-update-progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .ac-update-progress .ac-line { flex: 1; }
 .ac-update-percent { font-family: var(--ac-font-mono); font-size: 12px; color: var(--ac-muted); min-width: 36px; text-align: right; }

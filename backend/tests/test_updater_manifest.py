@@ -127,6 +127,26 @@ def test_changelog_notes_uses_only_that_version(tmp_path: Path):
     assert _mod.changelog_notes("9.9.9", log) == ""
 
 
+def test_changelog_notes_supports_bilingual_user_highlights_section(tmp_path: Path):
+    log = tmp_path / "CHANGELOG.md"
+    log.write_text(
+        "## [1.6.2] - 2026-11-26\n\n"
+        "### 用户更新要点\n\n"
+        "#### 中文\n"
+        "- 修复模型连接稳定性\n\n"
+        "#### English\n"
+        "- Improved model connection stability\n\n"
+        "### 详细改动\n\n"
+        "- 内部 SQLite NullPool 实现细节\n",
+        encoding="utf-8",
+    )
+    notes = _mod.changelog_notes("1.6.2", log)
+    assert "#### 中文" in notes
+    assert "#### English" in notes
+    assert "Improved model connection stability" in notes
+    assert "NullPool" not in notes
+
+
 def test_build_manifest_strips_v_prefix():
     payload = _mod.build_manifest(
         version="v1.2.2",

@@ -2460,5 +2460,6 @@
   "editing_style.view_all": "전체 {{count}}개",
   "editing_style.gallery_title": "편집 스타일 선택",
   "editing_style.scroll_prev": "이전",
-  "editing_style.scroll_next": "다음"
+  "editing_style.scroll_next": "다음",
+  "查看更新内容": "업데이트 내용 보기"
 }

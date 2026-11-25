@@ -65,9 +65,9 @@ def _version_section(text: str, version: str) -> str | None:
 
 
 def _highlights(section: str) -> str | None:
-    """`### 要点` 到下一个 `##` / `###` 标题之间的正文，不含标题行。"""
+    """`### 用户更新要点` 或 `### 要点` 到下一个 `##` / `###` 标题之间的正文，不含标题行。"""
     match = re.search(
-        r"^### 要点[^\n]*\n(.*?)(?=^#{2,3} |\Z)",
+        r"^### (?:用户更新要点|要点)[^\n]*\n(.*?)(?=^#{2,3} |\Z)",
         section,
         re.MULTILINE | re.DOTALL,
     )

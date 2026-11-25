@@ -2460,5 +2460,6 @@
   "editing_style.view_all": "Ver {{count}}",
   "editing_style.gallery_title": "Elegir estilo de edición",
   "editing_style.scroll_prev": "Anterior",
-  "editing_style.scroll_next": "Siguiente"
+  "editing_style.scroll_next": "Siguiente",
+  "查看更新内容": "Ver novedades"
 }

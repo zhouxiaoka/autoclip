@@ -2460,5 +2460,6 @@
   "editing_style.view_all": "Все {{count}}",
   "editing_style.gallery_title": "Выбор стиля монтажа",
   "editing_style.scroll_prev": "Назад",
-  "editing_style.scroll_next": "Вперёд"
+  "editing_style.scroll_next": "Вперёд",
+  "查看更新内容": "Что нового"
 }
