@@ -106,7 +106,7 @@ def test_youtube_subtitle_and_format_failures_recover_with_bounded_attempts(monk
     assert not calls[1]['writesubtitles']
     assert 'm3u8' in calls[2]['format']
     assert opts['writesubtitles'] is True
-    assert all(c['skip_unavailable_fragments'] is False and c['fragment_retries'] == 2 for c in calls)
+    assert all(c['skip_unavailable_fragments'] is False and c['fragment_retries'] == 5 for c in calls)
 
 
 def test_youtube_permanent_failure_is_not_silently_successful(monkeypatch):

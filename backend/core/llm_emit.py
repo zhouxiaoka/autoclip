@@ -384,7 +384,7 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
             provider=name, model=model, base_url=base_url, kind="text",
             stage=_current_request_stage(), http_status=_http_status(error), error=error,
             retries=current_retry_count(), duration_ms=_elapsed_ms(started),
-            outcome="error", failure_stage=_current_stage() or "analyze", identity=identity,
+            outcome="error", failure_stage=_current_stage(), identity=identity,
         )
         raise
     usage = getattr(response, "usage", None) if response is not None else None
@@ -437,7 +437,7 @@ def emit_vision_request(
             duration_ms=_elapsed_ms(started),
             outcome=outcome,
             finish_reason=finish_reason,
-            failure_stage=(_current_stage() or "vision") if outcome == "error" else None,
+            failure_stage=_current_stage() if outcome == "error" else None,
             http_status=_http_status(error) if error is not None else 200,
             identity=identity,
         )
@@ -725,7 +725,7 @@ def _request_properties(
     }
     properties = schema.sanitize_llm_request_properties(raw)
     if properties.get("outcome") == "error":
-        failed_stage = normalize_failure_stage(failure_stage or stage or _current_stage()) or "analyze"
+        failed_stage = normalize_failure_stage(failure_stage or stage or _current_stage()) or "other"
         properties["failure_stage"] = failed_stage
     return properties
 

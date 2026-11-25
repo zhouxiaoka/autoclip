@@ -51,14 +51,15 @@ _LOGIN_REQUIRED = (
 )
 _UNSUPPORTED = ('unsupported url', 'no video formats', 'no video formats found')
 _CONNECTION = (
-    'unable to download webpage', 'connection reset', 'connection refused',
-    'connection aborted', 'remote end closed', 'incomplete read', 'broken pipe',
-    'eof occurred in violation of protocol', 'urlopen error', 'transport error',
-    'network is unreachable', 'failed to resolve', 'temporary failure in name resolution',
+    'unable to download webpage', 'unable to download video data', 'did not get any data blocks',
+    'giving up after', 'fragment not found', 'http error 500', 'http error 502', 'http error 503', 'http error 504',
+    'connection reset', 'connection refused', 'connection aborted', 'remote end closed',
+    'incomplete read', 'broken pipe', 'eof occurred in violation of protocol', 'urlopen error',
+    'transport error', 'network is unreachable', 'failed to resolve', 'temporary failure in name resolution',
     'ssl:', '[ssl', 'ssl error', 'certificate_verify_failed', 'ssl.ssleoferror',
     'getaddrinfo', 'proxy', 'name or service not known', 'nodename nor servname',
 )
-_TIMEOUT = ('timed out', 'timeout')
+_TIMEOUT = ('timed out', 'timeout', 'read timed out')
 _FRAME = (
     'ffmpeg', 'postprocess',
     'merging formats', 'error merging', 'merge the formats', 'ffmpeg merge', 'unable to merge',
@@ -71,8 +72,8 @@ _DNS = ('getaddrinfo', 'name or service not known', 'nodename nor servname')
 
 
 def _rename_locked(text: str) -> bool:
-    """A rename that lost to a sharing lock, after the downloader's own retries."""
-    if 'unable to rename file' not in text:
+    """A rename or fragment append that lost to a Windows sharing lock, after yt-dlp's own retries."""
+    if not any(op in text for op in ('unable to rename file', 'unable to open for writing', 'append_fragment')):
         return False
     return any(phrase in text for phrase in (
         'winerror 32',

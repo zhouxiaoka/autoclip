@@ -530,11 +530,8 @@ def _rejects_thinking_param(error: Any) -> bool:
 
 
 def guarded_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dict[str, Any]:
-    """所有 OpenAI 兼容文字请求都经过这里：DeepSeek、百炼 Qwen、已知预设中转站与本地 Ollama 思考开关。"""
-    return _ollama_thinking_chat_kwargs(
-        base_url,
-        relay_thinking_chat_kwargs(base_url, dashscope_chat_kwargs(base_url, deepseek_chat_kwargs(base_url, request))),
-    )
+    """所有 OpenAI 兼容文字请求都经过这里：DeepSeek、百炼 Qwen 与已知预设中转站思考开关。"""
+    return relay_thinking_chat_kwargs(base_url, dashscope_chat_kwargs(base_url, deepseek_chat_kwargs(base_url, request)))
 
 
 def http_chat_body(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -685,11 +682,11 @@ class OpenAIProvider(LLMProvider):
             model = self.request_model()
             full_input = self._build_full_input(prompt, input_data)
             from backend.core.custom_request_options import apply_chat_options
-            payload = token_param_kwargs(model, self.base_url, guarded_chat_kwargs(self.base_url, apply_chat_options({
+            payload = token_param_kwargs(model, self.base_url, _ollama_thinking_chat_kwargs(self.base_url, guarded_chat_kwargs(self.base_url, apply_chat_options({
                 "model": model,
                 "messages": [{"role": "user", "content": full_input}],
                 **{key: value for key, value in kwargs.items() if key != "stream"},
-            }, getattr(self, 'kwargs', {}))))
+            }, getattr(self, 'kwargs', {})))))
             # A long think used to die on a silent socket. Stream when the host
             # can; a refusal or a single JSON body is assembled the same way.
             payload["stream"] = True

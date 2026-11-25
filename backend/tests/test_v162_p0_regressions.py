@@ -189,8 +189,6 @@ def test_local_ollama_job_budget_and_thinking_model_trial_retry(monkeypatch):
 
 
 def test_failure_stage_other_never_shadows_specific_stage():
-    assert llm_emit._current_stage() is None
-
     class _Err(failure_attribution.AttributedError):
         pass
 

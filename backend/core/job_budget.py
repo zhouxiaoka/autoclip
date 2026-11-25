@@ -73,9 +73,10 @@ def _is_local_analysis_provider() -> bool:
         return False
 
 
-def clip_job_budget_seconds(*, local: bool = False) -> float:
-    default = float(LOCAL_CLIP_JOB_BUDGET_SEC if local else CLIP_JOB_BUDGET_SEC)
-    env_names = ("AUTOCLIP_LOCAL_CLIP_JOB_BUDGET_SEC", "AUTOCLIP_CLIP_JOB_BUDGET_SEC") if local else ("AUTOCLIP_CLIP_JOB_BUDGET_SEC",)
+def clip_job_budget_seconds(*, local: Optional[bool] = None) -> float:
+    is_local = _is_local_analysis_provider() if local is None else bool(local)
+    default = float(LOCAL_CLIP_JOB_BUDGET_SEC if is_local else CLIP_JOB_BUDGET_SEC)
+    env_names = ("AUTOCLIP_LOCAL_CLIP_JOB_BUDGET_SEC", "AUTOCLIP_CLIP_JOB_BUDGET_SEC") if is_local else ("AUTOCLIP_CLIP_JOB_BUDGET_SEC",)
     for name in env_names:
         raw = os.getenv(name)
         if not raw:
@@ -119,7 +120,7 @@ def bind_clip_job(seconds: Optional[float] = None):
     """Start the budget if this task does not already have one. Nested binds are no-ops."""
     if _current.get() is not None:
         return None
-    limit = clip_job_budget_seconds(local=_is_local_analysis_provider()) if seconds is None else seconds
+    limit = clip_job_budget_seconds() if seconds is None else seconds
     return _current.set(_Budget(float(limit), time.monotonic()))
 
 

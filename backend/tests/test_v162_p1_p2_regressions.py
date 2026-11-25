@@ -202,7 +202,7 @@ def test_gemini_default_model_404_fallback_and_thinking_budget():
 def test_ollama_thinking_disabled_and_job_budget_legacy_fallback():
     from backend.core import job_budget, llm_providers
 
-    req = llm_providers.guarded_chat_kwargs(
+    req = llm_providers._ollama_thinking_chat_kwargs(
         "http://127.0.0.1:11434/v1",
         {"model": "qwen3.5:4b", "messages": [{"role": "user", "content": "hi"}]},
     )
@@ -217,4 +217,155 @@ def test_ollama_thinking_disabled_and_job_budget_legacy_fallback():
         patch("backend.core.llm_manager.get_llm_manager", return_value=fake_mgr),
     ):
         assert job_budget._is_local_analysis_provider() is True
+
+
+def test_wave2_gemini_native_root_and_vision_404_and_thinking_budget():
+    import io
+    import json
+    import urllib.error
+    from backend.core import gemini_transport
+
+    assert gemini_transport.native_root("https://generativelanguage.googleapis.com") == "https://generativelanguage.googleapis.com/v1beta"
+    assert gemini_transport.native_root("https://generativelanguage.googleapis.com/v1beta/openai/v1") == "https://generativelanguage.googleapis.com/v1beta"
+    assert gemini_transport.native_root("https://generativelanguage.googleapis.com/v1beta/openai/") == "https://generativelanguage.googleapis.com/v1beta"
+
+    seen = []
+
+    class FakeResp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen.append((req.full_url, json.loads(req.data.decode("utf-8"))))
+        if "gemini-3.8-flash" in req.full_url:
+            raise urllib.error.HTTPError(
+                req.full_url, 404, "Not Found", {},
+                io.BytesIO(b'{"error":{"status":"NOT_FOUND","message":"model not found"}}'),
+            )
+        return FakeResp(
+            b'{"candidates":[{"content":{"parts":[{"text":"{\\"goal\\":\\"highlight\\"}"}]},"finishReason":"STOP"}]}'
+        )
+
+    cfg = {
+        "provider": "gemini",
+        "api_key": "AIza-test",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-3.8-flash",
+        "model_source": "user",
+        "quick_screening": True,
+    }
+    with patch.object(intelligence.urllib.request, "urlopen", side_effect=fake_urlopen):
+        ans = intelligence.vision_call([{"type": "text", "text": "check"}], config=cfg)
+
+    assert ans == {"goal": "highlight"}
+    assert len(seen) == 2
+    assert "gemini-2.5-flash" in seen[1][0]
+    assert seen[1][1]["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+
+    # select_highlights tolerates whole-number float watch_score from small models while rejecting strings
+    scenes, _audit = intelligence.select_highlights(
+        [{"id": "e1", "label": "Action", "start": 1.0, "end": 12.0, "watch_score": 85.0}],
+        duration=30.0,
+    )
+    assert len(scenes) == 1 and scenes[0].id == "e1"
+
+
+def test_wave2_whisper_runtime_409_and_mirror_retry(tmp_path):
+    import asyncio
+    from fastapi import HTTPException
+    from backend.api.v1 import speech_recognition
+    from backend.services import whisper_model_manager as wmm
+
+    # Missing Whisper runtime returns 409 instead of HTTP 500
+    class FakeManager:
+        async def download_model(self, name):
+            raise RuntimeError("请先安装 Whisper 运行时")
+
+    with patch("backend.api.v1.speech_recognition.get_model_manager", return_value=FakeManager()):
+        try:
+            asyncio.run(speech_recognition.download_whisper_model(speech_recognition.DownloadModelRequest(model="base")))
+            raise AssertionError("expected HTTPException 409")
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            assert isinstance(exc.detail, dict) and exc.detail.get("code") == "whisper_not_installed"
+
+    # Transient network error retries once on the same source before failing over
+    mgr = wmm.WhisperModelManager()
+    calls = []
+
+    def fake_fetch(_sd, args, repo_id, endpoint):
+        calls.append(endpoint)
+        if len(calls) == 1:
+            raise ConnectionResetError("connection reset by peer")
+        return str(tmp_path)
+
+    fake_hf = type("HF", (), {"snapshot_download": lambda **kw: str(tmp_path)})()
+    with (
+        patch.object(wmm.whisper_runtime, "ensure_on_path", lambda: None),
+        patch.object(wmm.whisper_runtime, "get_models_dir", lambda: tmp_path),
+        patch.object(wmm, "download_plan", lambda: [("mirror", "https://hf-mirror.com"), ("official", "https://huggingface.co")]),
+        patch.object(wmm, "_fetch_snapshot", side_effect=fake_fetch),
+        patch.object(wmm.time, "sleep", lambda _s: None),
+        patch.dict("sys.modules", {"huggingface_hub": fake_hf}),
+    ):
+        mgr._download_blocking("base")
+
+    assert calls == ["https://hf-mirror.com", "https://hf-mirror.com"]
+    assert mgr._download_state["base"]["status"] == "downloaded"
+
+
+def test_wave2_download_hls_fallback_and_step1_step2_resilience(tmp_path):
+    # HLS fragment failure triggers non-HLS mp4 fallback once
+    seen_formats = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def download(self, urls):
+            seen_formats.append(self.opts.get("format"))
+            if len(seen_formats) == 1:
+                raise download_recovery.yt_dlp.utils.DownloadError("ERROR: fragment 3 failed: OSError")
+            return 0
+
+    with patch.object(download_recovery.yt_dlp, "YoutubeDL", FakeYDL):
+        assert download_recovery.download_with_recovery("https://www.youtube.com/watch?v=dQw4w9WgXcQ", {"format": "best"}) == 0
+    assert len(seen_formats) == 2
+    assert "[ext=mp4]" in seen_formats[1]
+
+    # Classify retry exhaustion and Windows fragment append lock
+    assert download_failure_observe.observe_download_failure("ERROR: Giving up after 5 retries")["code"] == "connection"
+    assert download_failure_observe.observe_download_failure("ERROR: unable to download video data: HTTP Error 503")["code"] == "connection"
+    assert download_failure_observe.observe_download_failure("ERROR: unable to open for writing: [WinError 32] sharing violation")["code"] == "file_locked"
+
+    # step1_outline strips <think> before parsing JSON/Markdown
+    from backend.pipeline.step1_outline import OutlineExtractor
+    ext = OutlineExtractor.__new__(OutlineExtractor)
+    outlines = ext._parse_outline_response('<think>consider topics</think>\n[{"title": "Intro", "subtopics": ["A"]}]', 0)
+    assert len(outlines) == 1 and outlines[0]["title"] == "Intro"
+
+    # step2_timeline unwraps {"clips": [...]} and start/end aliases
+    from backend.pipeline.step2_timeline import TimelineExtractor
+    from backend.utils.llm_client import LLMClient
+    tl = TimelineExtractor.__new__(TimelineExtractor)
+    tl.llm_client = LLMClient.__new__(LLMClient)
+    tl.llm_raw_output_dir = tmp_path
+    tl._save_debug_response = lambda *a, **kw: None
+    items = tl._parse_and_validate_response(
+        '{"clips": [{"title": "Intro", "start": "00:00:05,000", "end": "00:00:45,000"}]}',
+        "00:00:00,000",
+        "00:02:00,000",
+        0,
+    )
+    assert len(items) == 1 and items[0]["outline"] == "Intro"
+
 
