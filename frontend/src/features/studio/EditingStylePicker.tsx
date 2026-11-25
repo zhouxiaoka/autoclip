@@ -3,7 +3,6 @@ import { Modal } from 'antd'
 import { getLocale, t } from '../../i18n'
 import { telemetryId } from '../../analytics/workflow'
 import { trackTemplateOverride, trackTemplatePickerShown, trackTemplatePreviewFailed, trackTemplatePreviewPlayed, trackTemplateRestore } from '../../analytics/studio'
-import { captureStudioException } from '../../desktop/sentry'
 import { requestStyleRecommendation } from './editingStyleClient'
 import { loadStylePreview, posterForTemplate } from './editingStyleMedia'
 import { beginStyleRecommendation, readStyle, subscribeStyle, type StyleSnapshot } from './editingStyleSession'
@@ -364,12 +363,14 @@ export default function EditingStylePicker({
             first_frame_ms: Math.max(0, Math.round(performance.now() - begun)),
             is_recommended: id === recommendation?.template,
           })
-        }).catch(() => {
+        }).catch((err: unknown) => {
+          node.classList.remove('is-playing')
+          const errName = err instanceof Error ? err.name : (err && typeof err === 'object' && 'name' in err ? String((err as { name?: unknown }).name || '') : '')
+          // Hover-out / selection change / unmount aborts and browser autoplay blocks are expected, not decode failures (AUTOCLIP-FRONTEND-E).
+          if (cancel || !want.has(id) || errName === 'AbortError' || errName === 'NotAllowedError') return
           if (reportedFail.current.has(id)) return
           reportedFail.current.add(id)
-          node.classList.remove('is-playing')
           trackTemplatePreviewFailed({ template: id, error_kind: node.error?.code === 4 ? 'unsupported' : 'decode' })
-          captureStudioException(new Error('template preview failed'), 'template_picker')
         })
       }).catch(() => {
         if (reportedFail.current.has(id)) return

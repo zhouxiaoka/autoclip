@@ -929,12 +929,13 @@ def _current_request_stage() -> str:
         return "other"
 
 
-def _current_stage() -> str:
+def _current_stage() -> str | None:
     try:
         from backend.core import llm_usage
-        return normalize_failure_stage(llm_usage._stage.get()) or "other"
+        stage = normalize_failure_stage(llm_usage._stage.get())
+        return stage if stage and stage != "other" else None
     except Exception:  # noqa: BLE001
-        return "other"
+        return None
 
 
 def _elapsed_ms(started: float) -> int:

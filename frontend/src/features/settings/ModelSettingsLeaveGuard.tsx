@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { t } from '../../i18n'
 import { Btn, Dialog } from '../../ui'
@@ -11,13 +11,20 @@ export default function ModelSettingsLeaveGuard({ dirty, saving, onSave }: {
   const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty.current === true && currentLocation.pathname !== nextLocation.pathname)
   const blockerRef = useRef(blocker)
   blockerRef.current = blocker
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
   const busyRef = useRef(false)
   if (blocker.state !== 'blocked') return null
   const safeReset = () => {
-    if (blockerRef.current.state === 'blocked') blockerRef.current.reset()
+    if (!mountedRef.current || blockerRef.current.state !== 'blocked') return
+    try { blockerRef.current.reset() } catch { /* Router blocker already unblocked during async save */ }
   }
   const safeProceed = () => {
-    if (blockerRef.current.state === 'blocked') blockerRef.current.proceed()
+    if (!mountedRef.current || blockerRef.current.state !== 'blocked') return
+    try { blockerRef.current.proceed() } catch { /* Router blocker already unblocked during async save */ }
   }
   const stay = () => { if (!saving && !busyRef.current) safeReset() }
   const saveAndLeave = async () => {

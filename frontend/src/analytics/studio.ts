@@ -148,7 +148,8 @@ export async function observeStudioDownload<T>(action: () => Promise<T>, project
 }
 
 export function studioImportProperties(body: FormData): Record<string, unknown> {
-  let source_type = body.get?.('twitch_video_id') ? 'twitch' : 'file'
+  const obsCaptureId = body.get?.('obs_capture_id')
+  let source_type = obsCaptureId ? 'obs' : body.get?.('twitch_video_id') ? 'twitch' : 'file'
   const url = body.get?.('url')
   if (typeof url === 'string' && url) {
     source_type = 'other_url'
@@ -158,13 +159,16 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
       else if (host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com')) source_type = 'bilibili'
     } catch { /* invalid input remains an enum; URL is never captured */ }
   }
+  const replayRaw = body.get?.('replay_source')
+  const replay_source = typeof replayRaw === 'string' && replayRaw ? replayRaw : undefined
+  const material_origin = obsCaptureId ? 'obs' : 'user'
   const supplied = body.get?.('flow_id')
   const flow_id = typeof supplied === 'string' && /^t-[a-z0-9-]{10,100}$/.test(supplied) ? supplied : telemetryId()
   const chosen = body.get?.('html_template')
   const template = typeof chosen === 'string' && (chosen === 'classic' || /^[a-z][a-z0-9_-]{1,31}$/.test(chosen)) ? chosen : undefined
   const recommendedRaw = body.get?.('recommended_template')
   const recommended_template = recommendedRaw === 'editorial' || recommendedRaw === 'street' || recommendedRaw === 'classic' ? recommendedRaw : undefined
-  return { material_origin: 'user', flow_id, source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
+  return { material_origin, flow_id, source_type, replay_source, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
     // Omitted means the backend's saved preference: do not claim it is enabled.
     brand_outro_enabled: body.get?.('brand_outro_enabled') === 'true' ? true : body.get?.('brand_outro_enabled') === 'false' ? false : undefined }
 }

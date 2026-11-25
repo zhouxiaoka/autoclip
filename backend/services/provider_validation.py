@@ -52,6 +52,7 @@ from backend.core.provider_model_fetch import get_models as fetch_account_models
 PROBE_MAX_TOKENS = 16
 PROBE_REASONING_MAX_TOKENS = 256
 PROBE_TIMEOUT = 20.0
+LOCAL_PROBE_TIMEOUT = 45.0
 
 # E6: local model server (Ollama / LM Studio) not running -> connection refused on a local URL.
 LOCAL_SERVICE_DOWN_HINT_KEY = '连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。'
@@ -115,6 +116,8 @@ class ValidationResult:
     # Capability miss that is not an UpstreamErrorType (vision_unsupported / image_model_in_analysis).
     # Carried as error_code while error_type stays 'unknown' so sanitize + known_validation_type keep it.
     capability_error_code: str = ''
+    # When a preset default model returned model_not_found and validation succeeded via a live fallback model.
+    validated_model: str = ''
 
     @property
     def error_code(self) -> str:
@@ -155,6 +158,7 @@ class ValidationResult:
             'trial_passed': self.trial_passed,
             'trial_failure_reason': self.trial_failure_reason,
             'trial_failure_status': safe_http_status(self.trial_failure_status),
+            **({'validated_model': self.validated_model} if self.validated_model else {}),
         }
 
 
@@ -359,8 +363,9 @@ def _probe(base: str, api_key: str, model: str, provider: str = 'compatible', *,
     if native:
         url, headers, payload = gemini_transport.request(base, api_key, payload)
     stream_retried = False
+    probe_timeout = LOCAL_PROBE_TIMEOUT if is_local_url(base) else PROBE_TIMEOUT
     try:
-        with httpx.Client(timeout=PROBE_TIMEOUT, trust_env=not is_local_url(base)) as client:
+        with httpx.Client(timeout=probe_timeout, trust_env=not is_local_url(base)) as client:
             response = client.post(url, json=payload, headers=headers)
             # Relay / Azure / OpenRouter models that require max_completion_tokens on HTTP 400.
             if response.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(response.text or ''):
@@ -586,11 +591,37 @@ def _validate_resolved(
     if list_known and not fetched.truncated and advisory and selected not in models:
         warning = MODEL_NOT_LISTED_WARNING
     probe_error = _probe(base, api_key, selected, provider=resolved.provider, **({'options': options} if options else {}))
+    validated_model = ''
+    if (
+        probe_error
+        and probe_error.error_type is UpstreamErrorType.MODEL_NOT_FOUND
+        and list_known
+        and models
+        and selected not in models
+    ):
+        from backend.core.provider_presets import get_provider
+        preset = get_provider(resolved.provider)
+        preset_defaults = {preset.default_model, *(preset.candidates.get('analysis') or ())} if preset else set()
+        preset_defaults.discard('')
+        if selected in preset_defaults:
+            live_candidates = [m for m in (extras.get('recommended', {}).get('analysis') or []) if m in models and m != selected]
+            if not live_candidates:
+                live_candidates = [m for m in models if m != selected][:2]
+            for fallback_model in live_candidates[:2]:
+                fb_err = _probe(base, api_key, fallback_model, provider=resolved.provider, **({'options': options} if options else {}))
+                if fb_err is None:
+                    probe_error = None
+                    validated_model = fallback_model
+                    warning = ''
+                    break
     if probe_error:
         return _failed(probe_error, base, hint, models, **extras,
                        http_status=getattr(probe_error, 'http_status', None),
                        network_kind=getattr(probe_error, 'network_kind', ''))
-    return _ok(base, hint, models, **extras, warning=warning)
+    ok_res = _ok(base, hint, models, **extras, warning=warning)
+    if validated_model:
+        ok_res.validated_model = validated_model
+    return ok_res
 
 
 def resolve_fetch_base(connection: ai_models.Connection) -> tuple[str, Optional[ClassifiedUpstreamError]]:
@@ -639,6 +670,7 @@ TRIAL_ATTEMPTS = 3
 TRIAL_GAP_SEC = 1.0
 TRIAL_TIMEOUT = 90.0
 TRIAL_MAX_TOKENS = 2048
+TRIAL_REASONING_MAX_TOKENS = 4096
 # ~30 min CN speech transcript size used for the estimate line.
 TRIAL_ESTIMATE_30MIN_CHARS = 10_000
 _TRIAL_JSON_SUFFIX = (
@@ -771,6 +803,23 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
             if response.status_code == 400 and 'response_format' in payload and _response_format_400(response.text or ''):
                 payload.pop('response_format', None)
                 response = client.post(url, json=payload, headers=headers)
+            # Thinking/reasoning models (e.g. Qwen 3.5, Gemma 4, Kimi K3) can spend TRIAL_MAX_TOKENS
+            # inside reasoning_content before emitting JSON; retry once with a larger token cap.
+            if response.status_code == 200 and not native:
+                try:
+                    first_parsed = response.json()
+                except Exception:  # noqa: BLE001
+                    first_parsed = None
+                if (
+                    first_parsed is not None
+                    and not _non_stream_completion(first_parsed)
+                    and _has_reasoning_output(first_parsed)
+                ):
+                    token_key = 'max_completion_tokens' if 'max_completion_tokens' in payload else 'max_tokens'
+                    if int(payload.get(token_key) or 0) < TRIAL_REASONING_MAX_TOKENS:
+                        retry_payload = dict(payload)
+                        retry_payload[token_key] = TRIAL_REASONING_MAX_TOKENS
+                        response = client.post(url, json=retry_payload, headers=headers)
     except httpx.TimeoutException:
         return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
                 'rate_limited': False, 'context_error': False, 'json_ok': False,
@@ -912,7 +961,8 @@ def validate_connection_with_probe(
     base = result.normalized_base_url or ai_models.chat_endpoint(resolved, model)['base_url']
     from backend.core.custom_request_options import request_options
     options = request_options(resolved)
-    trial = trial_run(base, resolved.api_key or '', model.strip(), language=language, provider=resolved.provider, **({'options': options} if options else {}))
+    trial_model = (result.validated_model or model).strip()
+    trial = trial_run(base, resolved.api_key or '', trial_model, language=language, provider=resolved.provider, **({'options': options} if options else {}))
     result.probe_kind = 'trial'
     result.trial_context_ok = trial['trial_context_ok']
     result.trial_rate_limited = trial['trial_rate_limited']

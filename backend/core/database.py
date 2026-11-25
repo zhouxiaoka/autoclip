@@ -6,6 +6,7 @@
 import logging
 import os
 import sqlite3
+import threading
 from contextlib import contextmanager
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
@@ -52,27 +53,40 @@ def create_database_engine(database_url):
         echo=False,
     )
     if not in_memory:
+        wal_lock = threading.Lock()
+        wal_initialized = {'done': False}
+
         @event.listens_for(database_engine, 'connect')
         def sqlite_pragmas(dbapi_connection, _record):
             cursor = dbapi_connection.cursor()
             try:
-                # Even reading journal_mode can encounter an exclusive legacy lock.
-                # Defer optional WAL setup and leave normal queries their busy timeout.
-                cursor.execute('PRAGMA busy_timeout=0')
-                try:
-                    mode = cursor.execute('PRAGMA journal_mode').fetchone()[0]
-                    if str(mode).lower() != 'wal':
-                        cursor.execute('PRAGMA journal_mode=WAL').fetchone()
-                except sqlite3.OperationalError as error:
-                    code = getattr(error, 'sqlite_errorcode', 0) & 0xff
-                    if code not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED, sqlite3.SQLITE_READONLY):
-                        raise
-                    logging.getLogger(__name__).info('SQLite WAL initialization deferred (code=%s)', code)
+                # Apply busy_timeout first so normal queries never race on NullPool connects.
+                cursor.execute('PRAGMA busy_timeout=30000')
+                if not wal_initialized['done']:
+                    with wal_lock:
+                        if not wal_initialized['done']:
+                            try:
+                                cursor.execute('PRAGMA busy_timeout=0')
+                                row = cursor.execute('PRAGMA journal_mode').fetchone()
+                                mode = row[0] if row else ''
+                                if str(mode).lower() != 'wal':
+                                    wal_row = cursor.execute('PRAGMA journal_mode=WAL').fetchone()
+                                    if wal_row and str(wal_row[0]).lower() == 'wal':
+                                        wal_initialized['done'] = True
+                                else:
+                                    wal_initialized['done'] = True
+                            except sqlite3.OperationalError as error:
+                                # Windows transient lock / IO / sharing errors must not fail the request
+                                # when initializing optional WAL mode (PYTHON-FASTAPI-1C / -81).
+                                code = getattr(error, 'sqlite_errorcode', 0) & 0xff
+                                logging.getLogger(__name__).info('SQLite WAL initialization deferred (code=%s)', code)
+                            finally:
+                                try:
+                                    cursor.execute('PRAGMA busy_timeout=30000')
+                                except sqlite3.OperationalError:
+                                    pass
             finally:
-                try:
-                    cursor.execute('PRAGMA busy_timeout=30000')
-                finally:
-                    cursor.close()
+                cursor.close()
     return database_engine
 
 

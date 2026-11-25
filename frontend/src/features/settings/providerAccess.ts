@@ -45,10 +45,12 @@ export interface ValidationResult {
   trial_passed?: boolean | null
   trial_failure_reason?: string | null
   trial_failure_status?: number | null
+  validated_model?: string
 }
 
 const KEY_HINTS: Array<[RegExp, ProviderKey]> = [
   [/^AIza/, 'gemini'],
+  [/^AQ\./, 'gemini'],
   [/^xai-/, 'grok'],
   [/^sk-proj-/, 'openai'],
   [/^sk-svcacct-/, 'openai'],

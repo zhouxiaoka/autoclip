@@ -411,11 +411,14 @@ def build_attribution(error: BaseException | None = None, *, phase_identity: dic
     if verdict.snapshot is not None:
         snap = verdict.snapshot  # carried from the boundary: never re-judged
         source, identity = snap.attribution_source, snap.to_fields()
-        stage = snap.failure_stage or failure_stage
+        snap_stage = snap.failure_stage if snap.failure_stage and snap.failure_stage != "other" else None
+        stage = snap_stage or failure_stage or snap.failure_stage
         found = request_record.attribution() if callable(getattr(request_record, "attribution", None)) else {}
         if source == SOURCE_PHASE and found.get("provider") and found.get("config_source"):
             source, identity = SOURCE_REQUEST, found
-            stage = snap.failure_stage or found.get("failure_stage") or failure_stage
+            found_stage = found.get("failure_stage")
+            found_specific = found_stage if found_stage and found_stage != "other" else None
+            stage = snap_stage or found_specific or failure_stage or snap.failure_stage or found_stage
         if (source, stage) == (snap.attribution_source, snap.failure_stage):
             return snap
         return FailureAttribution._make(source, identity, http_status=snap.http_status,
