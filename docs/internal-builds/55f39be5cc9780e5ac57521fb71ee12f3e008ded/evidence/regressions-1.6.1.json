@@ -1,0 +1,43 @@
+{
+  "version": "1.6.1",
+  "commit": "55f39be5cc9780e5ac57521fb71ee12f3e008ded",
+  "build_run_id": 45551675724,
+  "regressions": {
+    "v161-dynamic-provider-v2-crud-and-hot-update": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-25T06:18:40Z",
+        "summary": "Shipped portable Python 3.13.13 verified signed v2 dynamic provider Create -> Update -> Delete hot-update without restart and confirmed 0 hardcoded SSY entries ({'ok': True, 'deepseek_flash_vision': True, 'ssy_hardcoded': False, 'v2_crud': ['create', 'update', 'delete']})."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-25T06:24:32Z",
+        "summary": "Shipped Windows portable Python 3.13.13 (55f39be5) verified signed v2 dynamic provider Create -> Update -> Delete hot-update persistence with zero PermissionError and 0 hardcoded SSY ({'ok': True, 'deepseek_flash_vision': True, 'ssy_hardcoded': False, 'v2_crud': ['create', 'update', 'delete']})."
+      }
+    },
+    "v161-dynamic-templates-and-catalog-cache-race": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-25T06:18:40Z",
+        "summary": "Shipped 1.6.1 backend served 5 built-in templates and live-synced 11 templates (editorial, street, news, cinema, classic, streamer_split, gta_wasted, streamer_pip, interview_card, xhs_note, podcast_dark) via /api/v1/studio/templates/sync including gta_wasted, streamer_split, streamer_pip."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-25T06:24:32Z",
+        "summary": "Shipped Windows 1.6.1 backend served 5 built-in templates and 5 post-sync templates (editorial, street, news, cinema, classic)."
+      }
+    },
+    "v161-custom-headers-and-deepseek-vision": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-25T06:18:40Z",
+        "summary": "Shipped 1.6.1 bundle persisted custom_headers/reasoning_effort/extra_body while masking secret header values on public GET, and confirmed supports_vision('deepseek-v4-flash') == True."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-25T06:24:32Z",
+        "summary": "Shipped Windows 1.6.1 bundle persisted custom_headers/reasoning_effort/extra_body while masking secret header values on public GET, and confirmed supports_vision('deepseek-v4-flash') == True."
+      }
+    }
+  }
+}
