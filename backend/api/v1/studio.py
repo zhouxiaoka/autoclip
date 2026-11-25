@@ -504,23 +504,23 @@ async def template_recommend(
 
 
 @router.get('/templates')
-def list_templates(include_remote: bool = True):
+def list_templates(include_remote: bool = True, locale: str | None = None):
     """Return built-in, user-installed, and cached remote packaging templates."""
     from backend.services.studio.templates import catalog
     if include_remote:
         catalog.trigger_background_sync()
-    return catalog.list_template_items(include_remote=include_remote)
+    return catalog.list_template_items(include_remote=include_remote, locale=locale)
 
 
 @router.post('/templates/sync')
-def sync_templates(force: bool = True):
+def sync_templates(force: bool = True, locale: str | None = None):
     """Refresh remote template catalog metadata from GitHub Releases / configured URL."""
     from backend.services.studio.templates import catalog
     try:
         catalog.sync_catalog(force=force)
     except catalog.TemplateCatalogError as error:
         raise HTTPException(502, str(error)) from None
-    return catalog.list_template_items(include_remote=True)
+    return catalog.list_template_items(include_remote=True, locale=locale)
 
 
 @router.post('/templates/import')

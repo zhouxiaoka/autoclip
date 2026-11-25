@@ -603,7 +603,11 @@ export default function EditingStylePicker({
               }}
             />
             {loading && id === 'editorial' ? <span className="studio-style-badge studio-style-badge--wait" aria-hidden="true" /> : null}
-            {recommendedCard ? <span className="studio-style-badge">{t('editing_style.badge')}</span> : null}
+            {recommendedCard ? (
+              <span className="studio-style-badge">{t('editing_style.badge')}</span>
+            ) : item.badge ? (
+              <span className="studio-style-badge">{item.badge.toUpperCase()}</span>
+            ) : null}
             {item.removable ? <button type="button" className="studio-style-remove-btn" title={t('editing_style.uninstall')} aria-label={t('editing_style.uninstall')} onClick={event => { event.stopPropagation(); void onUninstall(id) }}>×</button> : null}
             {item.update_available ? <button type="button" className="studio-style-preview-btn" onClick={event => { event.stopPropagation(); void onInstallRemote(id) }}>{installingId === id ? t('editing_style.installing') : t('editing_style.update')}</button> : null}
             <span className={`studio-style-radio${on ? ' is-on' : ''}`} aria-hidden="true">{on ? '✓' : ''}</span>
@@ -641,7 +645,7 @@ export default function EditingStylePicker({
             {remoteVideo ? (
               <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
             ) : null}
-            <span className="studio-style-badge">{t('editing_style.remote_badge')}</span>
+            <span className="studio-style-badge">{item.badge ? item.badge.toUpperCase() : t('editing_style.remote_badge')}</span>
             {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
             <button type="button" className="studio-style-preview-btn" disabled={disabled || Boolean(installingId)} onClick={() => void onInstallRemote(id)}>
               {busy ? t('editing_style.installing') : t('editing_style.install')}
@@ -728,7 +732,7 @@ export default function EditingStylePicker({
               {remoteVideo ? (
                 <video muted loop playsInline preload="metadata" poster={poster} src={remoteVideo} aria-hidden="true" />
               ) : null}
-              <span className="studio-style-badge">{t('editing_style.remote_badge')}</span>
+              <span className="studio-style-badge">{item.badge ? item.badge.toUpperCase() : t('editing_style.remote_badge')}</span>
               {remoteVideo ? <span className="studio-style-mark" aria-hidden="true">{t('editing_style.preview_mark')}</span> : null}
               <button type="button" className="studio-style-preview-btn" disabled={Boolean(installingId)} onClick={() => void onInstallRemote(id).then(() => setGalleryOpen(false))}>
                 {busy ? t('editing_style.installing') : t('editing_style.install')}
