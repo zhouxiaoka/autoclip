@@ -207,3 +207,52 @@ def test_cached_overlay_fits_tolerates_ffconcat_tail_padding(tmp_path: Path):
         # Way too long (+0.50s) is rejected
         with patch.object(packaging_html, '_overlay_duration', return_value=3.70):
             assert packaging_html._cached_overlay_fits(dummy, 96, 30) is False
+
+
+def test_cluster_corner_faces_accepts_stationary_webcam_and_rejects_fullscreen_or_moving():
+    # 1. Stationary left-edge webcam across 6/8 frames -> accepted and snapped to x=0.0
+    stationary = [
+        [(0.075, 0.46, 0.055, 0.095)],
+        [(0.078, 0.465, 0.056, 0.094)],
+        [(0.074, 0.458, 0.054, 0.096)],
+        [],
+        [(0.077, 0.462, 0.055, 0.095)],
+        [(0.076, 0.460, 0.055, 0.095)],
+        [],
+        [(0.075, 0.461, 0.055, 0.095)],
+    ]
+    roi = cp._cluster_corner_faces(stationary, total_frames=8)
+    assert roi is not None
+    assert roi[0] == 0.0
+    assert 0.20 <= roi[2] <= 0.34 and 0.22 <= roi[3] <= 0.36
+
+    # 2. Full-screen centered facecam (Just Chatting) -> rejected (returns None)
+    fullscreen = [[(0.38, 0.35, 0.24, 0.38)] for _ in range(8)]
+    assert cp._cluster_corner_faces(fullscreen, total_frames=8) is None
+
+    # 3. Fast-moving in-game character face -> rejected due to high jitter
+    moving = [[(0.05 + i * 0.04, 0.15 + i * 0.05, 0.05, 0.08)] for i in range(8)]
+    assert cp._cluster_corner_faces(moving, total_frames=8) is None
+
+
+def test_resolve_auto_camera_overrides_respects_manual_and_disabled():
+    with patch.object(cp, 'detect_embedded_facecam', return_value=(0.0, 0.36, 0.22, 0.26)) as mock_det:
+        # Auto-fills when unset on viral_split
+        auto = cp.resolve_auto_camera_overrides(None, Path('/tmp/fake.mp4'), layout_id='viral_split')
+        assert auto['camera_mode'] == 'embedded'
+        assert auto['camera_roi'] == [0.0, 0.36, 0.22, 0.26]
+        assert mock_det.call_count == 1
+
+        # Skips detection when camera explicitly disabled
+        disabled = cp.resolve_auto_camera_overrides({'camera': False}, Path('/tmp/fake.mp4'), layout_id='viral_split')
+        assert 'camera_roi' not in disabled
+        assert mock_det.call_count == 1
+
+        # Respects manual ROI without re-running detector
+        manual = cp.resolve_auto_camera_overrides(
+            {'camera_mode': 'embedded', 'camera_roi': [0.7, 0.65, 0.25, 0.28]},
+            Path('/tmp/fake.mp4'),
+            layout_id='viral_split',
+        )
+        assert manual['camera_roi'] == [0.7, 0.65, 0.25, 0.28]
+        assert mock_det.call_count == 1

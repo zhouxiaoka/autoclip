@@ -10,10 +10,15 @@ Implements the GTA VI Creator Pack architecture (and any future game Creator Pac
 from __future__ import annotations
 
 import json
+import logging
 import math
+import statistics
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Default GTA VI Creator Pack registry (matches config/pack.json v1.0.0).
 GTA_PACK_ID = 'autoclip.gta-vi-creator'
@@ -539,3 +544,220 @@ def event_phase(frame_index: int, ev: dict[str, Any]) -> float:
     if d < 0 or d >= total:
         return 0.0
     return max(0.0, min(1.0, (d + 1) / enter, (total - d) / exit_f))
+
+
+def _clamp(val: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, val))
+
+
+def _cluster_corner_faces(
+    samples: list[list[tuple[float, float, float, float]]],
+    *,
+    total_frames: int,
+) -> tuple[float, float, float, float] | None:
+    """Find a temporally stationary, corner/edge-anchored streamer facecam from normalized face boxes.
+
+    Each face box is ``(nx, ny, nw, nh)`` in ``[0, 1]``. Rejects full-screen talking-head shots
+    (centered or large face width) and moving in-game character faces (high spatial jitter).
+    """
+    if total_frames <= 0 or not samples:
+        return None
+
+    # Filter each frame's detections to corner/edge-located, webcam-sized faces.
+    edge_frames: list[list[tuple[float, float, float, float]]] = []
+    for boxes in samples:
+        kept: list[tuple[float, float, float, float]] = []
+        for nx, ny, nw, nh in boxes:
+            if nw <= 0.015 or nh <= 0.025:
+                continue
+            # Full-screen facecam (e.g. Just Chatting) has a large centered face — never split-screen it.
+            if nw > 0.18 or nh > 0.34:
+                continue
+            cx = nx + nw / 2.0
+            cy = ny + nh / 2.0
+            near_edge = (cx <= 0.32 or cx >= 0.68 or cy <= 0.28 or cy >= 0.72)
+            if not near_edge:
+                continue
+            kept.append((nx, ny, nw, nh))
+        if kept:
+            edge_frames.append(kept)
+
+    min_hits = max(3, int(math.ceil(total_frames * 0.50)))
+    if len(edge_frames) < min_hits:
+        return None
+
+    # Pick the dominant spatial cluster across frames (within 0.08 normalized distance of seed center).
+    all_boxes = [b for frame_boxes in edge_frames for b in frame_boxes]
+    best_cluster: list[tuple[float, float, float, float]] = []
+    for seed in all_boxes:
+        scx, scy = seed[0] + seed[2] / 2.0, seed[1] + seed[3] / 2.0
+        cluster: list[tuple[float, float, float, float]] = []
+        for frame_boxes in edge_frames:
+            match = min(
+                frame_boxes,
+                key=lambda b: math.hypot((b[0] + b[2] / 2.0) - scx, (b[1] + b[3] / 2.0) - scy),
+            )
+            mcx, mcy = match[0] + match[2] / 2.0, match[1] + match[3] / 2.0
+            if math.hypot(mcx - scx, mcy - scy) <= 0.08:
+                cluster.append(match)
+        if len(cluster) > len(best_cluster):
+            best_cluster = cluster
+
+    if len(best_cluster) < min_hits:
+        return None
+
+    cxs = [b[0] + b[2] / 2.0 for b in best_cluster]
+    cys = [b[1] + b[3] / 2.0 for b in best_cluster]
+    if len(cxs) >= 2 and (statistics.pstdev(cxs) > 0.045 or statistics.pstdev(cys) > 0.045):
+        return None
+
+    med_cx = statistics.median(cxs)
+    med_cy = statistics.median(cys)
+    med_w = statistics.median(b[2] for b in best_cluster)
+    med_h = statistics.median(b[3] for b in best_cluster)
+
+    # Expand face box symmetrically into a natural streamer webcam box (headroom + shoulders).
+    cam_w = _clamp(med_w * 3.6, 0.215, 0.34)
+    cam_h = _clamp(med_h * 2.45, 0.23, 0.36)
+    cam_x = _clamp(med_cx - cam_w / 2.0, 0.0, 1.0 - cam_w)
+    cam_y = _clamp(med_cy - cam_h * 0.56, 0.0, 1.0 - cam_h)
+
+    # Snap cleanly to left/right frame border when the webcam sits flush against the edge.
+    if cam_x <= 0.06:
+        cam_x = 0.0
+    elif (1.0 - (cam_x + cam_w)) <= 0.06:
+        cam_x = round(1.0 - cam_w, 4)
+
+    return (round(cam_x, 4), round(cam_y, 4), round(cam_w, 4), round(cam_h, 4))
+
+
+@lru_cache(maxsize=64)
+def _detect_embedded_facecam_cached(
+    path_str: str,
+    mtime_ns: int,
+    start_q: float,
+    end_q: float,
+    num_samples: int,
+) -> tuple[float, float, float, float] | None:
+    try:
+        from backend.services.studio import framing
+        import cv2  # type: ignore[import-not-found]
+        if not framing.MODEL.is_file() or not hasattr(cv2, 'FaceDetectorYN'):
+            return None
+    except Exception:
+        return None
+
+    cap = cv2.VideoCapture(path_str)
+    if not cap.isOpened():
+        return None
+    try:
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+        total_f = float(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0.0)
+        dur = (total_f / fps) if (fps > 0 and total_f > 0) else 0.0
+        t0 = max(0.0, start_q)
+        t1 = min(dur, end_q) if (end_q > t0 and dur > 0) else (dur if dur > t0 else max(t0 + 1.0, end_q))
+        span = max(0.2, t1 - t0)
+        n = max(4, int(num_samples))
+        timestamps = [t0 + span * (0.10 + 0.80 * i / max(1, n - 1)) for i in range(n)]
+
+        detector = None
+        det_size = (0, 0)
+        samples: list[list[tuple[float, float, float, float]]] = []
+        valid_frames = 0
+        for ts in timestamps:
+            cap.set(cv2.CAP_PROP_POS_MSEC, ts * 1000.0)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue
+            fh, fw = frame.shape[:2]
+            if fw < 64 or fh < 64:
+                continue
+            # Only look for embedded corner webcams on landscape / near-landscape streams.
+            if fw < fh * 1.1:
+                return None
+            valid_frames += 1
+            scale = min(1.0, 640.0 / float(fw))
+            dw, dh = max(64, int(round(fw * scale))), max(64, int(round(fh * scale)))
+            small = cv2.resize(frame, (dw, dh)) if scale < 0.999 else frame
+            if detector is None or det_size != (dw, dh):
+                detector = framing.create_detector(cv2, dw, dh, score=0.65)
+                det_size = (dw, dh)
+            _, faces = detector.detect(small)
+            frame_boxes: list[tuple[float, float, float, float]] = []
+            if faces is not None:
+                for row in faces:
+                    fx, fy, bw, bh = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+                    frame_boxes.append((fx / dw, fy / dh, bw / dw, bh / dh))
+            samples.append(frame_boxes)
+        return _cluster_corner_faces(samples, total_frames=valid_frames)
+    except Exception as exc:
+        logger.debug('auto facecam detection skipped: %s', exc)
+        return None
+    finally:
+        cap.release()
+
+
+def detect_embedded_facecam(
+    video_path: Path | str,
+    *,
+    start: float = 0.0,
+    end: float | None = None,
+    num_samples: int = 8,
+) -> tuple[float, float, float, float] | None:
+    """Detect a stationary corner/edge streamer facecam ROI in a single-track landscape recording.
+
+    Returns normalized ``(x, y, w, h)`` in ``[0, 1]`` or ``None`` if no corner facecam is present
+    (including pure gameplay and full-screen talking-head clips). Cached per file & clip window.
+    """
+    p = Path(video_path)
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    return _detect_embedded_facecam_cached(
+        str(p.resolve()),
+        st.st_mtime_ns,
+        round(max(0.0, float(start)), 1),
+        round(float(end), 1) if end is not None else -1.0,
+        int(num_samples),
+    )
+
+
+def resolve_auto_camera_overrides(
+    overrides: dict[str, Any] | None,
+    video_path: Path | str | None,
+    *,
+    layout_id: str,
+    start: float = 0.0,
+    end: float | None = None,
+    pack: dict[str, Any] = DEFAULT_PACK,
+) -> dict[str, Any]:
+    """Populate embedded ``camera_roi`` automatically when a Creator Pack layout wants a camera
+    and the caller has not explicitly disabled or configured one.
+    """
+    out = dict(overrides) if isinstance(overrides, dict) else {}
+    if out.get('camera') is False:
+        return out
+    explicit_mode = str(out.get('camera_mode') or '').strip().lower()
+    if explicit_mode == 'none':
+        return out
+    if explicit_mode == 'separate' and out.get('camera_path'):
+        return out
+    if explicit_mode == 'embedded' and _valid_roi(out.get('camera_roi')) is not None:
+        return out
+    if _valid_roi(out.get('camera_roi')) is not None:
+        out.setdefault('camera_mode', 'embedded')
+        return out
+
+    layouts = pack.get('layouts') or {}
+    target_layout = str(out.get('layout') or layout_id)
+    if target_layout in layouts and layouts[target_layout].get('camera') is None:
+        return out
+    if video_path is None:
+        return out
+
+    roi = detect_embedded_facecam(video_path, start=start, end=end)
+    if roi is not None:
+        out['camera_mode'] = 'embedded'
+        out['camera_roi'] = list(roi)
+    return out

@@ -266,6 +266,7 @@ def _encode_draft(
     overlay_grade = ''
     overlay_spec = None
     overlay_job = None
+    effective_cp_overrides = draft.creator_pack
     if template_registry.is_html_template(html_template):
         from backend.services.studio import packaging_html
         from backend.services.studio.templates.registry import TemplateRegistryError, get
@@ -281,11 +282,26 @@ def _encode_draft(
                     'captions_enabled': draft.subtitles, 'audience_language': draft.language,
                     'cues': draft_lines(entries, [scene.model_dump() for scene in draft.scenes]),
                 }
+            effective_cp_overrides = draft.creator_pack
+            if overlay_spec and overlay_spec.base.creator_pack is not None:
+                from backend.services.studio import creator_pack as cp_mod
+                cp_spec = overlay_spec.base.creator_pack
+                pack = cp_mod.load_pack(template_registry.resolve_dir(html_template))
+                clip_start = min((s.start for s in draft.scenes), default=0.0)
+                clip_end = max((s.end for s in draft.scenes), default=0.0)
+                effective_cp_overrides = cp_mod.resolve_auto_camera_overrides(
+                    draft.creator_pack,
+                    video,
+                    layout_id=cp_spec.default_layout,
+                    start=clip_start,
+                    end=clip_end if clip_end > clip_start else None,
+                    pack=pack,
+                )
             overlay_job = packaging_html.prepare_overlay(
                 project_id, html_template, overlay_packaging,
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
                 features=features, safe_area=safe_area, scenes=draft.scenes,
-                creator_pack_overrides=draft.creator_pack,
+                creator_pack_overrides=effective_cp_overrides,
             )
         except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise
@@ -332,7 +348,7 @@ def _encode_draft(
                             from backend.services.studio import packaging_html, packaging_render
                             if overlay_spec and overlay_spec.base.creator_pack is not None:
                                 from backend.services.studio import creator_pack as cp_mod
-                                ov = draft.creator_pack if isinstance(draft.creator_pack, dict) else {}
+                                ov = effective_cp_overrides if isinstance(effective_cp_overrides, dict) else {}
                                 cp_spec = overlay_spec.base.creator_pack
                                 pack = cp_mod.load_pack(template_registry.resolve_dir(html_template))
                                 cam_mode = str(ov.get('camera_mode') or 'none')
