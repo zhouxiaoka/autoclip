@@ -18,6 +18,7 @@ tracks:
       - streamer_split
       - gta_wasted
       - streamer_pip
+      - meme_setup
     youtube_queries:
       - "IShowSpeed GTA clip shorts"
       - "Kai Cenat gaming reaction shorts"
@@ -55,6 +56,7 @@ tracks:
       - street
       - xhs_note
       - highlight_note
+      - clean_pill
     youtube_queries:
       - "Ali Abdaal productivity tips shorts"
       - "tech explainer kinetic captions shorts"

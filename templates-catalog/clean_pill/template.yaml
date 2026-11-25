@@ -1,0 +1,48 @@
+id: clean_pill
+version: 2
+name: {zh: 极简白胶囊, en: Clean White Pill}
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.9, keynote_stage: 0.8}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.36
+  head_zone: [240, 1200]
+  zoom:
+    mode: creep
+    creep: 0.02
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.03:saturation=1.02"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 180, alt_top: 180}
+    subtitle: {top: 1410, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 44
+  inset_px: 96
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "极简白底黑字胶囊字幕 + 零干扰干净画幅，适合科技、效率与创始人深度口播", en: "Minimal crisp white pill captions with zero visual clutter for tech, founder & productivity shorts"}
+  tags: [knowledge, minimal, productivity, interview, viral]
+  category: knowledge
+  order: 46
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}

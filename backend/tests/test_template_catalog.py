@@ -187,7 +187,8 @@ def test_all_shipping_catalog_templates_pass_factory_verify():
     found = sorted(p.name for p in catalog_root.iterdir() if p.is_dir() and (p / 'template.yaml').is_file())
     assert {
         'interview_card', 'xhs_note', 'podcast_dark',
-        'streamer_split', 'gta_wasted', 'streamer_pip', 'highlight_note',
+        'streamer_split', 'gta_wasted', 'streamer_pip',
+        'highlight_note', 'meme_setup', 'clean_pill',
     } <= set(found)
     for name in found:
         spec, info = template_factory.verify_folder(catalog_root / name)
