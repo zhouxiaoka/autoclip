@@ -2282,6 +2282,93 @@ def _variant_attempt(data, retry, variant):
     return receipt
 
 
+def resumable_failed_variants(state) -> list[dict]:
+    """Return failed variants eligible for render-only resume (preserving completed outputs and skipping LLM)."""
+    if not isinstance(state, dict):
+        return []
+    generation = state.get('generation') or {}
+    analysis = state.get('analysis') or {}
+    if not generation.get('auto_start'):
+        return []
+    if generation.get('status') not in ('failed', 'partial'):
+        return []
+    if analysis.get('status') == 'running':
+        return []
+    variants = [item for item in (state.get('output_variants') or []) if isinstance(item, dict)]
+    if not variants:
+        return []
+    if any(item.get('status') in ('queued', 'running', 'preparing') for item in variants):
+        return []
+    render_interrupted = (
+        generation.get('status') == 'partial'
+        or analysis.get('phase') == 'rendering'
+        or generation.get('failure_stage') == 'render'
+        or analysis.get('failure_stage') == 'render'
+    )
+    if not render_interrupted:
+        return []
+    draft_ids = {d.get('id') for d in (state.get('drafts') or []) if isinstance(d, dict) and d.get('id')}
+    failed = [item for item in variants if item.get('status') == 'failed' and item.get('draft_id') in draft_ids]
+    return failed
+
+
+def retry_failed_variants(project_id, retry=None):
+    """Resume all failed output variants in one aggregate generation attempt without re-running LLM or completed renders."""
+    state = store.recover(project_id)
+    if retry is not None:
+        again = attempts.by_key(state, retry.get('key'))
+        if again:
+            return again.get('run_id'), [item for item in state.get('output_variants', []) if item.get('redone_by_attempt') == again.get('attempt_id')]
+    candidates = resumable_failed_variants(state)
+    if not candidates:
+        raise UserFacingError('没有可继续渲染的未完成版本')
+    candidate_ids = [item['id'] for item in candidates]
+
+    def update(data):
+        draft_ids = {d.get('id') for d in (data.get('drafts') or []) if isinstance(d, dict) and d.get('id')}
+        targets = [item for item in data.get('output_variants', []) if item.get('id') in candidate_ids and item.get('status') == 'failed' and item.get('draft_id') in draft_ids]
+        if not targets:
+            raise UserFacingError('没有可继续渲染的未完成版本')
+        receipt = _variant_attempt(data, retry, targets[0])
+        for extra in targets[1:]:
+            attempts.inherit_plan(receipt, data, extra)
+            extra['redone_by_attempt'] = receipt['attempt_id']
+        to_prepare = []
+        has_queued = False
+        for item in targets:
+            if item.get('needs_prepare'):
+                prep_id = _start_preparing(data, item)
+                to_prepare.append((item['id'], prep_id))
+            else:
+                item.update(status='queued', render_attempt_id=uuid.uuid4().hex)
+                item.pop('render_dispatch_claimed', None)
+                item.pop('render_dispatch_instance', None)
+                item.pop('render_job_id', None)
+                item.pop('error', None)
+                item.pop('error_code', None)
+                has_queued = True
+        data['generation'].update(status='rendering', attempt_id=receipt['attempt_id'])
+        data['analysis'] = {
+            **store.attempt_identity(data.get('analysis'), data.get('generation')),
+            **_carried_progress(data.get('analysis')),
+            'status': 'running',
+            'phase': 'rendering',
+            'run_id': receipt['run_id'],
+            'message': '正在继续渲染未完成的成片',
+            'instance': store.INSTANCE,
+            'created_at': store.now(),
+        }
+        return receipt['run_id'], to_prepare, has_queued
+
+    run_id, to_prepare, has_queued = store.change(project_id, update)
+    for variant_id, prep_id in to_prepare:
+        _submit_on_demand(project_id, variant_id, prep_id)
+    if has_queued:
+        _dispatch_pending_variants(project_id)
+    latest = store.read(project_id)
+    return run_id, [item for item in latest.get('output_variants', []) if item.get('id') in candidate_ids]
+
+
 def retry_variant(project_id, variant_id, retry=None):
     state = store.read(project_id)
     if retry is not None and attempts.by_key(state, retry.get('key')):

@@ -76,6 +76,14 @@ signal); every HTTP answer (even a 500) is seen. */
       workflow.watch('studio-variant', variantId, pid, undefined, { ...props, ...link }, true, result.variant.render_job_id || result.variant.render_attempt_id || result.variant.preparation_run_id)
       workflow.watchAttempt(pid, result.attempt, props)
     }, { ...workflow.context(pid), retry_kind: 'same' }).then(result => result.variant),
+  retryFailedVariants: (pid: string): Promise<{ analysis_run_id?: string; variants?: OutputVariant[] }> =>
+    observeStudioOperation('studio_variant_retry', () => api.post<unknown, RetryReceipt & { analysis_run_id?: string; variants?: OutputVariant[] }>(`/studio/${pid}/retry`, { scope: 'failed_variants', idempotency_key: retryKey() }), (result, props) => {
+      const link = result.attempt?.retry_of ? { retry_of: result.attempt.retry_of } : {}
+      for (const variant of result.variants || []) {
+        workflow.watch('studio-variant', variant.id, pid, undefined, { ...props, ...link }, true, variant.render_job_id || variant.render_attempt_id || variant.preparation_run_id)
+      }
+      workflow.watchAttempt(pid, result.attempt, props)
+    }, { ...workflow.context(pid), retry_kind: 'same' }),
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
   kitUrl: (path: string) => `${api.defaults.baseURL}${path}`,
   updateExportPost: (pid: string, jobId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/jobs/${jobId}/post`, post), undefined, workflow.context(pid)),

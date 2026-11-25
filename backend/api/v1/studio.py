@@ -687,7 +687,7 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
 class RetryCommand(BaseModel):
     """The one retry command (#419): the backend validates the parent and creates the attempt."""
     model_config = ConfigDict(extra='forbid')
-    scope: Literal['analysis', 'variant', 'project']
+    scope: Literal['analysis', 'variant', 'project', 'failed_variants']
     variant_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     parent_attempt_id: Optional[str] = Field(default=None, pattern=r'^t-[a-z0-9-]{10,100}$')
     idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
@@ -706,6 +706,10 @@ def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get
         variant = call(jobs.retry_variant, project_id, body.variant_id, retry)
         receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
         return {'attempt': attempts.public(receipt) if receipt else None, 'variant': variant}
+    if body.scope == 'failed_variants':
+        run_id, variants = call(jobs.retry_failed_variants, project_id, retry)
+        receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
+        return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None, 'variants': variants}
     config = project.processing_config or {}
     prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else ImportOptions.model_validate(Preferences.model_validate(config.get('creative', {})).model_dump())
     url = None
@@ -715,6 +719,12 @@ def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
+    if url is None and not body.fresh:
+        recovered = call(store.recover, project_id)
+        if jobs.resumable_failed_variants(recovered):
+            run_id, variants = call(jobs.retry_failed_variants, project_id, retry)
+            receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
+            return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None, 'variants': variants}
     run_id = call(jobs.inspect_project, project_id, prefs, url, config.get('creative_browser'), retry=retry)
     receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key)
     return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None}

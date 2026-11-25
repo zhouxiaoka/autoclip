@@ -369,3 +369,167 @@ def test_wave2_download_hls_fallback_and_step1_step2_resilience(tmp_path):
     assert len(items) == 1 and items[0]["outline"] == "Intro"
 
 
+def test_b1_render_checkpoint_resume_preserves_completed_and_skips_llm(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from backend.api.v1 import studio as studio_api
+    from backend.services.studio import attempts, jobs, pipeline_resume, store
+
+    pid = "proj_b1_resume"
+    project_dir = tmp_path / "projects" / pid
+    (project_dir / "raw").mkdir(parents=True)
+    (project_dir / "metadata").mkdir(parents=True)
+    video = project_dir / "raw" / "input.mp4"
+    video.write_bytes(b"mp4")
+
+    monkeypatch.setattr(store, "directory", lambda p: tmp_path / "projects" / p)
+    monkeypatch.setattr(jobs, "source", lambda p: video)
+    monkeypatch.setattr("backend.services.publish_export.find_source_video", lambda p: video)
+    monkeypatch.setattr("backend.core.path_utils.get_project_directory", lambda p: tmp_path / "projects" / p)
+
+    state = {
+        "schema_version": 2,
+        "drafts": [
+            {"id": "d1", "title": "Clip 1", "scenes": [{"id": "s1", "label": "S1", "start": 0.0, "end": 15.0}]},
+            {"id": "d2", "title": "Clip 2", "scenes": [{"id": "s2", "label": "S2", "start": 20.0, "end": 35.0}]},
+            {"id": "d3", "title": "Clip 3", "scenes": [{"id": "s3", "label": "S3", "start": 40.0, "end": 55.0}]},
+        ],
+        "events": [],
+        "jobs": [],
+        "analysis": {
+            "status": "failed",
+            "phase": "rendering",
+            "error_code": "service_restarted",
+            "failure_stage": "render",
+            "run_id": "run-old",
+        },
+        "generation": {
+            "auto_start": True,
+            "status": "partial",
+            "attempt_id": "t-parent000001",
+            "requested_platforms": ["douyin"],
+        },
+        "attempts": [
+            {
+                "attempt_id": "t-parent000001",
+                "flow_id": "f-0001",
+                "sequence": 1,
+                "kind": "generation",
+                "state": "partial",
+                "run_id": "run-old",
+                "plan_id": "plan-1",
+            }
+        ],
+        "output_variants": [
+            {"id": "v1", "draft_id": "d1", "strategy_id": "douyin", "status": "completed", "produced_by_attempt": "t-parent000001", "branding": {}},
+            {"id": "v2", "draft_id": "d2", "strategy_id": "douyin", "status": "failed", "error_code": "service_restarted", "produced_by_attempt": "t-parent000001", "branding": {}},
+            {"id": "v3", "draft_id": "d3", "strategy_id": "douyin", "status": "failed", "error_code": "service_restarted", "produced_by_attempt": "t-parent000001", "branding": {}},
+        ],
+    }
+    store.write(pid, state)
+
+    # resume_point surfaces render checkpoint label
+    rp = pipeline_resume.resume_point_for_project(pid)
+    assert rp == {"point": "render", "label": "继续渲染剩余版本"}
+
+    dispatched = []
+    inspect_called = []
+    monkeypatch.setattr(jobs, "_dispatch_pending_variants", lambda p: dispatched.append(p))
+    monkeypatch.setattr(jobs, "inspect_project", lambda *a, **kw: inspect_called.append((a, kw)) or "inspect-run")
+    monkeypatch.setattr(
+        studio_api,
+        "project_or_404",
+        lambda p, db: SimpleNamespace(id=p, processing_config={"smart_import": {"auto_start": True}}, project_metadata={}),
+    )
+
+    body = studio_api.RetryCommand(scope="project", idempotency_key="retry-render-resume-1")
+    resp = studio_api.retry_command(pid, body, None)
+    assert inspect_called == []
+    assert dispatched == [pid]
+    assert resp["ok"] is True
+    assert resp["attempt"]["retry_of"] == "t-parent000001"
+    after = store.read(pid)
+    by_id = {v["id"]: v for v in after["output_variants"]}
+    assert by_id["v1"]["status"] == "completed"
+    assert by_id["v2"]["status"] == "queued"
+    assert by_id["v3"]["status"] == "queued"
+    assert by_id["v2"]["redone_by_attempt"] == resp["attempt"]["attempt_id"]
+    assert by_id["v3"]["redone_by_attempt"] == resp["attempt"]["attempt_id"]
+
+    # Idempotent replay does not dispatch a second time
+    resp2 = studio_api.retry_command(pid, body, None)
+    assert resp2["attempt"]["attempt_id"] == resp["attempt"]["attempt_id"]
+    assert len(dispatched) == 1
+
+
+def test_b3_success_rate_sql_figure_11_parallel_stability_metric():
+    from pathlib import Path
+    from backend.tests.success_rate_sql import run_sql, statements
+
+    sql_path = Path(__file__).resolve().parents[2] / "docs" / "analytics" / "stability_success_rate.sql"
+    [stmt] = statements(sql_path.read_text(encoding="utf-8"))
+    rows = run_sql(
+        stmt,
+        [
+            (
+                "uuid-1",
+                "studio_generation_finished",
+                "u1",
+                "2026-10-10 01:00:00",
+                {
+                    "attempt_id": "a1",
+                    "flow_id": "f1",
+                    "attempt_sequence": 1,
+                    "outcome": "completed",
+                    "analytics_environment": "production",
+                    "runtime": "desktop",
+                    "app_version": "1.6.1",
+                },
+            ),
+            (
+                "uuid-2",
+                "studio_generation_finished",
+                "u2",
+                "2026-10-10 02:00:00",
+                {
+                    "attempt_id": "a2",
+                    "flow_id": "f2",
+                    "attempt_sequence": 1,
+                    "outcome": "failed",
+                    "error_code": "service_restarted",
+                    "restart_reason": "user_quit",
+                    "analytics_environment": "production",
+                    "runtime": "desktop",
+                    "app_version": "1.6.1",
+                },
+            ),
+            (
+                "uuid-3",
+                "studio_generation_finished",
+                "u3",
+                "2026-10-10 03:00:00",
+                {
+                    "attempt_id": "a3",
+                    "flow_id": "f3",
+                    "attempt_sequence": 1,
+                    "outcome": "failed",
+                    "error_code": "service_restarted",
+                    "restart_reason": "crash",
+                    "analytics_environment": "production",
+                    "runtime": "desktop",
+                    "app_version": "1.6.1",
+                },
+            ),
+        ],
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["ok"] == 1
+    assert row["q_prod"] == 3
+    assert row["q_stability"] == 2
+    assert row["user_quit_restarts"] == 1
+    assert row["product_attempt_rate"] == 0.333
+    assert row["stability_attempt_rate"] == 0.5
+    assert row["product_flow_rate"] == 0.333
+    assert row["stability_flow_rate"] == 0.5
+
+

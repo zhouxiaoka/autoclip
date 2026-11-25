@@ -378,6 +378,21 @@ def resume_point_for_project(project_id: str) -> dict[str, Any] | None:
         video = find_source_video(project_id)
         if video is None:
             return None
+        try:
+            from backend.services.studio import jobs, store
+            state = store.read(project_id)
+            failed_variants = jobs.resumable_failed_variants(state)
+            if failed_variants:
+                completed_any = any(
+                    isinstance(v, dict) and v.get('status') == 'completed'
+                    for v in (state.get('output_variants') or [])
+                )
+                return {
+                    'point': 'render',
+                    'label': '继续渲染剩余版本' if completed_any else '继续渲染未完成版本',
+                }
+        except Exception:  # noqa: BLE001
+            pass
         project_dir = get_project_directory(project_id)
         metadata_dir = project_dir / 'metadata'
         srt = Path(video).parent / 'input.srt'

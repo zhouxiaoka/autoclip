@@ -2462,5 +2462,11 @@
   "editing_style.scroll_prev": "Trước",
   "editing_style.scroll_next": "Sau",
   "查看更新内容": "Xem nội dung cập nhật",
-  "当前有项目正在制作，建议完成后再重启更新。": "Đang có dự án đang xử lý. Bạn nên chờ hoàn tất trước khi khởi động lại để cập nhật."
+  "当前有项目正在制作，建议完成后再重启更新。": "Đang có dự án đang xử lý. Bạn nên chờ hoàn tất trước khi khởi động lại để cập nhật.",
+  "继续渲染未完成版本": "Tiếp tục xuất các bản chưa xong",
+  "继续渲染剩余版本": "Tiếp tục xuất các bản còn lại",
+  "还有 {{count}} 条未完成版本，已完成成片已保留。": "Còn {{count}} bản chưa xuất xong. Các clip đã hoàn thành vẫn được giữ lại.",
+  "上次重启中断的制作": "Bị gián đoạn do khởi động lại",
+  "正在恢复…": "Đang tiếp tục…",
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Video dài hơn 30 phút và cần chép lời cục bộ, có thể mất nhiều thời gian trên máy cấu hình thấp. Hãy thử xử lý 30 phút đầu, hoặc chuyển sang mô hình base / chép lời đám mây trong Cài đặt."
 }

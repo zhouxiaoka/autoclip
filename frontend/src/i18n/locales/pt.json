@@ -2462,5 +2462,11 @@
   "editing_style.scroll_prev": "Anterior",
   "editing_style.scroll_next": "Próximo",
   "查看更新内容": "Ver novidades",
-  "当前有项目正在制作，建议完成后再重启更新。": "Há um projeto em andamento. Aguarde a conclusão antes de reiniciar para atualizar."
+  "当前有项目正在制作，建议完成后再重启更新。": "Há um projeto em andamento. Aguarde a conclusão antes de reiniciar para atualizar.",
+  "继续渲染未完成版本": "Retomar renderizações pendentes",
+  "继续渲染剩余版本": "Retomar renderizações restantes",
+  "还有 {{count}} 条未完成版本，已完成成片已保留。": "Restam {{count}} versões inacabadas. Os clipes concluídos foram mantidos.",
+  "上次重启中断的制作": "Interrompidos por reinicialização",
+  "正在恢复…": "Retomando…",
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Este vídeo tem mais de 30 minutos e exige transcrição local, o que pode demorar em PCs mais simples. Processe apenas os primeiros 30 minutos ou mude para o modelo base / transcrição na nuvem nas Configurações."
 }
