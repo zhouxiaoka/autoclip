@@ -4,6 +4,7 @@ use crate::backend_manager::BackendStatus;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::AutoLaunchManager;
 use tokio::io::AsyncWriteExt;
+use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 pub async fn start_backend_service(app_handle: AppHandle) -> Result<String, String> {
@@ -98,7 +99,7 @@ pub struct SavedDownload {
 }
 
 /// macOS 打包后的页面在 `tauri://localhost`。`<a download>` 会被 WKWebView 取消，
-/// 因为没有注册下载回调。这里只允许把本机后端的文件写到「下载」文件夹。
+/// 因为没有注册下载回调。这里只允许把本机后端的文件写到原生设置选择的目录（默认「下载」）。
 
 #[tauri::command]
 pub async fn hide_to_tray(app_handle: AppHandle) -> Result<(), String> {
@@ -156,9 +157,57 @@ fn validate_reveal_path(raw: &str) -> Result<std::path::PathBuf, String> {
     Ok(path)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportDirectoryState {
+    configured_path: Option<String>,
+    effective_path: String,
+}
+
+fn export_preferences_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_config_dir().map(|dir| dir.join(crate::export_directory::FILE_NAME))
+        .map_err(|_| "export_directory_config_unreadable".to_string())
+}
+
+#[tauri::command]
+pub fn get_export_directory(app: AppHandle) -> Result<ExportDirectoryState, String> {
+    let configured = crate::export_directory::read(&export_preferences_path(&app)?)?;
+    let effective = match &configured {
+        Some(path) => path.clone(),
+        None => app.path().download_dir().map_err(|_| "export_directory_unavailable".to_string())?,
+    };
+    Ok(ExportDirectoryState {
+        configured_path: configured.map(|path| path.to_string_lossy().into_owned()),
+        effective_path: effective.to_string_lossy().into_owned(),
+    })
+}
+
+/// The trusted native picker is the only source of a new destination; web requests still pass only a URL.
+#[tauri::command]
+pub async fn choose_export_directory(app: AppHandle) -> Result<ExportDirectoryState, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |picked| { let _ = sender.send(picked); });
+    let picked = receiver.await.map_err(|_| "export_directory_picker_failed".to_string())?;
+    if let Some(picked) = picked {
+        let directory = picked.into_path().map_err(|_| "export_directory_unavailable".to_string())?;
+        if directory.to_str().is_none() { return Err("export_directory_unavailable".into()); }
+        crate::export_directory::save(&export_preferences_path(&app)?, Some(&directory))?;
+    }
+    get_export_directory(app)
+}
+
+#[tauri::command]
+pub fn reset_export_directory(app: AppHandle) -> Result<ExportDirectoryState, String> {
+    crate::export_directory::save(&export_preferences_path(&app)?, None)?;
+    get_export_directory(app)
+}
+
 #[tauri::command]
 pub async fn save_local_download(app: AppHandle, url: String) -> Result<SavedDownload, String> {
     let parsed = local_http_url(&url)?;
+    let dir = crate::export_directory::destination(&export_preferences_path(&app)?, || {
+        app.path().download_dir().map_err(|_| "export_directory_unavailable".to_string())
+    })?;
     let response = local_client()?
         .get(parsed)
         .send()
@@ -173,8 +222,6 @@ pub async fn save_local_download(app: AppHandle, url: String) -> Result<SavedDow
             .get(reqwest::header::CONTENT_DISPOSITION)
             .and_then(|value| value.to_str().ok()),
     );
-    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     save_response(response, &dir, &filename).await
 }
 
@@ -326,6 +373,7 @@ fn unique_download_path(dir: &Path, filename: &str) -> PathBuf {
 #[cfg(test)]
 mod download_tests {
     use super::{filename_from_disposition, local_client, local_http_url, safe_filename, save_response, unique_download_path};
+    use std::path::Path;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     async fn response_from_fixture(length: usize) -> reqwest::Response {
@@ -392,6 +440,47 @@ mod download_tests {
         assert_eq!(saved.size_bytes, 32 * 8192);
         assert_eq!(std::fs::read(&saved.path).unwrap(), vec![42; 32 * 8192]);
         assert_eq!(std::fs::read(dir.join("kit.zip")).unwrap(), b"previous");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn selected_destination_saves_each_media_kind_and_concurrent_names() {
+        let root = std::env::temp_dir().join(format!("autoclip-custom-export-{}", std::process::id()));
+        let custom = root.join("成片 folder");
+        std::fs::create_dir_all(&custom).unwrap();
+        let config = root.join(crate::export_directory::FILE_NAME);
+        crate::export_directory::save(&config, Some(&custom)).unwrap();
+        let dir = crate::export_directory::destination(&config, || panic!("custom preference must not use Downloads")).unwrap();
+        for name in ["视频.mp4", "cover.png", "kit.zip"] {
+            let saved = save_response(response_from_fixture(32 * 8192).await, &dir, name).await.unwrap();
+            assert_eq!(Path::new(&saved.path).parent().unwrap(), custom);
+            assert_eq!(std::fs::read(&saved.path).unwrap().len(), 32 * 8192);
+        }
+        let first = response_from_fixture(32 * 8192).await;
+        let second = response_from_fixture(32 * 8192).await;
+        let (a, b) = tokio::join!(save_response(first, &dir, "same.mp4"), save_response(second, &dir, "same.mp4"));
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert_ne!(a.path, b.path);
+        assert_eq!(std::fs::read(a.path).unwrap().len(), 32 * 8192);
+        assert_eq!(std::fs::read(b.path).unwrap().len(), 32 * 8192);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn empty_response_leaves_no_partial_file() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            socket.read(&mut request).await.unwrap();
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+        });
+        let response = local_client().unwrap().get(format!("http://{address}/empty")).send().await.unwrap();
+        let dir = std::env::temp_dir().join(format!("autoclip-empty-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(save_response(response, &dir, "empty.mp4").await.is_err());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

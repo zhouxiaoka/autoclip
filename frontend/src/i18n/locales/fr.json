@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "Tout ({{count}})",
   "editing_style.gallery_title": "Choisir un style",
   "editing_style.scroll_prev": "Précédent",
-  "editing_style.scroll_next": "Suivant"
+  "editing_style.scroll_next": "Suivant",
+  "exportFolder.title": "Dossier d’exportation par défaut",
+  "exportFolder.hint": "Change uniquement où les nouveaux fichiers sont enregistrés. Aucun projet, vidéo source ou export existant n’est déplacé.",
+  "exportFolder.browser": "Sur le web, le navigateur contrôle le lieu d’enregistrement.",
+  "exportFolder.choose": "Choisir un dossier",
+  "exportFolder.reset": "Utiliser Téléchargements",
+  "exportFolder.retry": "Relire",
+  "exportFolder.unavailable": "Dossier indisponible. Choisissez-en un autre.",
+  "exportFolder.readError": "Impossible de lire la préférence. Choisissez à nouveau ou réinitialisez-la.",
+  "exportFolder.saveError": "La préférence n’a pas été enregistrée. La précédente est inchangée ; réessayez.",
+  "文件已保存": "File saved"
 }

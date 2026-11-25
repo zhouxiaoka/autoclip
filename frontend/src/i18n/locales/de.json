@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "Alle {{count}}",
   "editing_style.gallery_title": "Schnittstil wählen",
   "editing_style.scroll_prev": "Zurück",
-  "editing_style.scroll_next": "Weiter"
+  "editing_style.scroll_next": "Weiter",
+  "exportFolder.title": "Standard-Exportordner",
+  "exportFolder.hint": "Ändert nur den Speicherort neuer Dateien. Projekte, Quellvideos und vorhandene Exporte werden nicht verschoben.",
+  "exportFolder.browser": "Im Web bestimmt der Browser den Speicherort.",
+  "exportFolder.choose": "Ordner wählen",
+  "exportFolder.reset": "Downloads verwenden",
+  "exportFolder.retry": "Erneut lesen",
+  "exportFolder.unavailable": "Exportordner nicht verfügbar. Bitte neu wählen.",
+  "exportFolder.readError": "Einstellung nicht lesbar. Bitte erneut wählen oder zurücksetzen.",
+  "exportFolder.saveError": "Einstellung nicht gespeichert. Die bisherige bleibt erhalten; bitte erneut versuchen.",
+  "文件已保存": "File saved"
 }

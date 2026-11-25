@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "Tất cả {{count}}",
   "editing_style.gallery_title": "Chọn phong cách dựng",
   "editing_style.scroll_prev": "Trước",
-  "editing_style.scroll_next": "Sau"
+  "editing_style.scroll_next": "Sau",
+  "exportFolder.title": "Thư mục xuất mặc định",
+  "exportFolder.hint": "Chỉ thay đổi nơi lưu tệp mới. Không di chuyển dự án, video gốc hoặc bản xuất hiện có.",
+  "exportFolder.browser": "Trên web, trình duyệt quyết định nơi lưu tệp.",
+  "exportFolder.choose": "Chọn thư mục",
+  "exportFolder.reset": "Dùng thư mục Tải xuống",
+  "exportFolder.retry": "Đọc lại",
+  "exportFolder.unavailable": "Thư mục xuất không khả dụng. Hãy chọn thư mục khác.",
+  "exportFolder.readError": "Không đọc được tùy chọn. Hãy chọn lại hoặc đặt lại.",
+  "exportFolder.saveError": "Tùy chọn chưa được lưu. Thiết lập cũ không thay đổi; hãy thử lại.",
+  "文件已保存": "File saved"
 }

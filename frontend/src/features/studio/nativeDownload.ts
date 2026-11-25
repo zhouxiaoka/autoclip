@@ -4,7 +4,7 @@ export function isDesktopDownload() {
   return typeof window !== 'undefined' && !!((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
 }
 
-/** Save any file the local backend serves (name from its Content-Disposition) to Downloads. */
+/** Save any file the local backend serves (name from its Content-Disposition) to the native export destination. */
 export async function saveLocalFile(path: string): Promise<string> {
   if (!isDesktopDownload()) throw new Error('Desktop runtime required')
   if (!apiConfigManager.isReady() && !await apiConfigManager.waitForReady()) throw new Error('Backend not ready')

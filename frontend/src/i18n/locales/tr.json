@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "Tümü ({{count}})",
   "editing_style.gallery_title": "Kurgu Stili Seç",
   "editing_style.scroll_prev": "Önceki",
-  "editing_style.scroll_next": "Sonraki"
+  "editing_style.scroll_next": "Sonraki",
+  "exportFolder.title": "Varsayılan dışa aktarma klasörü",
+  "exportFolder.hint": "Yalnızca yeni dosyaların kaydedildiği yeri değiştirir. Projeler, kaynak videolar ve mevcut çıktılar taşınmaz.",
+  "exportFolder.browser": "Web’de kayıt konumunu tarayıcı belirler.",
+  "exportFolder.choose": "Klasör seç",
+  "exportFolder.reset": "İndirilenler’i kullan",
+  "exportFolder.retry": "Yeniden oku",
+  "exportFolder.unavailable": "Klasör kullanılamıyor. Başka bir klasör seçin.",
+  "exportFolder.readError": "Tercih okunamıyor. Yeniden seçin veya sıfırlayın.",
+  "exportFolder.saveError": "Tercih kaydedilmedi. Önceki ayar değişmedi; tekrar deneyin.",
+  "文件已保存": "File saved"
 }

@@ -8,6 +8,7 @@ import { diagnosticsApi, settingsApi } from '../services/api'
 import AIModelSettings from '../features/settings/AIModelSettings'
 import OutputBrandingSetting from '../features/settings/OutputBrandingSetting'
 import OutputCaptionsSetting from '../features/settings/OutputCaptionsSetting'
+import ExportDirectorySetting from '../features/settings/ExportDirectorySetting'
 import FeedbackDialog from '../components/FeedbackDialog'
 import PublishSettings from '../components/PublishSettings'
 import { isDesktopMode } from '../utils/desktopMode'
@@ -293,6 +294,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </Row>
         <OutputBrandingSetting />
         <OutputCaptionsSetting />
+        <ExportDirectorySetting desktop={desktop} />
         {(desktop || appUpdate.preview) && (
           <>
             <Row label={t('版本')} hint={versionHint}>

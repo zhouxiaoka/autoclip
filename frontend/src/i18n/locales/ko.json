@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "전체 {{count}}개",
   "editing_style.gallery_title": "편집 스타일 선택",
   "editing_style.scroll_prev": "이전",
-  "editing_style.scroll_next": "다음"
+  "editing_style.scroll_next": "다음",
+  "exportFolder.title": "기본 내보내기 폴더",
+  "exportFolder.hint": "새로 저장하는 파일의 위치만 바꿉니다. 프로젝트, 원본 영상 및 기존 결과물은 이동하지 않습니다.",
+  "exportFolder.browser": "웹에서는 브라우저 설정이 저장 위치를 결정합니다.",
+  "exportFolder.choose": "폴더 선택",
+  "exportFolder.reset": "다운로드 사용",
+  "exportFolder.retry": "다시 읽기",
+  "exportFolder.unavailable": "내보내기 폴더를 사용할 수 없습니다. 다시 선택하세요.",
+  "exportFolder.readError": "내보내기 폴더 설정을 읽을 수 없습니다. 다시 선택하거나 초기화하세요.",
+  "exportFolder.saveError": "설정이 저장되지 않았습니다. 이전 설정은 유지됩니다. 다시 시도하세요.",
+  "文件已保存": "File saved"
 }

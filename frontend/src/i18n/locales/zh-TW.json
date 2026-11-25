@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "全部 {{count}} 款",
   "editing_style.gallery_title": "選擇剪輯風格",
   "editing_style.scroll_prev": "向前翻頁",
-  "editing_style.scroll_next": "向後翻頁"
+  "editing_style.scroll_next": "向後翻頁",
+  "exportFolder.title": "預設匯出資料夾",
+  "exportFolder.hint": "只變更新儲存檔案的位置，不移動專案、原片或既有成片。",
+  "exportFolder.browser": "網頁版的儲存位置由瀏覽器設定決定。",
+  "exportFolder.choose": "選擇資料夾",
+  "exportFolder.reset": "使用下載資料夾",
+  "exportFolder.retry": "重新讀取",
+  "exportFolder.unavailable": "匯出資料夾無法使用，請重新選擇。",
+  "exportFolder.readError": "無法讀取匯出目錄設定，請重新選擇或重設。",
+  "exportFolder.saveError": "匯出目錄設定未儲存，原設定保持不變，請重試。",
+  "文件已保存": "檔案已儲存"
 }

@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "All {{count}}",
   "editing_style.gallery_title": "Choose Editing Style",
   "editing_style.scroll_prev": "Previous",
-  "editing_style.scroll_next": "Next"
+  "editing_style.scroll_next": "Next",
+  "exportFolder.title": "Default export folder",
+  "exportFolder.hint": "Only changes where new files are saved. Projects, source videos and existing exports are not moved.",
+  "exportFolder.browser": "Your browser controls where files are saved on the web.",
+  "exportFolder.choose": "Choose folder",
+  "exportFolder.reset": "Use Downloads",
+  "exportFolder.retry": "Read again",
+  "exportFolder.unavailable": "Export folder unavailable. Choose another folder.",
+  "exportFolder.readError": "Cannot read the export folder preference. Choose again or reset it.",
+  "exportFolder.saveError": "The export folder preference was not saved. The previous setting is unchanged; please retry.",
+  "文件已保存": "File saved"
 }

@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "Semua {{count}}",
   "editing_style.gallery_title": "Pilih Gaya Edit",
   "editing_style.scroll_prev": "Sebelumnya",
-  "editing_style.scroll_next": "Berikutnya"
+  "editing_style.scroll_next": "Berikutnya",
+  "exportFolder.title": "Folder ekspor default",
+  "exportFolder.hint": "Hanya mengubah lokasi file baru. Proyek, video sumber, dan hasil ekspor yang ada tidak dipindahkan.",
+  "exportFolder.browser": "Di web, browser menentukan lokasi penyimpanan.",
+  "exportFolder.choose": "Pilih folder",
+  "exportFolder.reset": "Gunakan Unduhan",
+  "exportFolder.retry": "Baca lagi",
+  "exportFolder.unavailable": "Folder ekspor tidak tersedia. Pilih folder lain.",
+  "exportFolder.readError": "Preferensi tidak dapat dibaca. Pilih lagi atau atur ulang.",
+  "exportFolder.saveError": "Preferensi tidak tersimpan. Pengaturan sebelumnya tidak berubah; coba lagi.",
+  "文件已保存": "File saved"
 }

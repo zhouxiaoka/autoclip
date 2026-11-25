@@ -2460,5 +2460,15 @@
   "editing_style.view_all": "全 {{count}} 件",
   "editing_style.gallery_title": "編集スタイルを選択",
   "editing_style.scroll_prev": "前へ",
-  "editing_style.scroll_next": "次へ"
+  "editing_style.scroll_next": "次へ",
+  "exportFolder.title": "既定の出力フォルダー",
+  "exportFolder.hint": "新しく保存するファイルの場所だけを変更します。プロジェクト、元動画、既存の出力は移動しません。",
+  "exportFolder.browser": "ウェブ版の保存先はブラウザーの設定で決まります。",
+  "exportFolder.choose": "フォルダーを選択",
+  "exportFolder.reset": "ダウンロードを使用",
+  "exportFolder.retry": "再読み込み",
+  "exportFolder.unavailable": "出力フォルダーが利用できません。選択し直してください。",
+  "exportFolder.readError": "出力先の設定を読み込めません。再選択またはリセットしてください。",
+  "exportFolder.saveError": "出力先の設定は保存されていません。以前の設定のままです。再試行してください。",
+  "文件已保存": "File saved"
 }
