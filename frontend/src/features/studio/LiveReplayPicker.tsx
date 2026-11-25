@@ -99,6 +99,7 @@ export default function LiveReplayPicker({ disabled, inline = false, onOpen, onF
     void refresh()
     return () => { active = false; clearTimeout(timer) }
   }, [activePanel, desktop, source])
+  const obsItems = Array.isArray(history?.items) ? history.items : []
   const content = <>
     <Segmented className="replay-sources" value={source} onChange={next => { if (next !== source) { setSelected(undefined); setSource(next) } }} ariaLabel={t('replays.title')} options={
       replayOptions.map(({ value, name, mark }) => ({
@@ -116,8 +117,8 @@ export default function LiveReplayPicker({ disabled, inline = false, onOpen, onF
             ? history.phase : history.connection)) : t('replays.loading')}</p>
           <Btn size="sm" aria-expanded={configure} onClick={() => setConfigure(!configure)}>{t('replays.connection')}</Btn></div>
         {configure && <ObsSettings />}
-        {history && !history.items.length && !loadError && <p className="studio-muted">{t('replays.empty')}</p>}
-        {history?.items.map(item => {
+        {history && !obsItems.length && !loadError && <p className="studio-muted">{t('replays.empty')}</p>}
+        {obsItems.map(item => {
           const title = 'OBS · ' + new Date(item.saved_at * 1000).toLocaleString(getLocale())
           return <div className="studio-source-row" key={item.id}>
             <div><b>{title}</b>

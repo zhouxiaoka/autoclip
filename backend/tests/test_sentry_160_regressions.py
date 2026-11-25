@@ -132,3 +132,16 @@ def test_python_fastapi_r_parse_srt_falls_back_to_gb18030_without_bom(tmp_path):
     items = TextProcessor.parse_srt(srt)
     assert len(items) == 1
     assert items[0]["text"] == "你好世界，测试字幕。"
+
+
+def test_python_fastapi_7h_chained_dpapi_oserror_under_cookie_load_error_is_recognized():
+    """PYTHON-FASTAPI-7H: DPAPI failure message on inner OSError chained under CookieLoadError/DownloadError."""
+    import yt_dlp
+    from yt_dlp.cookies import CookieLoadError
+    from backend.utils.download_recovery import _browser_cookie_permission_failure
+
+    inner = OSError("Failed to decrypt with DPAPI")
+    mid = CookieLoadError("Failed to load cookies")
+    mid.__cause__ = inner
+    outer = yt_dlp.utils.DownloadError("ERROR: cookie load failed", exc_info=(CookieLoadError, mid, None))
+    assert _browser_cookie_permission_failure(outer) is True
