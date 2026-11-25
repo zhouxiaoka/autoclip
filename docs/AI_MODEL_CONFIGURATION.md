@@ -15,6 +15,10 @@
 
 ## 持久化与兼容
 
+### OpenDesign Go 可选预设
+
+在 **设置 → 服务商与模型** 的「更多」分组（或直接搜索 `OpenDesign Go`）中可选择 **OpenDesign Go** 预设。该预设采用 OpenAI Chat Completions 兼容协议，已预置接口地址 `https://amr-link.open-design.ai/v1`，用户只需在 [OpenDesign Go](https://go.open-design.ai/) 订阅并参考 [OpenDesign Cloud API 文档](https://open-design.ai/help/cloud-api/) 创建工作区 API Key 后粘贴保存，即可通过 `/v1/models` 发现可用模型（默认优先推荐 `deepseek-v4.1-flash` 用于文本分析；视觉与生图请按实际账号权限选择对应模型）。
+
 新配置保存在数据目录的 `ai-model-settings.json`，包括 connections、analysis、vision、cover、分析偏好和切片参数。连接有 `base_url_source`，用途绑定有 `model_source`（`preset` 或 `user`）。旧文件已填的模型记为 `user`；迁不了的用途保留密钥并回到该预置的推荐默认，设置页提示一次。预设表更新只影响新连接，已保存的地址和模型不改写。保存前整体校验，通过临时文件和原子替换一次写入，密钥不返回到前端。API 进程和 worker 在下次调用时读取新配置。
 
 第一次打开页面时，读取原 settings.json、vision-settings.json、cover.json 及其环境变量生成草稿；只有保存时才启用新格式。原文件保留。新格式存在后具有优先级；旧文件及环境变量的更改不覆盖已保存的新配置。独立视觉接口、独立封面接口和显式 OCR 型号均保留。

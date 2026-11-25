@@ -2460,5 +2460,7 @@
   "editing_style.view_all": "Tất cả {{count}}",
   "editing_style.gallery_title": "Chọn phong cách dựng",
   "editing_style.scroll_prev": "Trước",
-  "editing_style.scroll_next": "Sau"
+  "editing_style.scroll_next": "Sau",
+  "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。": "OpenDesign Go. API tương thích OpenAI với địa chỉ được cấu hình sẵn.",
+  "OpenDesign Go": "OpenDesign Go"
 }

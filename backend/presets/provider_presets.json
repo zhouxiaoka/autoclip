@@ -42,7 +42,11 @@
     "whisper_local": "whisper",
     "sensevoice_local": "sensevoice",
     "google": "gemini",
-    "azure-openai-responses": "azure-openai"
+    "azure-openai-responses": "azure-openai",
+    "opendesign": "opendesign-go",
+    "opendesign_go": "opendesign-go",
+    "amr-link.open-design.ai": "opendesign-go",
+    "go.open-design.ai": "opendesign-go"
   },
   "providers": {
     "apimart": {
@@ -1343,6 +1347,34 @@
       "accepted_hosts": [
         "ark.ap-southeast.bytepluses.com",
         "bytepluses.com"
+      ],
+      "capabilities": [
+        "language"
+      ]
+    },
+    "opendesign-go": {
+      "display_name": "OpenDesign Go",
+      "short_name": "OpenDesign Go",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://amr-link.open-design.ai/v1",
+      "docs_url": "https://open-design.ai/help/cloud-api/",
+      "api_key_setting": "opendesign_go_api_key",
+      "placeholder": "sk-…",
+      "hint": "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [
+          "deepseek-v4.1-flash"
+        ],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "accepted_hosts": [
+        "amr-link.open-design.ai"
       ],
       "capabilities": [
         "language"

@@ -2460,5 +2460,7 @@
   "editing_style.view_all": "全部 {{count}} 款",
   "editing_style.gallery_title": "选择剪辑风格",
   "editing_style.scroll_prev": "向前翻页",
-  "editing_style.scroll_next": "向后翻页"
+  "editing_style.scroll_next": "向后翻页",
+  "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。": "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。",
+  "OpenDesign Go": "OpenDesign Go"
 }

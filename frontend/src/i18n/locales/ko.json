@@ -2460,5 +2460,7 @@
   "editing_style.view_all": "전체 {{count}}개",
   "editing_style.gallery_title": "편집 스타일 선택",
   "editing_style.scroll_prev": "이전",
-  "editing_style.scroll_next": "다음"
+  "editing_style.scroll_next": "다음",
+  "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。": "OpenDesign Go. 엔드포인트가 미리 설정된 OpenAI 호환 API.",
+  "OpenDesign Go": "OpenDesign Go"
 }

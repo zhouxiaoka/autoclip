@@ -2460,5 +2460,7 @@
   "editing_style.view_all": "Semua {{count}}",
   "editing_style.gallery_title": "Pilih Gaya Edit",
   "editing_style.scroll_prev": "Sebelumnya",
-  "editing_style.scroll_next": "Berikutnya"
+  "editing_style.scroll_next": "Berikutnya",
+  "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。": "OpenDesign Go. API kompatibel OpenAI dengan endpoint yang sudah dikonfigurasi.",
+  "OpenDesign Go": "OpenDesign Go"
 }

@@ -41,16 +41,20 @@ def test_catalog_has_forty_grouped_providers():
     assert catalog.schema_version == 1
     assert catalog.version >= 1
     assert catalog.path == CATALOG_PATH
-    assert len(catalog.providers) == 43
+    assert len(catalog.providers) == 44
     groups = {}
     for item in catalog.providers.values():
         groups[item.group] = groups.get(item.group, 0) + 1
-    assert groups == {"recommended": 1, "popular": 14, "local": 4, "more": 24}
+    assert groups == {"recommended": 1, "popular": 14, "local": 4, "more": 25}
     assert set(catalog.providers) >= {
         "api88", "infistar", "apimart", "deepseek", "dashscope", "siliconflow", "seed", "glm",
         "kimi", "minimax-cn", "xiaomi", "openai", "gemini", "whisper", "sensevoice",
-        "ollama", "lmstudio", "openrouter", "anthropic", "grok", "qianfan", "hunyuan",
+        "ollama", "lmstudio", "openrouter", "anthropic", "grok", "qianfan", "hunyuan", "opendesign-go",
     }
+    od = catalog.providers["opendesign-go"]
+    assert od.base_url == "https://amr-link.open-design.ai/v1"
+    assert od.protocol == "openai-completions"
+    assert od.candidates["analysis"] == ("deepseek-v4.1-flash",)
 
 
 def test_existing_product_defaults_are_preserved():

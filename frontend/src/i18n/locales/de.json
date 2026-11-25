@@ -2460,5 +2460,7 @@
   "editing_style.view_all": "Alle {{count}}",
   "editing_style.gallery_title": "Schnittstil wählen",
   "editing_style.scroll_prev": "Zurück",
-  "editing_style.scroll_next": "Weiter"
+  "editing_style.scroll_next": "Weiter",
+  "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。": "OpenDesign Go. OpenAI-kompatible API mit vorkonfiguriertem Endpunkt.",
+  "OpenDesign Go": "OpenDesign Go"
 }

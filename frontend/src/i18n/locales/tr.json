@@ -2460,5 +2460,7 @@
   "editing_style.view_all": "Tümü ({{count}})",
   "editing_style.gallery_title": "Kurgu Stili Seç",
   "editing_style.scroll_prev": "Önceki",
-  "editing_style.scroll_next": "Sonraki"
+  "editing_style.scroll_next": "Sonraki",
+  "OpenDesign Go。OpenAI 兼容接口，接口地址已预设。": "OpenDesign Go. Ön yapılandırılmış uç noktalı OpenAI uyumlu API.",
+  "OpenDesign Go": "OpenDesign Go"
 }
