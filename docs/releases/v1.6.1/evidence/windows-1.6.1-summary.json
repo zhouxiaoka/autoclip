@@ -1,0 +1,77 @@
+{
+  "version": "1.6.1",
+  "platform": "windows-x64",
+  "commit": "55f39be5cc9780e5ac57521fb71ee12f3e008ded",
+  "build_run_id": 45551675724,
+  "package": {
+    "name": "AutoClip Desktop_1.6.1_x64-setup.exe",
+    "sha256": "bc8ce8d04ed9a4efe6d613da4ffad0091b7d240829fe03780e6193f74b80af1e",
+    "bytes": 208487011
+  },
+  "installed_binary_sha256": "1b7a4be19e9ca11093f9e3918becd0e4998be0d02c1d91ac76eb268d81608e90",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:24:28Z",
+      "summary": "NSIS x64 installer (208 MB) verified and installed on Windows Server 2025 x64; shipped portable Python 3.13 booted against isolated empty data dir with health=200 version=1.6.1, projects=0, autoclip.db initialized, 5 templates loaded."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:24:29Z",
+      "summary": "Isolated loopback mock verified HTTP 401 -> HTTP 429 -> HTTP 200 recovery cleanly ({'step1_401_ok': False, 'step2_429_ok': False, 'step3_200_ok': True})."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:24:32Z",
+      "summary": "Isolated clean install persisted crash_reports=false and analytics=false across shipped backend restart."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:24:38Z",
+      "summary": "Isolated copy of existing autoclip.db (20 projects) and ai-model-settings.json (4 connections) loaded cleanly under Windows 1.6.1 bundle."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:24:38Z",
+      "summary": "Saved provider connections (api88, compatible, dashscope) persisted across 1.6.1 upgrade; custom_headers masking and 401->429->200 loopback probe passed."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:25:46Z",
+      "summary": "Real local 25s MP4 + SRT completed in 65.6s on Windows x64 1.6.1; rendered 26.92s MP4 (6,559,213 bytes, h264+aac, 0 decode errors)."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:26:19Z",
+      "summary": "OutputVariant AI cover regeneration with allow_reference_once=True completed on attempt 1 in 33.2s on Windows x64 1.6.1 (status=completed)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:27:12Z",
+      "summary": "Real local 25s MP4 without SRT transcribed and rendered 26.92s MP4 (6,616,904 bytes, h264+aac, 0 decode errors) in 51.4s on Windows x64 1.6.1."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:27:12Z",
+      "summary": "All 2 rendered MP4 outputs verified via bundled ffprobe.exe (h264+aac) and full-file ffmpeg.exe null decode with 0 errors.",
+      "outputs": [
+        {
+          "case": "local_with_subtitles",
+          "bytes": 6559213,
+          "duration_sec": 26.92,
+          "video": "h264",
+          "audio": "aac",
+          "decode_errors": 0
+        },
+        {
+          "case": "local_without_subtitles",
+          "bytes": 6616904,
+          "duration_sec": 26.92,
+          "video": "h264",
+          "audio": "aac",
+          "decode_errors": 0
+        }
+      ]
+    }
+  }
+}

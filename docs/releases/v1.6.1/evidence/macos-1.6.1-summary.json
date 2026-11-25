@@ -1,0 +1,90 @@
+{
+  "version": "1.6.1",
+  "platform": "macos-arm64",
+  "commit": "55f39be5cc9780e5ac57521fb71ee12f3e008ded",
+  "build_run_id": 45551675724,
+  "package": {
+    "name": "AutoClip Desktop_1.6.1_aarch64.dmg",
+    "sha256": "70c7115bee73d2db9a2f930b69443ef4df142e460e69670882f817ff80eafdd0",
+    "bytes": 340295679
+  },
+  "installed_binary_sha256": "55ac11cf0b76c006c644c16b5cacd5f2e0104f9e7e0e5246feee21177d87426f",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:18:28Z",
+      "summary": "DMG (334 MB) verified and extracted on macOS 26.6.2 arm64; shipped portable Python 3.13.13 booted against isolated empty data dir with health=200 version=1.6.1, projects=0, autoclip.db initialized, 5 templates loaded."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:18:29Z",
+      "summary": "Isolated loopback mock verified HTTP 401 -> HTTP 429 -> HTTP 200 recovery cleanly ({'step1_401_ok': False, 'step2_429_ok': False, 'step3_200_ok': True})."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:18:35Z",
+      "summary": "Isolated clean install persisted crash_reports=false and analytics=false across shipped backend restart."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:18:42Z",
+      "summary": "Isolated copy of existing autoclip.db (11 projects) and ai-model-settings.json (1 provider connections) loaded cleanly under shipped 1.6.1 bundle."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:18:42Z",
+      "summary": "Saved provider connections (dashscope) and role bindings persisted across 1.6.1 upgrade; custom_headers masking and 401->429->200 loopback probe passed."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:20:02Z",
+      "summary": "Real local 25s MP4 + SRT completed in 80.0s via shipped 1.6.1 bundle; rendered 15.59s MP4 (2,731,172 bytes, h264+aac, 0 decode errors)."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:20:11Z",
+      "summary": "OutputVariant AI cover regeneration with allow_reference_once=True completed in 9.1s (status=completed)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:21:00Z",
+      "summary": "Real local 25s MP4 without SRT transcribed and rendered 23.25s MP4 (3,953,717 bytes, h264+aac, 0 decode errors) in 48.3s."
+    },
+    "link_import": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:22:24Z",
+      "summary": "Real public YouTube link (Me at the zoo, 19s) downloaded via bundled yt-dlp, transcribed, and rendered 19.59s MP4 (3,799,547 bytes, h264+aac, 0 decode errors) in 84.4s."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-25T06:22:24Z",
+      "summary": "All 3 rendered MP4 outputs verified via bundled ffprobe 9.0.2 (h264+aac) and full-file ffmpeg null decode with 0 errors.",
+      "outputs": [
+        {
+          "case": "local_with_subtitles",
+          "bytes": 2731172,
+          "duration_sec": 15.59,
+          "video": "h264",
+          "audio": "aac",
+          "decode_errors": 0
+        },
+        {
+          "case": "local_without_subtitles",
+          "bytes": 3953717,
+          "duration_sec": 23.25,
+          "video": "h264",
+          "audio": "aac",
+          "decode_errors": 0
+        },
+        {
+          "case": "link_import",
+          "bytes": 3799547,
+          "duration_sec": 19.59,
+          "video": "h264",
+          "audio": "aac",
+          "decode_errors": 0
+        }
+      ]
+    }
+  }
+}

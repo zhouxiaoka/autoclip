@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "commit": "55f39be5cc9780e5ac57521fb71ee12f3e008ded",
+  "build_run_id": 45551675724,
+  "assets": {
+    "AutoClip Desktop_1.6.1_aarch64.dmg": "70c7115bee73d2db9a2f930b69443ef4df142e460e69670882f817ff80eafdd0",
+    "AutoClip Desktop_1.6.1_x64-setup.exe": "bc8ce8d04ed9a4efe6d613da4ffad0091b7d240829fe03780e6193f74b80af1e",
+    "AutoClip Desktop_1.6.1_x64-setup.exe.sig": "85c058838154451c632278504ecc137993d8d1e6ddbb94ef50726587e8036b28",
+    "AutoClip.Desktop_1.6.1_aarch64.app.tar.gz": "71690bd098c5b8ffbc448c19c5b4a994e24bd5ab6f3aa396196f13fd4cdb6fba",
+    "AutoClip.Desktop_1.6.1_aarch64.app.tar.gz.sig": "5cd8e678ac8a2d21c849aadafda72514a6e219ff71c43afa4ba57d7a53711d83",
+    "internal-build-provenance.json": "116d84756a60a958d61bf356796c6116cdf23c792412869a9e667825b08250f8"
+  },
+  "platforms": [
+    "macos-arm64"
+  ],
+  "label": "macos-arm64/output_delivery",
+  "completed_at": "2026-11-25T06:22:24Z",
+  "assertions": [
+    "macos-arm64-output_delivery:passed"
+  ],
+  "build": {
+    "path": "evidence/origin-build-45551675724.json",
+    "sha256": "f13d1460783a9aff258eb09ba9f0ef911f86ab9000a468778fdab1dc03ae2dd8"
+  },
+  "provenance": {
+    "path": "evidence/origin-provenance-45551675724.json",
+    "sha256": "719a2c1a5cb88f037972f03a00989407602556cca2dffa299c4059fda705959e"
+  },
+  "evidence": {
+    "path": "evidence/macos-1.6.1-summary.json",
+    "sha256": "6e38b0d277a16d02313eb3fb2062bc8f099ca7eee0e089c5b28c8a6778973d41"
+  }
+}
