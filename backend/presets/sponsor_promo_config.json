@@ -1,10 +1,16 @@
 {
   "enabled": true,
   "url": "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json",
+  "fallback_urls": [
+    "https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/sponsor-promo.json"
+  ],
   "v2_url": "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo-v2.json",
+  "v2_fallback_urls": [
+    "https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/sponsor-promo-v2.json"
+  ],
   "public_key": "VgEhoRZJe4tH1p8jrKBitKKcB4J1NWuCMXKziwMk0pQ=",
   "min_sequence": 1,
   "max_bytes": 65536,
-  "timeout_seconds": 4,
+  "timeout_seconds": 3,
   "refresh_seconds": 21600
 }

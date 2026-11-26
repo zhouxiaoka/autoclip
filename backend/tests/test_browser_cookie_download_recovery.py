@@ -31,7 +31,7 @@ def test_locked_browser_retries_public_video_without_cookie_access(monkeypatch, 
     assert module.download_with_recovery(url, options) == 0
     assert len(calls) == 2
     assert 'cookiesfrombrowser' not in calls[1]
-    assert calls[1]['continuedl'] is True and calls[1]['fragment_retries'] == 2
+    assert calls[1]['continuedl'] is True and calls[1]['fragment_retries'] == 5
     assert options['cookiesfrombrowser'] == ('chrome',)
 
 

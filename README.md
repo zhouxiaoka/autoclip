@@ -8,7 +8,7 @@
 
 ### Turn any video, link, or live stream into ready-to-post clips.
 
-Open-source, local-first AI clipping for **podcasts, interviews, and gaming streams** — with smart reframing, captions, covers, and titles built in.
+**The open-source OpusClip alternative** — local-first AI clipping for **podcasts, interviews, and gaming streams** with smart reframing, captions, covers, titles, and built-in **MCP for AI agents**. Zero subscriptions, no paywall.
 
 <br>
 
@@ -22,9 +22,12 @@ Open-source, local-first AI clipping for **podcasts, interviews, and gaming stre
 
 <br>
 
+<!-- hero-cta:start -->
 <p>
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/"><img src="docs/images/download-button.svg" alt="Download AutoClip" width="248" height="55"></a>&nbsp;&nbsp;
   <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 </p>
+<!-- hero-cta:end -->
 
 <br>
 
@@ -53,6 +56,22 @@ Open-source, local-first AI clipping for **podcasts, interviews, and gaming stre
 <p>
   ⭐ <em>Free, MIT-licensed, zero subscriptions — everything cuts and renders on your machine. Star the repo if you find it useful!</em>
 </p>
+
+<!-- top-sponsors:start -->
+<table width="100%">
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="docs/sponsors/apimart.png" alt="APIMart" width="64"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a><br>
+      <sub>Low-cost AI image &amp; video API · GPT-Image-2 from $0.006/img</sub>
+    </td>
+    <td align="center" width="50%">
+      <a href="mailto:christine_zhouye@163.com?subject=AutoClip%20Sponsor%20%2F%20Provider%20Partnership"><strong>Sponsor / Partner with AutoClip</strong></a><br>
+      <sub>Put your AI API or creator tool in front of AutoClip users worldwide (cloud dynamic provider listing supported, zero client release needed).<br><a href="mailto:christine_zhouye@163.com">christine_zhouye@163.com</a></sub>
+    </td>
+  </tr>
+</table>
+<!-- top-sponsors:end -->
 
 </div>
 
@@ -264,9 +283,11 @@ Browse 16+ clips, covers, and post copy in the **[Showcase →](https://zhouxiao
 2. Open **Settings**, pick a cloud provider (or start Ollama / LM Studio), test the connection, and save — or click **Try the built-in example** with no API key.
 3. Paste a video link, drop a file, or switch to **Live Replay** to connect OBS or import a stream recording. Pick your platforms and click **Generate**.
 
-> Installers are built publicly on GitHub Actions (`Desktop Build`) with `build-provenance.json` SHA-256 verification. Code signing and Apple notarization are tracked in [#119](https://github.com/zhouxiaoka/autoclip/issues/119).
+> Installers are built publicly on GitHub Actions (`Desktop Build`) with `build-provenance.json` SHA-256 verification. First launch on an unsigned build: on **macOS** run `xattr -dr com.apple.quarantine "/Applications/AutoClip Desktop.app"` (or *System Settings → Privacy &amp; Security → Open Anyway*); on **Windows** click **More info → Run anyway** on SmartScreen. See **[Code Signing &amp; Verification Policy](CODE_SIGNING.md)** (notarization tracked in [#119](https://github.com/zhouxiaoka/autoclip/issues/119)).
 
-### 2. CLI &amp; MCP (Claude Code, Codex, OpenCode &amp; scripts)
+### 2. CLI &amp; MCP (Claude Code, Cursor, Codex, OpenCode &amp; scripts)
+
+Let AI coding agents clip videos directly from your terminal (`claude mcp add autoclip -- uvx autoclip-mcp`). Full MCP setup guides: **[English](docs/MCP.en.md)** · [简体中文](docs/CLI_AND_MCP.md) · [日本語](docs/MCP.ja.md) · [한국어](docs/MCP.ko.md) · [Español](docs/MCP.es.md) · [Deutsch](docs/MCP.de.md).
 
 ```bash
 uvx autoclip-mcp
@@ -384,11 +405,11 @@ Check the failed stage: subtitles/transcription, model connection, FFmpeg, disk 
 | Topic | Guide |
 | :--- | :--- |
 | Install &amp; first clips | [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
-| Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [CLI &amp; MCP](docs/CLI_AND_MCP.md) (ZH) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
+| Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [MCP &amp; AI Agents](docs/MCP.en.md) ([ZH](docs/CLI_AND_MCP.md) · [JA](docs/MCP.ja.md) · [KO](docs/MCP.ko.md) · [ES](docs/MCP.es.md) · [DE](docs/MCP.de.md)) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
 | Models &amp; troubleshooting | [Multi-LLM Setup](docs/MULTI_LLM_PROVIDER_GUIDE.md) (ZH) · [FAQ](docs/FAQ.en.md) |
-| Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |
+| Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Code Signing](CODE_SIGNING.md) · [Roadmap](docs/ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |
 | Research | [Pick the Moment, Not the Effect](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
-| Contributing &amp; i18n | [Contributing](CONTRIBUTING.md) (ZH) · [Translation Guide](docs/i18n.md) (ZH) |
+| Contributing &amp; i18n | [Contributing](CONTRIBUTING.md) (ZH) · [Translating AutoClip](TRANSLATING.md) · [Translation Guide](docs/i18n.md) (ZH) |
 
 ## Contribute
 

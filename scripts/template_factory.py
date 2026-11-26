@@ -14,8 +14,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
+import urllib.error
+import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -344,6 +347,94 @@ def cmd_build_catalog(args: argparse.Namespace) -> int:
     return 0
 
 
+def build_ingest_payload(
+    entry: dict,
+    *,
+    target_region: str = 'global',
+    auto_publish: bool = False,
+    badge: str | None = None,
+) -> dict:
+    """Build an AutoClip Admin ``POST /templates/ingest`` request body from a catalog entry."""
+    name_raw = entry.get('name') or {}
+    desc_raw = entry.get('desc') or {}
+    payload: dict = {
+        'id': entry['id'],
+        'version': entry['version'],
+        'name': {
+            'en': name_raw.get('en') or entry['id'],
+            'zh': name_raw.get('zh') or name_raw.get('en') or entry['id'],
+        },
+        'desc': {
+            'en': desc_raw.get('en') or '',
+            'zh': desc_raw.get('zh') or desc_raw.get('en') or '',
+        },
+        'category': entry.get('category') or 'general',
+        'badge': badge if badge is not None else entry.get('badge'),
+        'target_region': target_region,
+        'tags': entry.get('tags') or [],
+        'min_app_version': entry.get('min_app_version') or '1.6.1',
+        'sha256': entry['sha256'],
+        'size_bytes': int(entry.get('size_bytes') or 0),
+        'download_url': entry['download_url'],
+        'poster_url': entry.get('poster_url'),
+        'preview_mp4_url': entry.get('preview_mp4_url'),
+        'preview_webm_url': entry.get('preview_webm_url'),
+        'auto_publish': bool(auto_publish),
+    }
+    return payload
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    catalog_path = Path(args.catalog).resolve()
+    raw = json.loads(catalog_path.read_text(encoding='utf-8'))
+    templates = raw.get('templates') if isinstance(raw, dict) else None
+    if not isinstance(templates, list):
+        raise SystemExit(f'Invalid catalog.json (missing templates list): {catalog_path}')
+
+    only_ids = {s.strip() for s in (args.only or '').split(',') if s.strip()}
+    selected = [entry for entry in templates if not only_ids or entry.get('id') in only_ids]
+    if not selected:
+        raise SystemExit('No matching templates to ingest')
+
+    admin_url = (args.admin_url or os.getenv('AUTOCLIP_ADMIN_URL') or 'http://127.0.0.1:8765').rstrip('/')
+    endpoint = f'{admin_url}/templates/ingest'
+    token = (args.token or os.getenv('AUTOCLIP_ADMIN_BOT_TOKEN') or '').strip()
+    if not args.dry_run and not token:
+        raise SystemExit('Missing AUTOCLIP_ADMIN_BOT_TOKEN (pass --token or set env var)')
+
+    for entry in selected:
+        payload = build_ingest_payload(
+            entry,
+            target_region=args.target_region,
+            auto_publish=args.auto_publish,
+            badge=args.badge or None,
+        )
+        if args.dry_run:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            continue
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        req = urllib.request.Request(
+            endpoint,
+            data=body,
+            method='POST',
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {token}',
+                'User-Agent': 'AutoClip-TemplateFactory/1.0',
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp_text = resp.read().decode('utf-8', errors='replace')[:200]
+                print(f'INGESTED {payload["id"]} v{payload["version"]} -> HTTP {resp.status} ({resp_text})')
+        except urllib.error.HTTPError as err:
+            detail = err.read().decode('utf-8', errors='replace')[:300]
+            raise SystemExit(f'Ingest failed for {payload["id"]}: HTTP {err.code} {detail}') from None
+        except urllib.error.URLError as err:
+            raise SystemExit(f'Ingest connection failed ({endpoint}): {err.reason}') from None
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='AutoClip automated template factory')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -372,6 +463,17 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument('--base-url', required=True, help='Release download base URL')
     c.add_argument('--out', required=True, help='Output catalog.json path')
     c.set_defaults(func=cmd_build_catalog)
+
+    ig = sub.add_parser('ingest', help='Push built catalog.json entries into AutoClip Admin (/templates/ingest)')
+    ig.add_argument('catalog', help='Path to built catalog.json')
+    ig.add_argument('--admin-url', default='', help='Admin base URL (default: AUTOCLIP_ADMIN_URL or http://127.0.0.1:8765)')
+    ig.add_argument('--token', default='', help='Admin bot bearer token (default: AUTOCLIP_ADMIN_BOT_TOKEN)')
+    ig.add_argument('--target-region', choices=['global', 'zh', 'overseas'], default='global')
+    ig.add_argument('--badge', default='', help='Optional badge override (e.g. new, hot, beta)')
+    ig.add_argument('--auto-publish', action='store_true', help='Publish immediately instead of creating a draft')
+    ig.add_argument('--only', default='', help='Comma-separated template IDs to ingest (default: all)')
+    ig.add_argument('--dry-run', action='store_true', help='Print ingest JSON payloads without sending HTTP requests')
+    ig.set_defaults(func=cmd_ingest)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

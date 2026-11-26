@@ -9,6 +9,38 @@
 
 _（本周尚无改动）_
 
+## [1.6.2] - 2026-11-26
+
+### 要点
+
+#### 中文
+- 新增 3 款短视频包装模板，并支持模板卡片悬停动态预览
+- 渲染中断或部分失败时支持一键续渲剩余版本，保留已完成成片、无需重跑分析
+- 新增 30 分钟以上长视频本地转写提醒与「只处理前 30 分钟」快捷选项
+- 优化 Gemini、DeepSeek、百炼与本地 Ollama 的模型兼容性与解析稳定性，显著提升出片成功率
+- 更新提示默认折叠展示完整更新条目，并修复多处下载重试、Windows 文件占用与界面异常
+
+#### English
+- Added 3 new short-video templates with animated hover previews on template cards
+- Added one-click resume for interrupted or partially failed renders while keeping completed clips
+- Added local transcription tips and a quick "First 30 minutes only" option for videos over 30 minutes
+- Improved Gemini, DeepSeek, Bailian, and local Ollama reliability and parsing to raise clip success rates
+- Collapsed update notes by default with full bullet lists, and fixed download retries, Windows file locks, and UI errors
+
+### 新增
+
+- 模板库新增 `highlight_note`、`meme_setup`、`clean_pill` 3 款短视频包装模板，模板卡片支持悬停动态视频预览，并支持内置与云端模板统一混排展示。
+- 支持渲染断点续跑与局部续渲：应用重启中断或部分版本失败时，首页置顶「上次重启中断的制作」一键续跑入口，详情页新增「继续渲染未完成版本」，直接续渲剩余片段并保留已完成成片。
+- 链接与本地文件导入新增 30 分钟以上长视频本地转写防超时提醒，支持一键「只处理前 30 分钟」。
+- 应用内更新弹窗默认折叠更新说明，展开后按条目完整展示并自动匹配当前界面语言；制作进行中安装更新会给出中断提醒。
+- 服务商额度不足时在详情页与设置页提供直达余额/充值的快捷入口。
+
+### 修复与改进
+
+- 优化 Gemini、DeepSeek、百炼与本地 Ollama 的模型调用与解析稳定性：更新 Gemini 默认模型并在遇到已下线预设时自动回退、修复原生端点路径问题、默认关闭结构化步骤不必要思考、放行英文素材原语种标题、放宽本地模型任务预算与小模型 JSON/思考块容错。
+- 改进转写与下载恢复：链接预览前置检查本地转写就绪状态、空转写（含游戏解说素材）支持自动回退视觉高光出片、修复百炼云端转写带尾斜杠地址报错、提升视频下载重试与 YouTube HLS 片段失败回退能力、增强 Whisper 模型下载网络抖动重试并放宽常见视频格式导入。
+- 修复 Windows 场景下成片落盘、HTML 模板叠层、临时音频清理与示例项目复制的文件占用和磁盘空间提示问题，并修复模板预览、设置离开拦截、OBS 设置与数据库并发锁等多处异常。
+
 ## [1.6.1] - 2026-11-25
 
 ### 新增
@@ -753,7 +785,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.1...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.2...HEAD
+- [1.6.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.1...v1.6.2
 - [1.6.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.0...v1.6.1
 - [1.6.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.9...v1.6.0
 - [1.5.9]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.8...v1.5.9

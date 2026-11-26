@@ -294,7 +294,7 @@ class TimelineExtractor:
             # Compatible endpoints sometimes retain the input envelope or omit
             # the array around one topic. Accept only unambiguous known shapes.
             if isinstance(parsed_response, dict):
-                arrays = [parsed_response[key] for key in ("timeline", "outline")
+                arrays = [parsed_response[key] for key in ("timeline", "outline", "clips", "segments", "topics", "items")
                           if isinstance(parsed_response.get(key), list)]
                 if len(arrays) == 1:
                     parsed_response = arrays[0]
@@ -318,6 +318,10 @@ class TimelineExtractor:
                 # Some models preserve the input title instead of renaming it.
                 if 'outline' not in timeline_item and isinstance(timeline_item.get('title'), str):
                     timeline_item['outline'] = timeline_item['title']
+                if 'start_time' not in timeline_item and 'start' in timeline_item:
+                    timeline_item['start_time'] = timeline_item['start']
+                if 'end_time' not in timeline_item and 'end' in timeline_item:
+                    timeline_item['end_time'] = timeline_item['end']
                 if 'outline' not in timeline_item or 'start_time' not in timeline_item or 'end_time' not in timeline_item:
                     reasons["missing_fields"] += 1
                     logger.warning("  > LLM返回的JSON对象格式不正确")

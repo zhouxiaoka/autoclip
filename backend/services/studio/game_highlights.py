@@ -951,11 +951,15 @@ def _commentary_rows(path, duration):
 
 
 def subtitle_drafts(video, prefs, duration, instruction="", *, auto_frame_review=False, selection_log=None):
-    from backend.utils.speech_recognizer import generate_subtitle_for_video
+    from backend.pipeline.failures import failure_from_speech_error
+    from backend.utils.speech_recognizer import SpeechRecognitionError, generate_subtitle_for_video
 
     path = Path(video).parent / "input.srt"
     if not path.is_file():
-        generate_subtitle_for_video(video, output_path=path)
+        try:
+            generate_subtitle_for_video(video, output_path=path)
+        except SpeechRecognitionError as exc:
+            raise failure_from_speech_error(str(exc)) from None
     rows = _commentary_rows(path, duration)
     prompt = (
         "从游戏直播解说中提名实际发生的高光。优先本局最重要的决胜、逆转、达成目标，"

@@ -39,6 +39,22 @@ from backend.core.project_cancellation import JobStopped, ProjectDeleted, Servic
 
 logger = failure_logger(__name__)
 
+_THINK_BLOCK_RE = re.compile(
+    r'<(?:think|thought|thinking)\b[^>]*>[\s\S]*?</(?:think|thought|thinking)>',
+    re.IGNORECASE,
+)
+_OPEN_THINK_TAG_RE = re.compile(r'<(?:think|thought|thinking)\b[^>]*>', re.IGNORECASE)
+_FENCED_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]*?)\s*```', re.IGNORECASE)
+
+
+def strip_thinking_blocks(text: str) -> str:
+    """Strip <think>/<thought>/<thinking> reasoning blocks emitted by local & hybrid models."""
+    cleaned = _THINK_BLOCK_RE.sub('', str(text or '')).strip()
+    if cleaned and _OPEN_THINK_TAG_RE.search(cleaned):
+        # Some local models emit an unclosed <think> before a fenced block or JSON payload.
+        cleaned = _OPEN_THINK_TAG_RE.sub('', cleaned).strip()
+    return cleaned
+
 class LLMClient:
     """LLM客户端 - 兼容性包装器"""
     
@@ -218,51 +234,74 @@ class LLMClient:
             
             return json_str
 
-        response = response.strip()
-        
-        # 0. 预处理响应，移除非JSON内容
-        response = self._preprocess_llm_response(response)
-        logger.debug("预处理后的响应 length=%s", len(response))
-        
-        # 1. 优先尝试从Markdown代码块中提取
-        match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response, re.DOTALL)
-        if match:
+        response = strip_thinking_blocks(response)
+
+        # 1. 优先尝试从 Markdown 代码块中提取（必须在 _preprocess_llm_response 截断 ``` 之前）
+        for match in _FENCED_JSON_RE.finditer(response):
             json_str = sanitize_string(match.group(1))
+            if not json_str:
+                continue
             try:
                 return json.loads(json_str)
             except json.JSONDecodeError as e:
-                logger.error("JSON解析失败: %s length=%s", sanitize_exception_text(e), len(json_str))
-                logger.warning("从Markdown提取的内容解析失败，将尝试修复后解析。")
-
-                # 尝试修复常见错误后再解析
+                logger.warning("从Markdown提取的内容解析失败 (%s length=%s)，将尝试修复后解析。", sanitize_exception_text(e), len(json_str))
                 try:
                     fixed_json = fix_common_json_errors(json_str)
                     return json.loads(fixed_json)
                 except json.JSONDecodeError:
-                    logger.warning("修复后仍然解析失败，将尝试解析整个响应。")
-        
-        # 2. 如果没有Markdown，或Markdown解析失败，尝试整个响应
+                    continue
+
+        # 2. 尝试直接解析整个响应
         try:
             sanitized_response = sanitize_string(response)
-            return json.loads(sanitized_response)
+            if sanitized_response:
+                return json.loads(sanitized_response)
         except json.JSONDecodeError:
-            # 3. 如果整个响应直接解析也失败，做最后一次尝试，用通用正则寻找
+            pass
+
+        # 3. 精确扫描首个合法 JSON 数组/对象（避免正文里带 [1] 或 {note} 被贪婪正则截坏）
+        sanitized_full = sanitize_string(response)
+        decoder = json.JSONDecoder()
+        scan_index = 0
+        while scan_index < len(sanitized_full):
+            if sanitized_full[scan_index] in '{[':
+                try:
+                    parsed_obj, _ = decoder.raw_decode(sanitized_full, scan_index)
+                    if isinstance(parsed_obj, (dict, list)):
+                        return parsed_obj
+                except json.JSONDecodeError:
+                    pass
+            scan_index += 1
+
+        # 4. 预处理响应，移除非JSON内容后再尝试
+        preprocessed = self._preprocess_llm_response(response)
+        logger.debug("预处理后的响应 length=%s", len(preprocessed))
+        try:
+            sanitized_response = sanitize_string(preprocessed)
+            if sanitized_response:
+                return json.loads(sanitized_response)
+        except json.JSONDecodeError:
+            # 5. 最后一次尝试：用通用正则寻找并修复常见 JSON 错误
             logger.warning("直接解析响应失败，尝试使用通用正则寻找JSON...")
-            json_match = re.search(r'\[[\s\S]*\]|\{[\s\S]*\}', response, re.DOTALL)
-            if json_match:
+            matched_candidate = False
+            for candidate in (preprocessed, response):
+                json_match = re.search(r'\[[\s\S]*\]|\{[\s\S]*\}', candidate, re.DOTALL)
+                if not json_match:
+                    continue
+                matched_candidate = True
                 json_str = sanitize_string(json_match.group())
                 try:
                     return json.loads(json_str)
-                except json.JSONDecodeError as e:
-                    # 4. 最后尝试修复常见错误
+                except json.JSONDecodeError:
                     try:
                         fixed_json = fix_common_json_errors(json_str)
                         return json.loads(fixed_json)
                     except json.JSONDecodeError as final_e:
                         logger.error("最终尝试解析失败: %s length=%s", sanitize_exception_text(final_e), len(response))
-                        # the model answered (200) with content that is not JSON: a model failure.
-                        raise ModelResponseInvalid(f"无法从响应中解析出有效的JSON length={len(response)}") from None
-            
+            if matched_candidate:
+                # the model answered (200) with content that is not JSON: a model failure.
+                raise ModelResponseInvalid(f"无法从响应中解析出有效的JSON length={len(response)}") from None
+
             # 如果连通用正则都找不到，就彻底失败
             raise ModelResponseInvalid(f"无法从响应中解析出有效的JSON length={len(response)}") from None
     

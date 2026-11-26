@@ -447,6 +447,12 @@ async def download_whisper_model(request: DownloadModelRequest):
     try:
         model_manager = get_model_manager()
         state = await model_manager.download_model(request.model)
+    except RuntimeError as e:
+        if "请先安装 Whisper 运行时" in str(e):
+            raise HTTPException(status_code=409, detail={"code": "whisper_not_installed", "message": str(e)})
+        logger.error(f"下载Whisper模型失败: {e}")
+        sentry_setup.capture_studio_exception(e, phase="model_download", http_status=500)
+        raise HTTPException(status_code=500, detail=f"下载Whisper模型失败: {str(e)}")
     except Exception as e:
         logger.error(f"下载Whisper模型失败: {e}")
         # the one Studio capture path (consent, scope, tag whitelist); production Sentry has no

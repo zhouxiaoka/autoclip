@@ -77,6 +77,11 @@ def file_access_backoff(n=0) -> float:
     return min(2.0, 0.25 * (int(n) + 1))
 
 
+def http_retry_backoff(n=0) -> float:
+    """Bounded linear backoff for transient HTTP / HLS fragment retries."""
+    return min(4.0, 0.5 * (int(n) + 1))
+
+
 def recovery_options(options: dict) -> dict:
     """yt-dlp options for one download, including the Windows rename-lock budget.
 
@@ -85,15 +90,17 @@ def recovery_options(options: dict) -> dict:
     """
     opts = dict(options)
     opts.setdefault('socket_timeout', 30)
-    opts.setdefault('retries', 2)
-    opts.setdefault('fragment_retries', 2)
-    opts.setdefault('extractor_retries', 2)
+    opts.setdefault('retries', 5)
+    opts.setdefault('fragment_retries', 5)
+    opts.setdefault('extractor_retries', 3)
     opts.setdefault('concurrent_fragment_downloads', 1)
     opts.setdefault('skip_unavailable_fragments', False)
     opts.setdefault('continuedl', True)
     opts.setdefault('file_access_retries', FILE_ACCESS_RETRIES)
     sleeps = dict(opts.get('retry_sleep_functions') or {})
     sleeps.setdefault('file_access', file_access_backoff)
+    sleeps.setdefault('http', http_retry_backoff)
+    sleeps.setdefault('fragment', http_retry_backoff)
     opts['retry_sleep_functions'] = sleeps
     return opts
 
@@ -102,7 +109,7 @@ def download_with_recovery(url: str, options: dict):
     opts = recovery_options(options)
     youtube = urlparse(url).hostname in {'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'}
     public_site = youtube or urlparse(url).hostname in {'bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'b23.tv'}
-    retried_subtitles = retried_format = retried_cookies = False
+    retried_subtitles = retried_format = retried_cookies = retried_non_hls = False
     while True:
         try:
             with yt_dlp.YoutubeDL(opts) as downloader:
@@ -124,9 +131,18 @@ def download_with_recovery(url: str, options: dict):
                 retried_subtitles = True
                 opts.update(writesubtitles=False, writeautomaticsub=False)
                 continue
-            if youtube and not retried_format and any(code in text for code in ('http error 403', 'http error 500', 'requested format is not available')):
+            if youtube and not retried_format and any(code in text for code in (
+                'http error 403', 'http error 500', 'http error 502', 'http error 503',
+                'requested format is not available', 'the downloaded file is empty',
+            )):
                 retried_format = True
                 opts['format'] = 'bestvideo[height<=1080][protocol*=m3u8]+bestaudio[protocol*=m3u8]/best[height<=1080][protocol*=m3u8]/best[ext=mp4]/best'
+                continue
+            if youtube and not retried_non_hls and any(tok in text for tok in (
+                'fragment', 'hls', 'm3u8', 'unable to download video data', 'did not get any data blocks',
+            )):
+                retried_non_hls = True
+                opts['format'] = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[ext=mp4]/best'
                 continue
             if retried_cookies:
                 _raise_cookie_access()

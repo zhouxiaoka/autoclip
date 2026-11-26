@@ -322,7 +322,10 @@ class SimplePipelineAdapter:
                 finally:
                     TranscriptionProgress.finish_studio(self.project_id)
                     if temp_audio is not None:
-                        temp_audio.unlink(missing_ok=True)
+                        try:
+                            temp_audio.unlink(missing_ok=True)
+                        except OSError:
+                            logger.debug("跳过清理临时切分音频: %s", temp_audio)
 
                 if srt_path and srt_path.exists():
                     if window:

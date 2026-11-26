@@ -48,7 +48,10 @@ def source_frame_analysis_allowed():
     except ValueError:
         return False
 
-_THINK_BLOCK_RE = re.compile(r'<think\b[^>]*>[\s\S]*?</think>', re.IGNORECASE)
+_THINK_BLOCK_RE = re.compile(
+    r'<(?:think|thought|thinking)\b[^>]*>[\s\S]*?</(?:think|thought|thinking)>',
+    re.IGNORECASE,
+)
 _FENCED_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]*?)```', re.IGNORECASE)
 
 
@@ -184,7 +187,17 @@ def vision_call(content, config=None, *, allow_event_list=False):
     identity = config.get('identity') or sent_vision_identity(config)
     if not base or not model:
         raise UserFacingError('当前模型只能处理文字，不能看画面。请到「设置 → 服务商与模型」换一个能看图的模型，或改用字幕分析。')
-    from backend.core.llm_providers import asks_for_max_completion_tokens, disables_qwen_thinking, to_max_completion_tokens, token_param_kwargs
+    from backend.core.llm_providers import (
+        _GEMINI_FALLBACK_MODEL,
+        _GEMINI_RETIRED_PRESET_MODELS,
+        _ollama_thinking_chat_kwargs,
+        _rejects_thinking_param,
+        asks_for_max_completion_tokens,
+        disables_qwen_thinking,
+        guarded_chat_kwargs,
+        to_max_completion_tokens,
+        token_param_kwargs,
+    )
     from backend.core.model_recovery import provider_for_endpoint, remember_model, remembered_model, resolve_available_model
 
     saved_model = model
@@ -195,6 +208,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
     if cached:
         model = cached
     from backend.core.model_catalog import known_text_only
+    native = gemini_transport.is_official_gemini(config.get('provider', ''), base)
 
     def build_body(name):
         max_tokens = int(config['max_tokens']) if config.get('max_tokens') else (1000 if config.get('quick_screening') else 4000)
@@ -206,6 +220,10 @@ def vision_call(content, config=None, *, allow_event_list=False):
         if disables_qwen_thinking(name, base):
             # Qwen3.5–3.8 on Bailian think by default (RC156 Win QA #18); allowlist only, see llm_providers.
             payload['enable_thinking'] = False
+        if native and name.removeprefix('models/').lower().startswith('gemini-2.5-flash') and 'thinking_budget' not in config:
+            payload['thinking_budget'] = 0
+        elif not native:
+            payload = _ollama_thinking_chat_kwargs(base, guarded_chat_kwargs(base, payload))
         # Long vision thinks keep the socket alive. A refusal or a JSON 2xx is read in load().
         payload['stream'] = True
         from backend.core.custom_request_options import apply_chat_options
@@ -213,7 +231,6 @@ def vision_call(content, config=None, *, allow_event_list=False):
         return http_chat_body(token_param_kwargs(name, base, apply_chat_options(payload, config)))
 
     body = build_body(model)
-    native = gemini_transport.is_official_gemini(config.get('provider', ''), base)
     from backend.core.custom_request_options import merge_headers
     headers = merge_headers({**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}, config.get('http_headers'))
 
@@ -272,14 +289,25 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 except urllib.error.HTTPError as error:
                     detail = _http_error_detail(error)
                     read_detail['text'] = detail
-                    if not (error.code == 400 and 'max_tokens' in body and asks_for_max_completion_tokens(detail)):
+                    if error.code == 400 and 'max_tokens' in body and asks_for_max_completion_tokens(detail):
+                        error.close()
+                        read_detail['text'] = None
+                        # One retry with the parameter the provider asked for; never more.
+                        _telem['retries'] += 1
+                        body = to_max_completion_tokens(body)
+                        result = load(body)
+                    elif (
+                        error.code == 400
+                        and any(k in body for k in ('enable_thinking', 'thinking', 'think'))
+                        and _rejects_thinking_param(type('E', (), {'status_code': 400, '__str__': lambda self: detail})())
+                    ):
+                        error.close()
+                        read_detail['text'] = None
+                        _telem['retries'] += 1
+                        body = {k: v for k, v in body.items() if k not in ('enable_thinking', 'thinking', 'think')}
+                        result = load(body)
+                    else:
                         raise
-                    error.close()
-                    read_detail['text'] = None
-                    # One retry with the parameter the provider asked for; never more.
-                    _telem['retries'] += 1
-                    body = to_max_completion_tokens(body)
-                    result = load(body)
             except TimeoutError:
                 from backend.core.job_budget import JobDurationExceeded, budget_expired
                 if budget_expired():
@@ -295,6 +323,18 @@ def vision_call(content, config=None, *, allow_event_list=False):
                 from backend.core.llm_retry import studio_code_for
                 from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_error
                 info = classify_upstream_error(status, detail)
+                # Official Gemini retired preset default (e.g. gemini-3.8-flash) -> fall back to gemini-2.5-flash even for user-saved models.
+                if (
+                    native
+                    and status == 404
+                    and not tried_substitute
+                    and model.removeprefix('models/').strip().lower() in _GEMINI_RETIRED_PRESET_MODELS
+                ):
+                    tried_substitute = True
+                    _telem['retries'] += 1
+                    model = _GEMINI_FALLBACK_MODEL
+                    body = build_body(model)
+                    continue
                 # The saved id is gone. Ask the account list once and retry that call once.
                 if allow_substitute and not tried_substitute and info.error_type is UpstreamErrorType.MODEL_NOT_FOUND:
                     tried_substitute = True
@@ -494,9 +534,18 @@ class HighlightCandidate(Scene):
 NON_PLAY_EVENTS = {'menu', 'reward_screen', 'loading'}
 
 
+def _coerce_highlight_item(item):
+    if not isinstance(item, dict):
+        return item
+    score = item.get('watch_score')
+    if isinstance(score, float) and score.is_integer():
+        return {**item, 'watch_score': int(score)}
+    return item
+
+
 def select_highlights(raw_events, duration, limit=6, *, max_duration=None):
     try:
-        candidates = [HighlightCandidate.model_validate(e) for e in raw_events[:12]]
+        candidates = [HighlightCandidate.model_validate(_coerce_highlight_item(e)) for e in raw_events[:12]]
     except ValueError:  # pydantic ValidationError on the model's own answer
         raise ModelResponseInvalid('视觉模型返回的候选格式无效，请重试') from None
     validate_scenes(candidates, duration)
@@ -580,7 +629,7 @@ def analyze(video: Path, prefs: Preferences, on_stage=None, instruction="", *, g
     try:
         if not isinstance(raw_refined, list):
             raise ValueError('events')
-        refined_candidates = [HighlightCandidate.model_validate(e) for e in raw_refined[:1]]
+        refined_candidates = [HighlightCandidate.model_validate(_coerce_highlight_item(e)) for e in raw_refined[:1]]
     except ValueError:  # null/non-list, or the model's own schema; do not surface the payload
         raise ModelResponseInvalid('视觉模型返回的候选格式无效，请重试') from None
     rejected = bool(refined_candidates and refined_candidates[0].event_type in NON_PLAY_EVENTS)

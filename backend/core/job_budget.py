@@ -23,6 +23,9 @@ from backend.core.failure_codes import sentence
 # One read is 600s. 20 minutes covers that read plus its SDK retry, then stops
 # the next manager retry instead of stacking hours of 600s waits.
 CLIP_JOB_BUDGET_SEC = 20 * 60
+# Local models (Ollama / LM Studio) have ~15m p50 on consumer Windows GPUs/CPUs;
+# give them a wider wall-clock cap so healthy local runs are not cut short mid-analysis.
+LOCAL_CLIP_JOB_BUDGET_SEC = 45 * 60
 
 
 class JobDurationExceeded(Exception):
@@ -47,15 +50,44 @@ class _Budget:
 _current: ContextVar[Optional[_Budget]] = ContextVar("autoclip_clip_job_budget", default=None)
 
 
-def clip_job_budget_seconds() -> float:
-    raw = os.getenv("AUTOCLIP_CLIP_JOB_BUDGET_SEC")
-    if not raw:
-        return float(CLIP_JOB_BUDGET_SEC)
+def _is_local_analysis_provider() -> bool:
     try:
-        value = float(raw)
-    except ValueError:
-        return float(CLIP_JOB_BUDGET_SEC)
-    return value if value > 0 else float(CLIP_JOB_BUDGET_SEC)
+        from backend.core.llm_providers import is_local_url
+        from backend.services import ai_model_settings as ai
+        settings = ai.load()
+        binding = getattr(settings, "analysis", None)
+        if binding and getattr(binding, "connection_id", None):
+            conn = next((c for c in (getattr(settings, "connections", None) or ()) if getattr(c, "id", None) == binding.connection_id), None)
+            if conn is not None:
+                provider = (getattr(conn, "provider", None) or "").strip().lower()
+                if provider in {"ollama", "lmstudio"}:
+                    return True
+                return is_local_url(getattr(conn, "base_url", None) or "")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from backend.core.llm_manager import get_llm_manager
+        from backend.core.local_presets import is_local_model
+        return bool(is_local_model(get_llm_manager().settings))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def clip_job_budget_seconds(*, local: Optional[bool] = None) -> float:
+    is_local = _is_local_analysis_provider() if local is None else bool(local)
+    default = float(LOCAL_CLIP_JOB_BUDGET_SEC if is_local else CLIP_JOB_BUDGET_SEC)
+    env_names = ("AUTOCLIP_LOCAL_CLIP_JOB_BUDGET_SEC", "AUTOCLIP_CLIP_JOB_BUDGET_SEC") if is_local else ("AUTOCLIP_CLIP_JOB_BUDGET_SEC",)
+    for name in env_names:
+        raw = os.getenv(name)
+        if not raw:
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return default
 
 
 def clip_job_active() -> bool:

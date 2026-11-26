@@ -214,6 +214,7 @@ export default function HomePage() {
   }
 
   const pendingImports = projects.filter(needsImportConfirmation)
+  const [resumingId, setResumingId] = useState<string>('')
   const filteredProjects = (projects || [])
     .filter(p => !needsImportConfirmation(p))
     .filter(project => {
@@ -224,6 +225,24 @@ export default function HomePage() {
       // 按创建时间倒序排列，最新的在前面
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
+  const interruptedProjects = filteredProjects.filter(
+    p => (p.status === 'failed' || p.status === 'error') && p.error_code === 'service_restarted',
+  )
+  const resumeInterrupted = async (project: Project) => {
+    if (resumingId) return
+    setResumingId(project.id)
+    try {
+      const managed = !!(project.settings?.smart_import || project.processing_config?.smart_import)
+        || !!(project.settings?.studio_generation_status || project.processing_config?.studio_generation_status)
+      if (managed) await studioApi.retry(project.id, { scope: 'project', retry_kind: 'same' })
+      else await projectApi.retryProcessing(project.id)
+      await handleRetryProject()
+    } catch {
+      message.error(t('重试失败，请稍后再试'))
+    } finally {
+      setResumingId('')
+    }
+  }
 
   return (
     <Layout style={{
@@ -236,6 +255,7 @@ export default function HomePage() {
           <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />
           <div ref={importArea}><CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} onExample={() => void openExample()} exampleBusy={exampleBusy} /></div>
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
+          {interruptedProjects.length>0&&<div className="studio-import-resume" role="status" data-testid="interrupted-projects-resume"><b>{t('上次重启中断的制作')}</b>{interruptedProjects.slice(0, 3).map(p=><button key={p.id} type="button" className="studio-link" disabled={!!resumingId} onClick={()=>void resumeInterrupted(p)}>{p.name} · {resumingId === p.id ? t('正在恢复…') : t('继续制作')}</button>)}</div>}
 
           {!(setupNeeded && !projects.length) && <>
           {/* 项目管理区域 */}

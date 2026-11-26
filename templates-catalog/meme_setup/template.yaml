@@ -1,0 +1,48 @@
+id: meme_setup
+version: 2
+name: {zh: 情景反转黄牌, en: Meme Setup Banner}
+fit:
+  formats: {gaming_stream: 1.0, live_replay: 1.0, vlog: 0.9}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.45
+  head_zone: [380, 1320]
+  zoom:
+    mode: creep
+    creep: 0.02
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.03:saturation=1.04"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 156, alt_top: 156}
+    subtitle: {top: 1380, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 58
+  inset_px: 72
+  source_limit: 40
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "顶部亮黄圆角情境大标题卡 + 粗黑边大字幕，专为抖音/B站游戏搞笑与情景反转切片打造", en: "Bold yellow rounded setup card on top + thick-stroked punchline captions for viral gaming & comedy clips"}
+  tags: [gaming, comedy, meme, viral, bilibili, douyin]
+  category: gaming
+  order: 43
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}

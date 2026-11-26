@@ -470,6 +470,19 @@ def _run(cmd: list[str], timeout: float):
     return subprocess.run(full, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, **priority)
 
 
+def _replace_movie(src: Path, dst: Path) -> None:
+    """Retry atomic overlay promotion briefly when Windows locks a freshly encoded mkv."""
+    delays = (0.05, 0.1, 0.2, 0.4)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33) or attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
+
+
 def encode_ffv1(holds: list[tuple[Path, int]], dest: Path, fps: int = 30, *, timeout: float, run=None) -> None:
     """Write an ffv1 movie with alpha. ``holds`` is ``(png, frame count)`` in order.
 
@@ -510,11 +523,14 @@ def encode_ffv1(holds: list[tuple[Path, int]], dest: Path, fps: int = 30, *, tim
             if proc.returncode:
                 report_overlay_failure(RuntimeError('encode'))
                 raise OverlayEncodeError('encode')
-        os.replace(partial, dest)
+        _replace_movie(partial, dest)
         replaced = True
     finally:
         if not replaced:
-            partial.unlink(missing_ok=True)
+            try:
+                partial.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def _grade_prefix(grade: str) -> str:

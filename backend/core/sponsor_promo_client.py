@@ -45,6 +45,8 @@ class PromoConfig:
     timeout_seconds: float = 4
     refresh_seconds: float = 21600
     v2_url: str = ""
+    fallback_urls: tuple[str, ...] = ()
+    v2_fallback_urls: tuple[str, ...] = ()
 
 
 def load_packaged_config() -> PromoConfig:
@@ -52,6 +54,22 @@ def load_packaged_config() -> PromoConfig:
 
     raw = json.loads(files("backend.presets").joinpath("sponsor_promo_config.json").read_text(encoding="utf-8"))
     return parse_config(raw)
+
+
+def _https_url_list(raw: Any, *, exclude: str = "", limit: int = 4) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        return ()
+    seen: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        cleaned = item.strip()
+        if not cleaned or cleaned == exclude or cleaned in seen or not _https_url(cleaned):
+            continue
+        seen.append(cleaned)
+        if len(seen) >= limit:
+            break
+    return tuple(seen)
 
 
 def parse_config(raw: Any) -> PromoConfig:
@@ -73,6 +91,8 @@ def parse_config(raw: Any) -> PromoConfig:
         timeout_seconds=float(raw["timeout_seconds"]) if isinstance(raw.get("timeout_seconds"), (int, float)) and 0 < float(raw["timeout_seconds"]) <= 10 else 4,
         refresh_seconds=float(raw["refresh_seconds"]) if isinstance(raw.get("refresh_seconds"), (int, float)) and float(raw["refresh_seconds"]) >= 60 else 21600,
         v2_url=v2_url,
+        fallback_urls=_https_url_list(raw.get("fallback_urls"), exclude=url),
+        v2_fallback_urls=_https_url_list(raw.get("v2_fallback_urls"), exclude=v2_url),
     )
 
 
@@ -287,12 +307,26 @@ class SponsorPromoClient:
 
     def _download(self) -> Any:
         getter = self._http_get or _bounded_get
-        if self.config.v2_url:
+        candidates: list[str] = []
+        for candidate in (
+            self.config.v2_url,
+            *self.config.v2_fallback_urls,
+            self.config.url,
+            *self.config.fallback_urls,
+        ):
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+        last_error: Optional[Exception] = None
+        for idx, target_url in enumerate(candidates):
             try:
-                return getter(self.config.v2_url, timeout=self.config.timeout_seconds, max_bytes=self.config.max_bytes)
-            except Exception:
-                logger.info("sponsor promo v2 fetch unavailable, falling back to v1")
-        return getter(self.config.url, timeout=self.config.timeout_seconds, max_bytes=self.config.max_bytes)
+                return getter(target_url, timeout=self.config.timeout_seconds, max_bytes=self.config.max_bytes)
+            except Exception as exc:
+                last_error = exc
+                if idx + 1 < len(candidates):
+                    logger.info("sponsor promo endpoint unavailable, trying next fallback")
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("no sponsor promo url configured")
 
     def _shown(self, state: Optional[dict], health: str, *, locale: Optional[str] = None) -> dict:
         if health == "security_state" or not state or not isinstance(state.get("accepted"), dict):

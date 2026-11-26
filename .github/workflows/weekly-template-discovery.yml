@@ -1,0 +1,65 @@
+name: Weekly Viral Template Discovery
+
+on:
+  schedule:
+    # Every Monday at 01:00 UTC (09:00 UTC+8)
+    - cron: '0 1 * * 1'
+  workflow_dispatch:
+    inputs:
+      tracks:
+        description: 'Comma-separated tracks to scan (default: gaming,interview,knowledge)'
+        required: false
+        default: 'gaming,interview,knowledge'
+        type: string
+      limit:
+        description: 'Max results per query'
+        required: false
+        default: '4'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install discovery dependencies
+        run: python -m pip install --upgrade pip pyyaml pillow yt-dlp
+
+      - name: Run viral template discovery
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          TRACKS="${{ github.event.inputs.tracks || 'gaming,interview,knowledge' }}"
+          LIMIT="${{ github.event.inputs.limit || '4' }}"
+          python scripts/template_discovery/cli.py run \
+            --tracks "$TRACKS" \
+            --source auto \
+            --limit "$LIMIT" \
+            --max-queries 2 \
+            --out dist-discovery
+
+      - name: Publish report to GitHub Actions Step Summary
+        run: |
+          if [ -f dist-discovery/discovery_report.md ]; then
+            cat dist-discovery/discovery_report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload discovery report & contact sheet artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-template-discovery-${{ github.run_number }}
+          path: |
+            dist-discovery/discovery_report.md
+            dist-discovery/contact_sheet.png
+            dist-discovery/candidates.json
+          retention-days: 30

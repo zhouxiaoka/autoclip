@@ -2460,5 +2460,13 @@
   "editing_style.view_all": "Semua {{count}}",
   "editing_style.gallery_title": "Pilih Gaya Edit",
   "editing_style.scroll_prev": "Sebelumnya",
-  "editing_style.scroll_next": "Berikutnya"
+  "editing_style.scroll_next": "Berikutnya",
+  "查看更新内容": "Lihat pembaruan",
+  "当前有项目正在制作，建议完成后再重启更新。": "Ada proyek yang sedang berjalan. Tunggu hingga selesai sebelum memulai ulang untuk memperbarui.",
+  "继续渲染未完成版本": "Lanjutkan render yang belum selesai",
+  "继续渲染剩余版本": "Lanjutkan sisa render",
+  "还有 {{count}} 条未完成版本，已完成成片已保留。": "Tersisa {{count}} versi yang belum selesai. Klip yang selesai tetap disimpan.",
+  "上次重启中断的制作": "Terhenti karena restart",
+  "正在恢复…": "Melanjutkan…",
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Video ini lebih dari 30 menit dan memerlukan transkripsi lokal yang bisa lambat di PC spesifikasi rendah. Coba proses 30 menit pertama saja, atau ganti ke model base / transkripsi cloud di Pengaturan."
 }

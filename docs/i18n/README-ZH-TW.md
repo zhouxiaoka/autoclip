@@ -17,11 +17,32 @@
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
-<a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+<!-- hero-cta:start -->
+<p>
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/"><img src="../../docs/images/download-button.svg" alt="Download AutoClip" width="248" height="55"></a>&nbsp;&nbsp;
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+</p>
+<!-- hero-cta:end -->
 
 **[官網](https://zhouxiaoka.github.io/autoclip_intro/)** · **[下載桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [案例庫](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [研究](../research/2026-10-what-drives-views/article-zh.md) · [快速開始](#快速開始) · [文件](#文件) · [問題回報](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [English](../../README.md) · [简体中文](README-ZH.md) · **繁體中文** · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md) · [Bahasa Indonesia](README-ID.md) · [Türkçe](README-TR.md) · [Tiếng Việt](README-VI.md) · [Deutsch](README-DE.md)
+
+<!-- top-sponsors:start -->
+<table width="100%">
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="../../docs/sponsors/apimart.png" alt="APIMart" width="64"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a><br>
+      <sub>Low-cost AI image &amp; video API · GPT-Image-2 from $0.006/img</sub>
+    </td>
+    <td align="center" width="50%">
+      <a href="mailto:christine_zhouye@163.com?subject=AutoClip%20Sponsor%20%2F%20Provider%20Partnership"><strong>Sponsor / Partner with AutoClip</strong></a><br>
+      <sub>Put your AI API or creator tool in front of AutoClip users worldwide (cloud dynamic provider listing supported, zero client release needed).<br><a href="mailto:christine_zhouye@163.com">christine_zhouye@163.com</a></sub>
+    </td>
+  </tr>
+</table>
+<!-- top-sponsors:end -->
 
 </div>
 

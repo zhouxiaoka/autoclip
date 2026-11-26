@@ -102,7 +102,13 @@ def test_packaged_config_uses_valid_https_worker_and_catalog_stays_local(profile
     packaged = load_packaged_config()
     assert packaged.enabled is True
     assert packaged.url == "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json"
+    assert packaged.fallback_urls == (
+        "https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/sponsor-promo.json",
+    )
     assert packaged.v2_url == "https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo-v2.json"
+    assert packaged.v2_fallback_urls == (
+        "https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/sponsor-promo-v2.json",
+    )
     assert len(base64.b64decode(packaged.public_key, validate=True)) == 32
     assert "PRIVATE" not in packaged.public_key
     assert packaged.min_sequence >= 1
@@ -1127,3 +1133,108 @@ def test_fsync_dir_skips_directory_open_on_windows(tmp_path, profiles, monkeypat
     shown = client.view(locale="zh")
     assert shown["default"] == "cloudgw"
     assert [p["id"] for p in shown["providers"]] == ["cloudgw"]
+
+
+def test_v2_fallback_mirror_recovers_when_primary_times_out(tmp_path, profiles):
+    """When primary workers.dev v2_url times out (e.g. China mainland), client falls back to v2_fallback_urls."""
+    private, public = _keys()
+    payload = _payload(
+        sequence=80,
+        schema=sponsor_promo.SCHEMA_V2,
+        max_app="1.9.9",
+        providers=[_dynamic_provider()],
+        sponsors=[
+            {"id": "cloudgw", "order": 1, "status": "healthy", "new_user_default": True, "register_url": "https://www.cloudgw.example/?from=AutoClip"},
+            {"id": "apimart", "order": 2, "status": "healthy", "new_user_default": False},
+        ],
+    )
+    seen_urls: list[str] = []
+
+    def http_get(url, timeout, max_bytes):
+        seen_urls.append(url)
+        if "workers.dev" in url:
+            raise TimeoutError("simulated workers.dev timeout")
+        return _envelope(private, payload)
+
+    cfg = PromoConfig(
+        enabled=True,
+        url="https://promo.workers.dev/sponsor-promo.json",
+        fallback_urls=("https://cos.example/sponsor-promo.json",),
+        v2_url="https://promo.workers.dev/sponsor-promo-v2.json",
+        v2_fallback_urls=("https://cos.example/sponsor-promo-v2.json",),
+        public_key=public,
+        min_sequence=1,
+        timeout_seconds=3,
+    )
+    client = SponsorPromoClient(cfg, data_dir=tmp_path, app_version="1.6.2", http_get=http_get, now=lambda: NOW, busy=lambda: False)
+    assert client.refresh_sync() == "ok"
+    assert seen_urls == [
+        "https://promo.workers.dev/sponsor-promo-v2.json",
+        "https://cos.example/sponsor-promo-v2.json",
+    ]
+    shown = client.view(locale="zh")
+    assert shown["source"] == "cache"
+    assert shown["sequence"] == 80
+    assert shown["default"] == "cloudgw"
+    assert [p["id"] for p in shown["providers"]] == ["cloudgw"]
+
+
+def test_fallback_urls_reject_insecure_and_duplicate_entries():
+    _, public = _keys()
+    cfg = parse_config({
+        "enabled": True,
+        "url": "https://primary.example/v1.json",
+        "v2_url": "https://primary.example/v2.json",
+        "fallback_urls": [
+            "http://insecure.example/v1.json",
+            "https://user:pass@cred.example/v1.json",
+            "https://primary.example/v1.json",
+            "https://mirror1.example/v1.json",
+            "https://mirror1.example/v1.json",
+        ],
+        "v2_fallback_urls": [
+            "http://insecure.example/v2.json",
+            "https://primary.example/v2.json",
+            "https://mirror1.example/v2.json",
+            "https://mirror2.example/v2.json",
+        ],
+        "public_key": public,
+    })
+    assert cfg.enabled is True
+    assert cfg.fallback_urls == ("https://mirror1.example/v1.json",)
+    assert cfg.v2_fallback_urls == ("https://mirror1.example/v2.json", "https://mirror2.example/v2.json")
+
+
+def test_fallback_mirror_still_enforces_signature_and_watermark(tmp_path, profiles):
+    private, public = _keys()
+    good = _payload(
+        sequence=85,
+        schema=sponsor_promo.SCHEMA_V2,
+        max_app="1.9.9",
+        providers=[_dynamic_provider()],
+        sponsors=[{"id": "cloudgw", "order": 1, "status": "healthy", "new_user_default": True, "register_url": "https://www.cloudgw.example/?from=AutoClip"}],
+    )
+    good_env = _envelope(private, good)
+    bad_payload = json.loads(json.dumps({**good, "sequence": 86}))
+    bad = _envelope(private, bad_payload)
+    bad["payload"]["sponsors"][0]["id"] = "tampered"
+    stage = {"doc": good_env}
+
+    def http_get(url, timeout, max_bytes):
+        if "workers.dev" in url:
+            raise TimeoutError("unreachable")
+        return stage["doc"]
+
+    cfg = PromoConfig(
+        enabled=True,
+        url="https://promo.workers.dev/sponsor-promo.json",
+        v2_url="https://promo.workers.dev/sponsor-promo-v2.json",
+        v2_fallback_urls=("https://cos.example/sponsor-promo-v2.json",),
+        public_key=public,
+        min_sequence=1,
+    )
+    client = SponsorPromoClient(cfg, data_dir=tmp_path, app_version="1.6.2", http_get=http_get, now=lambda: NOW, busy=lambda: False)
+    assert client.refresh_sync() == "ok"
+    stage["doc"] = bad
+    assert client.refresh_sync() == "unsigned"
+    assert client.view(locale="zh")["sequence"] == 85

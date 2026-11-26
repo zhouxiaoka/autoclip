@@ -213,6 +213,20 @@ def _decoded_video_seconds(path, fps, expected) -> float:
     return frames / (fps if fps and fps > 0 else 30)
 
 
+def _replace_output(src: Path, dst: Path) -> None:
+    """Retry atomic output promotion briefly when Windows Defender/Explorer locks a fresh mp4."""
+    import time
+    delays = (0.05, 0.1, 0.2, 0.4, 0.8)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33) or attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
+
+
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
@@ -574,7 +588,7 @@ def _encode_draft(
                 and abs(decoded_seconds - (body_seconds + outro_seconds)) > 0.5):
             raise UserFacingError('渲染输出无效，请重新导出')
         project_cancellation.checkpoint(project_id)
-        os.replace(ready, output)
+        _replace_output(ready, output)
         result = {'title': draft.title, 'duration': duration, 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
         if overlay_job is not None:
             from backend.services import video_encoder
@@ -587,5 +601,9 @@ def _encode_draft(
             result['requested_template'] = requested
         return result
     finally:
-        partial.unlink(missing_ok=True)
+        for leftover in (partial, ready):
+            try:
+                leftover.unlink(missing_ok=True)
+            except OSError:
+                pass
         ready.unlink(missing_ok=True)

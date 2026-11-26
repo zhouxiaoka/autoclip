@@ -2460,5 +2460,13 @@
   "editing_style.view_all": "Ver {{count}}",
   "editing_style.gallery_title": "Elegir estilo de edición",
   "editing_style.scroll_prev": "Anterior",
-  "editing_style.scroll_next": "Siguiente"
+  "editing_style.scroll_next": "Siguiente",
+  "查看更新内容": "Ver novedades",
+  "当前有项目正在制作，建议完成后再重启更新。": "Hay un proyecto en curso. Espera a que termine antes de reiniciar para actualizar.",
+  "继续渲染未完成版本": "Reanudar renderizados pendientes",
+  "继续渲染剩余版本": "Reanudar renderizados restantes",
+  "还有 {{count}} 条未完成版本，已完成成片已保留。": "Quedan {{count}} versiones sin terminar. Los clips completados se conservan.",
+  "上次重启中断的制作": "Interrumpidos por reinicio",
+  "正在恢复…": "Reanudando…",
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Este video supera los 30 minutos y requiere transcripción local, lo que puede tardar mucho en PC modestos. Prueba solo los primeros 30 minutos o cambia al modelo base / transcripción en la nube en Ajustes."
 }

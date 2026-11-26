@@ -41,7 +41,7 @@ def test_curated_catalog_includes_current_flagships():
     assert "kimi-k3" in kimi
     assert "siliconflow" not in model_catalog.CURATED_MODELS
     assert model_catalog.default_model_for("dashscope") == "qwen-plus"
-    assert model_catalog.default_model_for("gemini") == "gemini-3.8-flash"
+    assert model_catalog.default_model_for("gemini") == "gemini-2.5-flash"
     assert model_catalog.default_model_for("deepseek") == "deepseek-flash"
     assert model_catalog.default_model_for("seed") == "doubao-seed-2-1-lite-260915"
 

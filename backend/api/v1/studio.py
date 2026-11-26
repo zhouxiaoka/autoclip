@@ -323,12 +323,13 @@ async def import_visual(
             raise
         return {'project_id': pid, 'analysis_run_id': run_id}
     if url:
+        url = url.strip()
         parsed = urlparse(url)
         host = (parsed.hostname or '').lower()
         if parsed.scheme != 'https' or parsed.username or parsed.password or not any(host == d or host.endswith('.' + d) for d in ('youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv')):
             raise HTTPException(422, '仅支持 HTTPS 的 B 站或 YouTube 视频链接')
     ext = Path(video.filename or '').suffix.lower() if video else '.mp4'
-    if ext not in ('.mp4', '.mov', '.mkv', '.webm', '.avi'):
+    if ext not in ('.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.flv', '.ts', '.mts', '.m2ts', '.mpg', '.mpeg', '.wmv'):
         raise HTTPException(422, '不支持的视频格式')
     first_chunk = await video.read(1024 * 1024) if video else None
     if video and not first_chunk:
@@ -504,23 +505,23 @@ async def template_recommend(
 
 
 @router.get('/templates')
-def list_templates(include_remote: bool = True):
+def list_templates(include_remote: bool = True, locale: str | None = None):
     """Return built-in, user-installed, and cached remote packaging templates."""
     from backend.services.studio.templates import catalog
     if include_remote:
         catalog.trigger_background_sync()
-    return catalog.list_template_items(include_remote=include_remote)
+    return catalog.list_template_items(include_remote=include_remote, locale=locale)
 
 
 @router.post('/templates/sync')
-def sync_templates(force: bool = True):
+def sync_templates(force: bool = True, locale: str | None = None):
     """Refresh remote template catalog metadata from GitHub Releases / configured URL."""
     from backend.services.studio.templates import catalog
     try:
         catalog.sync_catalog(force=force)
     except catalog.TemplateCatalogError as error:
         raise HTTPException(502, str(error)) from None
-    return catalog.list_template_items(include_remote=True)
+    return catalog.list_template_items(include_remote=True, locale=locale)
 
 
 @router.post('/templates/import')
@@ -686,7 +687,7 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
 class RetryCommand(BaseModel):
     """The one retry command (#419): the backend validates the parent and creates the attempt."""
     model_config = ConfigDict(extra='forbid')
-    scope: Literal['analysis', 'variant', 'project']
+    scope: Literal['analysis', 'variant', 'project', 'failed_variants']
     variant_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     parent_attempt_id: Optional[str] = Field(default=None, pattern=r'^t-[a-z0-9-]{10,100}$')
     idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
@@ -705,6 +706,10 @@ def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get
         variant = call(jobs.retry_variant, project_id, body.variant_id, retry)
         receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
         return {'attempt': attempts.public(receipt) if receipt else None, 'variant': variant}
+    if body.scope == 'failed_variants':
+        run_id, variants = call(jobs.retry_failed_variants, project_id, retry)
+        receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
+        return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None, 'variants': variants}
     config = project.processing_config or {}
     prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else ImportOptions.model_validate(Preferences.model_validate(config.get('creative', {})).model_dump())
     url = None
@@ -714,6 +719,12 @@ def retry_command(project_id: str, body: RetryCommand, db: Session = Depends(get
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
+    if url is None and not body.fresh:
+        recovered = call(store.recover, project_id)
+        if jobs.resumable_failed_variants(recovered):
+            run_id, variants = call(jobs.retry_failed_variants, project_id, retry)
+            receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key) or attempts.current(call(store.read, project_id))
+            return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None, 'variants': variants}
     run_id = call(jobs.inspect_project, project_id, prefs, url, config.get('creative_browser'), retry=retry)
     receipt = attempts.by_key(call(store.read, project_id), body.idempotency_key)
     return {'ok': True, 'analysis_run_id': run_id, 'attempt': attempts.public(receipt) if receipt else None}

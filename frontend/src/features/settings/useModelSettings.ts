@@ -742,19 +742,24 @@ export function useModelSettings(placement: Placement = 'settings_model', requir
         message.error(text)
         return
       }
-      const testedModel = t('settings.providers.test_model', { model })
       const vision = active && probeVision(next, 'analysis', available)
       const value = await probe(connection, model, vision, 'analysis', probeKind, controller.signal)
       if (controller.signal.aborted) return
+      const effectiveModel = (passed(value) && value.validated_model) ? value.validated_model : model
+      const testedModel = t('settings.providers.test_model', { model: effectiveModel })
       emitValidation(connection, value)
-      const appliedBase = logic.applyValidation(settingsRef.current || next, connection.id, value, model, 'analysis', vision)
-      const testedEntry = available[connection.id]?.models.find(row => row.id === model)
-      const applied: ModelSettings = passed(value) && !appliedBase.analysis?.model
+      const appliedBase = logic.applyValidation(settingsRef.current || next, connection.id, value, effectiveModel, 'analysis', vision)
+      const testedEntry = available[connection.id]?.models.find(row => row.id === effectiveModel)
+      const shouldBindFallback = passed(value) && (
+        !appliedBase.analysis?.model
+        || (Boolean(value.validated_model) && appliedBase.analysis.connection_id === connection.id && appliedBase.analysis.model === model)
+      )
+      const applied: ModelSettings = shouldBindFallback
         ? {
             ...appliedBase,
             analysis: {
               connection_id: connection.id,
-              model,
+              model: effectiveModel,
               capability: testedEntry?.capability === 'multimodal' || testedEntry?.capability === 'text' ? testedEntry.capability : 'auto',
               model_source: 'preset',
             },

@@ -88,6 +88,74 @@ export function previewNotes(body: string | null | undefined, max = 180): string
   return `${text.slice(0, max).trimEnd()}…`
 }
 
+const GENERIC_RELEASE_NOTE = /^AutoClip(?:\s+Desktop)?\s+v?\d+\.\d+(?:\.\d+)?(?:[-+.\w]*)?$/i
+const TRAILING_ISSUE_REF = /\s*[（(]\s*#\d+(?:\s*[/,，、–—-]\s*#?\d+)*\s*[）)]\.?$/g
+
+function selectLocalizedSection(body: string, locale?: string): string {
+  const sections: Array<{ lang: 'zh' | 'en'; lines: string[] }> = []
+  let current: { lang: 'zh' | 'en'; lines: string[] } | null = null
+  for (const rawLine of body.split(/\r?\n/)) {
+    const trimmed = rawLine.trim()
+    const heading = trimmed.match(/^#{2,4}\s+(.+)$/)
+    if (heading) {
+      const title = heading[1].trim().toLowerCase()
+      if (title === '中文' || title === '简体中文' || title === 'chinese' || title === 'zh' || title === 'zh-cn') {
+        current = { lang: 'zh', lines: [] }
+        sections.push(current)
+        continue
+      }
+      if (title === 'english' || title === 'en') {
+        current = { lang: 'en', lines: [] }
+        sections.push(current)
+        continue
+      }
+      // Another subheading ends any active language block unless it's nested inside prose.
+      if (current) {
+        current = null
+      }
+      continue
+    }
+    if (current) current.lines.push(rawLine)
+  }
+  if (!sections.length) return body
+  const wantZh = (locale || '').toLowerCase().startsWith('zh')
+  const preferred = sections.find((item) => item.lang === (wantZh ? 'zh' : 'en'))
+    || sections.find((item) => item.lang === 'en')
+    || sections[0]
+  return preferred.lines.join('\n')
+}
+
+function cleanUpdateLine(raw: string): string {
+  return raw
+    .replace(/^[-*•]\s+/, '')
+    .replace(/^\d+[.)、]\s+/, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/`/g, '')
+    .replace(TRAILING_ISSUE_REF, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Parse updater release notes into clean, untruncated bullet items.
+ * Picks the matching Chinese/English block when bilingual sections are present.
+ */
+export function parseUpdateNotes(body: string | null | undefined, locale?: string): string[] {
+  if (!body) return []
+  const trimmed = body.trim()
+  if (!trimmed || GENERIC_RELEASE_NOTE.test(trimmed)) return []
+  const scoped = selectLocalizedSection(trimmed, locale)
+  const items: string[] = []
+  for (const rawLine of scoped.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#') || line.startsWith('|') || line === '---') continue
+    const cleaned = cleanUpdateLine(line)
+    if (!cleaned || GENERIC_RELEASE_NOTE.test(cleaned)) continue
+    items.push(cleaned)
+  }
+  return items
+}
+
 export function displayError(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err)
   return text.split('{{').join('{').slice(0, 240)

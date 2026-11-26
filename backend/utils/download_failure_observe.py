@@ -19,7 +19,10 @@ INGEST_CONNECTION_MESSAGE = '下载视频时网络超时或中断。请检查网
 _BLOCKED_HTTP_ERROR = re.compile(r'\bhttp error (403|412|429)\b')
 _ACCESS_BLOCKED = re.compile(
     r"sign in to confirm you.?re not a bot"
+    r"|sign in to view"
     r"|not a bot"
+    r"|use --cookies"
+    r"|cookies-from-browser"
     r"|private video"
     r"|video is private"
     r"|not available in your country"
@@ -29,6 +32,8 @@ _ACCESS_BLOCKED = re.compile(
     r"|confirm your age"
     r"|members[- ]only"
     r"|join this channel"
+    r"|this live event will begin"
+    r"|premieres in"
 )
 _NOT_FOUND = re.compile(
     r"\bhttp error (404|410)\b"
@@ -36,18 +41,25 @@ _NOT_FOUND = re.compile(
     r"|has been removed"
     r"|does not exist"
     r"|no longer available"
+    r"|truncated id"
+    r"|incomplete youtube id"
     r"|account associated with this video has been terminated"
 )
 _LOGIN_REQUIRED = (
-    'sign in to confirm', 'not a bot', 'login required', 'private video', 'members-only', 'members only',
+    'sign in to confirm', 'sign in to view', 'not a bot', 'login required', 'login_required',
+    'use --cookies', 'cookies-from-browser', 'private video', 'members-only', 'members only',
 )
 _UNSUPPORTED = ('unsupported url', 'no video formats', 'no video formats found')
 _CONNECTION = (
-    'unable to download webpage', 'connection reset',
+    'unable to download webpage', 'unable to download video data', 'did not get any data blocks',
+    'giving up after', 'fragment not found', 'http error 500', 'http error 502', 'http error 503', 'http error 504',
+    'connection reset', 'connection refused', 'connection aborted', 'remote end closed',
+    'incomplete read', 'broken pipe', 'eof occurred in violation of protocol', 'urlopen error',
+    'transport error', 'network is unreachable', 'failed to resolve', 'temporary failure in name resolution',
     'ssl:', '[ssl', 'ssl error', 'certificate_verify_failed', 'ssl.ssleoferror',
     'getaddrinfo', 'proxy', 'name or service not known', 'nodename nor servname',
 )
-_TIMEOUT = ('timed out', 'timeout')
+_TIMEOUT = ('timed out', 'timeout', 'read timed out')
 _FRAME = (
     'ffmpeg', 'postprocess',
     'merging formats', 'error merging', 'merge the formats', 'ffmpeg merge', 'unable to merge',
@@ -60,8 +72,8 @@ _DNS = ('getaddrinfo', 'name or service not known', 'nodename nor servname')
 
 
 def _rename_locked(text: str) -> bool:
-    """A rename that lost to a sharing lock, after the downloader's own retries."""
-    if 'unable to rename file' not in text:
+    """A rename or fragment append that lost to a Windows sharing lock, after yt-dlp's own retries."""
+    if not any(op in text for op in ('unable to rename file', 'unable to open for writing', 'append_fragment')):
         return False
     return any(phrase in text for phrase in (
         'winerror 32',

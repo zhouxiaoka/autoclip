@@ -2460,5 +2460,13 @@
   "editing_style.view_all": "All {{count}}",
   "editing_style.gallery_title": "Choose Editing Style",
   "editing_style.scroll_prev": "Previous",
-  "editing_style.scroll_next": "Next"
+  "editing_style.scroll_next": "Next",
+  "查看更新内容": "What's new",
+  "当前有项目正在制作，建议完成后再重启更新。": "A project is currently running. Wait until it finishes before restarting to update.",
+  "继续渲染未完成版本": "Resume unfinished renders",
+  "继续渲染剩余版本": "Resume remaining renders",
+  "还有 {{count}} 条未完成版本，已完成成片已保留。": "{{count}} unfinished render(s) remaining. Completed clips are kept.",
+  "上次重启中断的制作": "Interrupted by restart",
+  "正在恢复…": "Resuming…",
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "This video is over 30 minutes and needs local transcription, which can be slow on lower-spec PCs. Try the first 30 minutes, or switch to the base model or cloud transcription in Settings."
 }

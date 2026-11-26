@@ -257,6 +257,8 @@ export default function StudioResults({ project, children, onCreateCollection, o
     receipt: receiptCause,
   })
   const completedVariants = (workspace.output_variants || []).filter(item => item.status === 'completed')
+  const failedVariants = (workspace.output_variants || []).filter(item => item.status === 'failed')
+  const canResumeFailedVariants = failedVariants.length > 0 && !progressRun
   const representedJobs = new Set(completedVariants.map(item => item.render_job_id).filter(Boolean))
   const preservedCount = countPreservedResults({
     drafts: workspace.drafts?.length,
@@ -377,9 +379,16 @@ export default function StudioResults({ project, children, onCreateCollection, o
             void act('retry-analysis', async () => { await studioApi.retry(project.id, { retry_kind: 'same' }) })
           }}>{t(resumePoint?.label || detailView.primary.label)}</Btn>}
           {rechargeUrl && <Btn disabled={!!busy} onClick={() => void openExternalLink(rechargeUrl)}>{t(rechargeLabel)}</Btn>}
+          {canResumeFailedVariants && detailView.primary?.id === 'view_results' && <Btn variant="cta" disabled={!!busy} loading={busy === 'retry-failed-variants'} onClick={() => void act('retry-failed-variants', async () => { await studioApi.retryFailedVariants(project.id) })}>{t('继续渲染未完成版本')}</Btn>}
           {resumePoint && <Btn disabled={!!busy} loading={busy==='retry-fresh'} onClick={() => void act('retry-fresh', async () => { await studioApi.retry(project.id, { retry_kind: 'same', fresh: true }) })}>{t('从头重做')}</Btn>}
         </div>
         {!escalateDiagnose && <div className="ac-failure-weak"><Btn variant="text" disabled={!!busy} onClick={() => setDiagnoseOpen(true)}>{t('看看哪里不对')}</Btn></div>}
+      </div>}
+      {!taskFailed && canResumeFailedVariants && <div className="studio-more-platform" role="status" data-testid="partial-render-resume">
+        <p className="studio-muted">{t('还有 {{count}} 条未完成版本，已完成成片已保留。', { count: failedVariants.length })}</p>
+        <div className="studio-actions">
+          <Btn size="sm" variant="cta" disabled={!!busy} loading={busy === 'retry-failed-variants'} onClick={() => void act('retry-failed-variants', async () => { await studioApi.retryFailedVariants(project.id) })}>{t('继续渲染未完成版本')}</Btn>
+        </div>
       </div>}
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
       <div className="ac-grid-3 studio-result-grid">{[...variants].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} billable={billable > 0} recommendation={{ recommended_template: workspace.generation?.recommended_template, accepted_recommendation: workspace.generation?.accepted_recommendation }} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>)}{standaloneDrafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}

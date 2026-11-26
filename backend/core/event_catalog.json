@@ -192,6 +192,7 @@
     ],
     "source_type": [
       "file",
+      "obs",
       "twitch",
       "youtube",
       "bilibili",
@@ -201,6 +202,14 @@
       "studio",
       "legacy",
       "upload"
+    ],
+    "replay_source": [
+      "obs",
+      "twitch_file",
+      "youtube_file",
+      "kick_file",
+      "discord_file",
+      "other_file"
     ],
     "material_origin": [
       "obs",

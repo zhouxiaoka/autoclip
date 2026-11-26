@@ -84,7 +84,7 @@ export default function ObsSettings() {
       {state?.connected && <Row label={'OBS ' + state.version} hint={state.directory}>{state.recording && t('obs.recording')}</Row>}
       <Row label={t('obs.limit')} hint={t('obs.fees')}><InputNumber aria-label={t('obs.limit')} min={1} max={500}
         disabled={state?.automatic} value={limit ?? state?.max_calls ?? 50} onChange={setLimit} /></Row>
-      {state?.recipients.map(({ role, host, model }) =>
+      {(state?.recipients ?? []).map(({ role, host, model }) =>
         <Row key={role} label={t('obs.' + role)} hint={host}>{model}</Row>)}
       <Row label={t('obs.auto')} hint={state?.changed ? t('obs.changed') : state?.connected && !state.supported
         ? t('obs.version') : !state?.digest ? t('obs.models') : t('obs.consent')}>

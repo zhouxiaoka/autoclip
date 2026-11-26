@@ -682,16 +682,16 @@
       "protocol": "google-generative-ai",
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
       "docs_url": "https://aistudio.google.com/apikey",
-      "default_model": "gemini-3.8-flash",
+      "default_model": "gemini-2.5-flash",
       "catalog": [
+        "gemini-2.5-flash",
         "gemini-3.8-flash",
         "gemini-3.7-flash",
         "gemini-3.6-flash",
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
         "gemini-3.1-pro-preview",
-        "gemini-3-flash-preview",
-        "gemini-2.5-flash"
+        "gemini-3-flash-preview"
       ],
       "legacy_ui": true,
       "api_key_setting": "gemini_api_key",
@@ -700,12 +700,12 @@
       "kind": "preset",
       "candidates": {
         "analysis": [
-          "gemini-3.8-flash",
-          "gemini-2.5-flash"
+          "gemini-2.5-flash",
+          "gemini-3.8-flash"
         ],
         "vision": [
-          "gemini-3.8-flash",
-          "gemini-2.5-flash"
+          "gemini-2.5-flash",
+          "gemini-3.8-flash"
         ],
         "asr": [],
         "image": []

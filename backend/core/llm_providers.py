@@ -491,11 +491,29 @@ def relay_thinking_chat_kwargs(base_url: Optional[str], request: Dict[str, Any])
     return request
 
 
+def _ollama_thinking_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dict[str, Any]:
+    """Disable default deep thinking on local Ollama hybrid models (Qwen3/3.5, Gemma4) for structured JSON steps.
+
+    If an older Ollama or local server rejects `think` with HTTP 400, OpenAIProvider.call() strips it and retries once.
+    """
+    if not is_local_url(base_url):
+        return request
+    raw_model = (request.get("model") or "").strip().lower()
+    bare_model = raw_model.rsplit("/", 1)[-1]
+    if not bare_model.startswith(("qwen3", "gemma4")):
+        return request
+    guarded = dict(request)
+    extra = dict(guarded.get("extra_body") or {})
+    extra.setdefault("think", False)
+    guarded["extra_body"] = extra
+    return guarded
+
+
 def _strip_thinking_extra_body(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     extra = payload.get("extra_body")
-    if not isinstance(extra, dict) or not any(k in extra for k in ("enable_thinking", "thinking")):
+    if not isinstance(extra, dict) or not any(k in extra for k in ("enable_thinking", "thinking", "think")):
         return None
-    stripped_extra = {k: v for k, v in extra.items() if k not in ("enable_thinking", "thinking")}
+    stripped_extra = {k: v for k, v in extra.items() if k not in ("enable_thinking", "thinking", "think")}
     cleaned = dict(payload)
     if stripped_extra:
         cleaned["extra_body"] = stripped_extra
@@ -508,11 +526,11 @@ def _rejects_thinking_param(error: Any) -> bool:
     if getattr(error, "status_code", None) != 400:
         return False
     text = str(error or "").lower()
-    return any(tok in text for tok in ("enable_thinking", "thinking", "extra_body", "unrecognized", "unknown parameter", "unsupported"))
+    return any(tok in text for tok in ("enable_thinking", "thinking", "think", "extra_body", "unrecognized", "unknown parameter", "unsupported"))
 
 
 def guarded_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dict[str, Any]:
-    """所有 OpenAI 兼容文字请求都经过这里：DeepSeek、百炼 Qwen 与已知预设中转站的思考开关。"""
+    """所有 OpenAI 兼容文字请求都经过这里：DeepSeek、百炼 Qwen 与已知预设中转站思考开关。"""
     return relay_thinking_chat_kwargs(base_url, dashscope_chat_kwargs(base_url, deepseek_chat_kwargs(base_url, request)))
 
 
@@ -664,11 +682,11 @@ class OpenAIProvider(LLMProvider):
             model = self.request_model()
             full_input = self._build_full_input(prompt, input_data)
             from backend.core.custom_request_options import apply_chat_options
-            payload = token_param_kwargs(model, self.base_url, guarded_chat_kwargs(self.base_url, apply_chat_options({
+            payload = token_param_kwargs(model, self.base_url, _ollama_thinking_chat_kwargs(self.base_url, guarded_chat_kwargs(self.base_url, apply_chat_options({
                 "model": model,
                 "messages": [{"role": "user", "content": full_input}],
                 **{key: value for key, value in kwargs.items() if key != "stream"},
-            }, getattr(self, 'kwargs', {}))))
+            }, getattr(self, 'kwargs', {})))))
             # A long think used to die on a silent socket. Stream when the host
             # can; a refusal or a single JSON body is assembled the same way.
             payload["stream"] = True
@@ -776,10 +794,20 @@ def _attach_gemini_error_body(error: BaseException) -> None:
         return
 
 
+_GEMINI_RETIRED_PRESET_MODELS = frozenset({
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+})
+_GEMINI_FALLBACK_MODEL = "gemini-2.5-flash"
+
+
 class GeminiProvider(LLMProvider):
     """Google Gemini提供商"""
     
-    def __init__(self, api_key: str, model_name: str = "gemini-3.8-flash", **kwargs):
+    def __init__(self, api_key: str, model_name: str = _GEMINI_FALLBACK_MODEL, **kwargs):
         super().__init__(api_key, model_name, **kwargs)
         self.base_url = kwargs.get('base_url') or 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -791,26 +819,49 @@ class GeminiProvider(LLMProvider):
             full_input = self._build_full_input(prompt, input_data)
 
             model = self.request_model()
-            payload = {
-                'model': model,
-                'messages': [{'role': 'user', 'content': full_input}],
-                'temperature': kwargs.get('temperature'),
-                'top_p': kwargs.get('top_p'),
-                'max_tokens': kwargs.get('max_tokens'),
-                'max_completion_tokens': kwargs.get('max_completion_tokens'),
-                'response_format': kwargs.get('response_format'),
-            }
-            url, headers, body = gemini_transport.request(self.base_url, self.api_key, payload)
-            from backend.core.job_budget import clip_job_read_timeout
+            from backend.core.job_budget import clip_job_active, clip_job_read_timeout
             from backend.core.llm_stream import budget_watch
-            timeout = clip_job_read_timeout(LLM_READ_TIMEOUT_SEC)
-            with requests.post(url, headers=headers, json=body,
-                               auth=gemini_transport.native_auth,
-                               timeout=(min(LLM_CONNECT_TIMEOUT_SEC, timeout), timeout), stream=True) as response:
-                with budget_watch(response):
-                    response_body = response.content
-                    response.raise_for_status()
-                    result = gemini_transport.completion(json.loads(response_body))
+
+            def _send(target_model: str):
+                payload = {
+                    'model': target_model,
+                    'messages': [{'role': 'user', 'content': full_input}],
+                    'temperature': kwargs.get('temperature'),
+                    'top_p': kwargs.get('top_p'),
+                    'max_tokens': kwargs.get('max_tokens'),
+                    'max_completion_tokens': kwargs.get('max_completion_tokens'),
+                    'response_format': kwargs.get('response_format'),
+                }
+                bare = target_model.removeprefix('models/').lower()
+                if clip_job_active() and bare.startswith('gemini-2.5-flash') and 'thinking_budget' not in kwargs:
+                    payload['thinking_budget'] = 0
+                elif kwargs.get('thinking_budget') is not None:
+                    payload['thinking_budget'] = kwargs['thinking_budget']
+                url, headers, body = gemini_transport.request(self.base_url, self.api_key, payload)
+                timeout = clip_job_read_timeout(LLM_READ_TIMEOUT_SEC)
+                with requests.post(url, headers=headers, json=body,
+                                   auth=gemini_transport.native_auth,
+                                   timeout=(min(LLM_CONNECT_TIMEOUT_SEC, timeout), timeout), stream=True) as response:
+                    with budget_watch(response):
+                        response_body = response.content
+                        response.raise_for_status()
+                        return gemini_transport.completion(json.loads(response_body))
+
+            try:
+                result = _send(model)
+            except requests.HTTPError as err:
+                status = getattr(getattr(err, 'response', None), 'status_code', None)
+                bare = model.removeprefix('models/').strip().lower()
+                if (
+                    status == 404
+                    and bare in _GEMINI_RETIRED_PRESET_MODELS
+                    and gemini_transport.is_official_gemini('gemini', self.base_url)
+                ):
+                    logger.info("Gemini 预设模型 %s 返回 404，自动回退至 %s 重试一次", sanitize_model(model), _GEMINI_FALLBACK_MODEL)
+                    model = _GEMINI_FALLBACK_MODEL
+                    result = _send(model)
+                else:
+                    raise
             choice = result['choices'][0]
             return LLMResponse(
                 content=choice['message']['content'],

@@ -106,6 +106,13 @@ export default function UrlPreview({
   if (!preview) return null
   const eta = totalEtaLine(preview.duration ?? null, preview.preview_route)
   const showFirstWindow = Boolean(suggestFirstWindow && onConfirmFirstWindow && onConfirmFull)
+  const showLongLocalAsrTip = Boolean(
+    !showFirstWindow
+    && preview.preview_route === 'local_transcription'
+    && typeof preview.duration === 'number'
+    && preview.duration > FIRST_WINDOW_END_SEC
+    && onConfirmFirstWindow,
+  )
   return (
     <div className="studio-url-preview" data-testid="url-preview" role="region" aria-label={t('视频预览')}>
       <div className="studio-url-preview-main">
@@ -121,6 +128,9 @@ export default function UrlPreview({
           {eta && <p className="studio-muted">{eta}</p>}
           {preview.warn_visual_too_long && (
             <p className="studio-url-preview-warn" role="note">{t(VISUAL_SOURCE_TOO_LONG_MESSAGE)}</p>
+          )}
+          {showLongLocalAsrTip && (
+            <p className="studio-url-preview-warn" role="note" data-testid="long-local-asr-tip">{t('视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。')}</p>
           )}
         </div>
       </div>
@@ -145,9 +155,16 @@ export default function UrlPreview({
             </Btn>
           </>
         ) : onConfirm ? (
-          <Btn size="sm" variant={needsTranscriptionInstall ? 'default' : 'cta'} disabled={needsTranscriptionInstall} onClick={onConfirm}>
-            {confirmLabel || t('确认并开始下载')}
-          </Btn>
+          <>
+            <Btn size="sm" variant={needsTranscriptionInstall ? 'default' : 'cta'} disabled={needsTranscriptionInstall} onClick={onConfirm}>
+              {confirmLabel || t('确认并开始下载')}
+            </Btn>
+            {showLongLocalAsrTip && (
+              <Btn size="sm" variant="default" disabled={needsTranscriptionInstall} onClick={onConfirmFirstWindow} data-testid="long-local-window-partial">
+                {t('只处理前 30 分钟')}
+              </Btn>
+            )}
+          </>
         ) : null}
         {onDismiss && (
           <Btn size="sm" variant="text" onClick={onDismiss}>{t('换一个链接')}</Btn>

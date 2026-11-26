@@ -188,6 +188,7 @@ def test_all_shipping_catalog_templates_pass_factory_verify():
     assert {
         'interview_card', 'xhs_note', 'podcast_dark',
         'streamer_split', 'gta_wasted', 'streamer_pip',
+        'highlight_note', 'meme_setup', 'clean_pill',
     } <= set(found)
     for name in found:
         spec, info = template_factory.verify_folder(catalog_root / name)
@@ -221,3 +222,158 @@ def test_concurrent_catalog_cache_writes_do_not_race(tmp_path):
     assert loaded is not None
     assert meta['etag'].startswith('W/"')
     assert list(tmp_path.glob('*.tmp')) == []
+
+
+def test_catalog_admin_filters_locale_min_version_badge_and_removed_ids(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    folder = _scaffold_template(tmp_path / 'src', 'installed_soft_hidden')
+    catalog.install_from_archive(_zip_dir(folder), source_url='test')
+    assert registry.is_html_template('installed_soft_hidden')
+
+    sha = 'a' * 64
+    base_url = 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog'
+    payload = {
+        'schema_version': 1,
+        'catalog_revision': 7,
+        'updated_at': '2026-11-25T12:00:00Z',
+        'removed_ids': ['installed_soft_hidden', 'remote_removed'],
+        'templates': [
+            {
+                'id': 'global_new',
+                'version': '1.0.0',
+                'name': {'zh': '全球新模版', 'en': 'Global New'},
+                'sha256': sha,
+                'download_url': f'{base_url}/global_new-1.0.0.zip',
+                'badge': 'new',
+                'target_locales': [],
+                'min_app_version': '1.6.1',
+            },
+            {
+                'id': 'zh_only',
+                'version': '1.0.0',
+                'name': {'zh': '中文专属', 'en': 'ZH Only'},
+                'sha256': sha,
+                'download_url': f'{base_url}/zh_only-1.0.0.zip',
+                'target_locales': ['zh'],
+                'min_app_version': '1.6.1',
+            },
+            {
+                'id': 'future_app_only',
+                'version': '1.0.0',
+                'name': {'zh': '未来版本', 'en': 'Future App'},
+                'sha256': sha,
+                'download_url': f'{base_url}/future_app_only-1.0.0.zip',
+                'min_app_version': '2.0.0',
+            },
+            {
+                'id': 'unlisted_tpl',
+                'version': '1.0.0',
+                'name': {'zh': '已下架', 'en': 'Unlisted'},
+                'sha256': sha,
+                'download_url': f'{base_url}/unlisted_tpl-1.0.0.zip',
+                'status': 'unlisted',
+            },
+            {
+                'id': 'remote_removed',
+                'version': '1.0.0',
+                'name': {'zh': '软隐藏远端', 'en': 'Removed Remote'},
+                'sha256': sha,
+                'download_url': f'{base_url}/remote_removed-1.0.0.zip',
+            },
+        ],
+    }
+    catalog.sync_catalog(
+        force=True,
+        url=f'{base_url}/catalog.json',
+        fetcher=lambda _u, **_kw: (200, json.dumps(payload).encode('utf-8'), {}),
+    )
+
+    en_items = catalog.list_template_items(include_remote=True, locale='en-US', app_version='1.6.2')['templates']
+    en_ids = {item['id'] for item in en_items}
+    assert 'global_new' in en_ids
+    assert 'zh_only' not in en_ids
+    assert 'future_app_only' not in en_ids
+    assert 'unlisted_tpl' not in en_ids
+    assert 'remote_removed' not in en_ids
+    assert 'installed_soft_hidden' not in en_ids
+    # Installed template files remain intact for existing drafts!
+    assert registry.is_html_template('installed_soft_hidden')
+    global_item = next(item for item in en_items if item['id'] == 'global_new')
+    assert global_item['badge'] == 'new'
+
+    zh_items = catalog.list_template_items(include_remote=True, locale='zh-CN', app_version='1.6.2')['templates']
+    assert 'zh_only' in {item['id'] for item in zh_items}
+
+
+def test_template_factory_build_ingest_payload():
+    entry = {
+        'id': 'highlight_note',
+        'version': '1.0.0',
+        'name': {'en': 'Highlight Note', 'zh': '干货高光纸条'},
+        'desc': {'en': 'Highlighter tape', 'zh': '荧光黄胶带'},
+        'category': 'knowledge',
+        'tags': ['knowledge', 'highlight'],
+        'min_app_version': '1.6.1',
+        'sha256': 'b' * 64,
+        'size_bytes': 175855,
+        'download_url': 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog/highlight_note-1.0.0.zip',
+        'poster_url': 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog/highlight_note-1.0.0.poster.webp',
+        'preview_mp4_url': 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog/highlight_note-1.0.0.preview.mp4',
+        'preview_webm_url': 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog/highlight_note-1.0.0.preview.webm',
+    }
+    body = template_factory.build_ingest_payload(entry, target_region='global', auto_publish=True, badge='new')
+    assert body['id'] == 'highlight_note'
+    assert body['target_region'] == 'global'
+    assert body['badge'] == 'new'
+    assert body['auto_publish'] is True
+    assert body['sha256'] == 'b' * 64
+
+
+def test_catalog_overrides_builtin_order_featured_locale_and_unlisted(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    sha = 'c' * 64
+    base_url = 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog'
+    payload = {
+        'schema_version': 1,
+        'catalog_revision': 8,
+        'updated_at': '2026-11-25T13:00:00Z',
+        'templates': [
+            {
+                'id': 'cloud_top',
+                'version': '1.0.0',
+                'name': {'zh': '云端置顶', 'en': 'Cloud Top'},
+                'sha256': sha,
+                'download_url': f'{base_url}/cloud_top-1.0.0.zip',
+                'order': 5,
+                'featured': True,
+                'badge': 'new',
+            },
+        ],
+        'overrides': {
+            'editorial': {'order': 10, 'featured': True, 'badge': 'hot', 'target_locales': [], 'status': 'published'},
+            'street': {'order': 20, 'target_locales': ['zh'], 'status': 'published'},
+            'news': {'order': 90, 'status': 'unlisted'},
+            'classic': {'order': 950, 'status': 'unlisted'},
+        },
+        'removed_ids': ['news'],
+    }
+    catalog.sync_catalog(
+        force=True,
+        url=f'{base_url}/catalog.json',
+        fetcher=lambda _u, **_kw: (200, json.dumps(payload).encode('utf-8'), {}),
+    )
+
+    en_items = catalog.list_template_items(include_remote=True, locale='en-US', app_version='1.6.2')['templates']
+    en_ids = [item['id'] for item in en_items]
+    # Cloud featured (order 5) comes BEFORE built-in featured editorial (order 10) -> true interleaved equality!
+    assert en_ids[:2] == ['cloud_top', 'editorial']
+    assert 'street' not in en_ids  # zh-only override hides street for en-US
+    assert 'news' not in en_ids  # unlisted + removed_ids hides news from picker
+    assert 'classic' not in en_ids  # unlisted hides classic from picker
+    # Built-in news files remain renderable for existing drafts!
+    assert registry.is_html_template('news')
+    editorial_item = next(item for item in en_items if item['id'] == 'editorial')
+    assert editorial_item['featured'] is True and editorial_item['badge'] == 'hot' and editorial_item['order'] == 10
+
+    zh_items = catalog.list_template_items(include_remote=True, locale='zh-CN', app_version='1.6.2')['templates']
+    assert 'street' in [item['id'] for item in zh_items]

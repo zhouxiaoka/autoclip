@@ -14,7 +14,13 @@ def native_root(base_url: str) -> str:
     parsed = urlsplit(base_url)
     if parsed.username or parsed.password:
         raise ValueError('Gemini endpoint must not contain credentials')
-    path = parsed.path.rstrip('/').removesuffix('/openai')
+    path = parsed.path.rstrip('/')
+    if path.lower().endswith('/openai/v1'):
+        path = path[:-len('/openai/v1')]
+    elif path.lower().endswith('/openai'):
+        path = path[:-len('/openai')]
+    if (parsed.hostname or '').lower() == 'generativelanguage.googleapis.com' and not path:
+        path = '/v1beta'
     return urlunsplit((parsed.scheme, parsed.netloc, path, '', ''))
 
 
@@ -76,6 +82,9 @@ def request(base_url: str, api_key: str, payload: dict) -> tuple[str, dict, dict
             config[target] = payload[source]
     if (payload.get('response_format') or {}).get('type') in ('json_object', 'json_schema'):
         config['responseMimeType'] = 'application/json'
+    thinking_budget = payload.get('thinking_budget')
+    if isinstance(thinking_budget, int) and not isinstance(thinking_budget, bool) and thinking_budget >= 0:
+        config['thinkingConfig'] = {'thinkingBudget': thinking_budget}
     if config:
         body['generationConfig'] = config
     model = quote(payload['model'].removeprefix('models/'), safe='')

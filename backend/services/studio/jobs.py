@@ -935,36 +935,73 @@ def _content_drafts(project_id, plan, video, platforms=()):
     prefs = Preferences.model_validate(plan['preferences'])
     if route == 'subtitle' or prefs.goal == 'content':
         from backend.services.platform_strategy import long_form_minimum
+        from backend.services.studio.planning import VISUAL_MAX_SOURCE_SEC
         min_sec, label = long_form_minimum(platforms)
         # Pass the minimum only when a long platform asked for it. A two-argument mock
         # still matches every short-platform import.
         if not min_sec and prefs.goal == 'highlight' and (plan.get('local_evidence') or {}).get('commentary'):
+            from backend.pipeline.failures import PipelineFailure
             from backend.services.studio.game_highlights import subtitle_drafts
-            from backend.services.studio.planning import VISUAL_MAX_SOURCE_SEC
             selection = []
             can_frame_review = (
                 (plan.get('analysis_preferences') or {}).get('analysis_mode') == 'auto'
                 and not plan.get('degrade_reason')
                 and (plan.get('source_duration') or 0) <= VISUAL_MAX_SOURCE_SEC
             )
-            drafts = subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
-                                     auto_frame_review=can_frame_review,
-                                     selection_log=selection)
-            return (drafts, [], {'selection': selection}) if selection else drafts
-        clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
-        source_duration = float(intelligence._probe(video).get('duration') or 0)
-        drafts = _drafts_from_content_clips(
-            project_id,
-            clips,
-            prefs,
-            source_duration,
-            window=(plan.get('overrides') or {}).get('source_window'),
-            origin='auto-content',
-            include_score=True,
-        )
-        if not drafts:
-            raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
-        return drafts
+            try:
+                drafts = subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
+                                         auto_frame_review=can_frame_review,
+                                         selection_log=selection)
+                return (drafts, [], {'selection': selection}) if selection else drafts
+            except PipelineFailure as error:
+                source_duration = float(intelligence._probe(video).get('duration') or 0)
+                analysis_mode = (plan.get('analysis_preferences') or {}).get('analysis_mode') or 'auto'
+                requested_goal = (plan.get('overrides') or {}).get('goal') or 'auto'
+                can_visual_fallback = (
+                    error.code == 'transcription_empty'
+                    and analysis_mode != 'subtitle'
+                    and requested_goal != 'content'
+                    and 0 < source_duration <= VISUAL_MAX_SOURCE_SEC
+                    and intelligence.source_frame_analysis_allowed()
+                )
+                if not can_visual_fallback:
+                    raise
+                logger.info('Gameplay commentary transcription empty on %s; falling back to visual highlight analysis', project_id)
+                route = 'visual'
+                prefs = prefs.model_copy(update={'goal': 'highlight'})
+        if route == 'subtitle' or prefs.goal == 'content':
+          try:
+            clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
+          except ContentPipelineFailure as error:
+            source_duration = float(intelligence._probe(video).get('duration') or 0)
+            analysis_mode = (plan.get('analysis_preferences') or {}).get('analysis_mode') or 'auto'
+            requested_goal = (plan.get('overrides') or {}).get('goal') or 'auto'
+            can_visual_fallback = (
+                error.code == 'transcription_empty'
+                and analysis_mode != 'subtitle'
+                and requested_goal != 'content'
+                and 0 < source_duration <= VISUAL_MAX_SOURCE_SEC
+                and intelligence.source_frame_analysis_allowed()
+            )
+            if not can_visual_fallback:
+                raise
+            logger.info('Transcription empty on %s; falling back to visual highlight analysis', project_id)
+            route = 'visual'
+            prefs = prefs.model_copy(update={'goal': 'highlight'})
+          else:
+            source_duration = float(intelligence._probe(video).get('duration') or 0)
+            drafts = _drafts_from_content_clips(
+                project_id,
+                clips,
+                prefs,
+                source_duration,
+                window=(plan.get('overrides') or {}).get('source_window'),
+                origin='auto-content',
+                include_score=True,
+            )
+            if not drafts:
+                raise UserFacingError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
+            return drafts
     if route != 'visual':
         raise UserFacingError('没有可用的自动分析路径，请检查模型设置后重试')
     if not intelligence.ready():
@@ -1329,7 +1366,14 @@ def _design_covers(project_id, draft, job_id):
                     item['cover'] = 'design'
         store.change(project_id, mark)
     for variant in targets:
-        request_ai_cover(project_id, variant['id'], job_id)
+        try:
+            request_ai_cover(project_id, variant['id'], job_id)
+        except Exception as error:  # Optional AI cover config/dispatch errors must never fail a completed render.
+            from backend.core import project_cancellation
+            if isinstance(error, (project_cancellation.ProjectDeleted, project_cancellation.JobStopped)):
+                raise
+            store.raise_owned_read_error(error)
+            logger.warning('Optional AI cover request skipped after render: %s', type(error).__name__)
 
 
 # Cap background cover work to 1 worker so PIL/OpenCV jobs do not spike RAM alongside renders on 8GB machines.
@@ -2262,6 +2306,92 @@ def _variant_attempt(data, retry, variant):
     variant['redone_by_attempt'] = receipt['attempt_id']  # this round is judged on what it redid
     data['generation']['attempt_id'] = receipt['attempt_id']
     return receipt
+
+
+def resumable_failed_variants(state) -> list[dict]:
+    """Return failed variants eligible for render-only resume (preserving completed outputs and skipping LLM)."""
+    if not isinstance(state, dict):
+        return []
+    generation = state.get('generation') or {}
+    analysis = state.get('analysis') or {}
+    if not generation.get('auto_start'):
+        return []
+    if generation.get('status') not in ('failed', 'partial'):
+        return []
+    if analysis.get('status') == 'running':
+        return []
+    variants = [item for item in (state.get('output_variants') or []) if isinstance(item, dict)]
+    if not variants:
+        return []
+    if any(item.get('status') in ('queued', 'running', 'preparing') for item in variants):
+        return []
+    render_interrupted = (
+        generation.get('status') == 'partial'
+        or analysis.get('phase') == 'rendering'
+        or any(item.get('status') == 'completed' for item in variants)
+    )
+    if not render_interrupted:
+        return []
+    draft_ids = {d.get('id') for d in (state.get('drafts') or []) if isinstance(d, dict) and d.get('id')}
+    failed = [item for item in variants if item.get('status') == 'failed' and item.get('draft_id') in draft_ids]
+    return failed
+
+
+def retry_failed_variants(project_id, retry=None):
+    """Resume all failed output variants in one aggregate generation attempt without re-running LLM or completed renders."""
+    state = store.recover(project_id)
+    if retry is not None:
+        again = attempts.by_key(state, retry.get('key'))
+        if again:
+            return again.get('run_id'), [item for item in state.get('output_variants', []) if item.get('redone_by_attempt') == again.get('attempt_id')]
+    candidates = resumable_failed_variants(state)
+    if not candidates:
+        raise UserFacingError('没有可继续渲染的未完成版本')
+    candidate_ids = [item['id'] for item in candidates]
+
+    def update(data):
+        draft_ids = {d.get('id') for d in (data.get('drafts') or []) if isinstance(d, dict) and d.get('id')}
+        targets = [item for item in data.get('output_variants', []) if item.get('id') in candidate_ids and item.get('status') == 'failed' and item.get('draft_id') in draft_ids]
+        if not targets:
+            raise UserFacingError('没有可继续渲染的未完成版本')
+        receipt = _variant_attempt(data, retry, targets[0])
+        for extra in targets[1:]:
+            attempts.inherit_plan(receipt, data, extra)
+            extra['redone_by_attempt'] = receipt['attempt_id']
+        to_prepare = []
+        has_queued = False
+        for item in targets:
+            if item.get('needs_prepare'):
+                prep_id = _start_preparing(data, item)
+                to_prepare.append((item['id'], prep_id))
+            else:
+                item.update(status='queued', render_attempt_id=uuid.uuid4().hex)
+                item.pop('render_dispatch_claimed', None)
+                item.pop('render_dispatch_instance', None)
+                item.pop('render_job_id', None)
+                item.pop('error', None)
+                item.pop('error_code', None)
+                has_queued = True
+        data['generation'].update(status='rendering', attempt_id=receipt['attempt_id'])
+        data['analysis'] = {
+            **store.attempt_identity(data.get('analysis'), data.get('generation')),
+            **_carried_progress(data.get('analysis')),
+            'status': 'running',
+            'phase': 'rendering',
+            'run_id': receipt['run_id'],
+            'message': '正在继续渲染未完成的成片',
+            'instance': store.INSTANCE,
+            'created_at': store.now(),
+        }
+        return receipt['run_id'], to_prepare, has_queued
+
+    run_id, to_prepare, has_queued = store.change(project_id, update)
+    for variant_id, prep_id in to_prepare:
+        _submit_on_demand(project_id, variant_id, prep_id)
+    if has_queued:
+        _dispatch_pending_variants(project_id)
+    latest = store.read(project_id)
+    return run_id, [item for item in latest.get('output_variants', []) if item.get('id') in candidate_ids]
 
 
 def retry_variant(project_id, variant_id, retry=None):

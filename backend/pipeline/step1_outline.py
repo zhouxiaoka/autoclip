@@ -244,6 +244,8 @@ class OutlineExtractor:
             解析后的大纲结构
         """
         # 分类提示词同时存在 JSON 和 Markdown 契约，统一成下游结构。
+        from ..utils.llm_client import strip_thinking_blocks
+        response = strip_thinking_blocks(response)
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip(), flags=re.IGNORECASE)
         try:
             data = json.loads(raw)

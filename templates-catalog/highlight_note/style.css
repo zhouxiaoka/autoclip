@@ -1,0 +1,14 @@
+@font-face {
+  font-family: 'NoteDisplay';
+  src: local('PingFang SC'), local('Noto Sans CJK SC'), local('Hiragino Sans GB'), local('Inter'), local('Helvetica Neue');
+  font-weight: 800;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'NoteDisplay', 'PingFang SC', 'Noto Sans CJK SC', 'Helvetica Neue', sans-serif;
+}
+#stage { position: relative; width: 1080px; height: 1920px; }

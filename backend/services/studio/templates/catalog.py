@@ -77,6 +77,10 @@ class CatalogEntry(BaseModel):
     size_bytes: int = Field(default=0, ge=0, le=MAX_ARCHIVE_BYTES)
     min_app_version: str | None = Field(default=None, max_length=32)
     author: str = Field(default='AutoClip', max_length=64)
+    featured: bool = False
+    badge: str | None = Field(default=None, max_length=24)
+    status: str = Field(default='published', max_length=24)
+    target_locales: list[str] = Field(default_factory=list, max_length=16)
     poster_url: str | None = Field(default=None, max_length=2048)
     preview_mp4_url: str | None = Field(default=None, max_length=2048)
     preview_webm_url: str | None = Field(default=None, max_length=2048)
@@ -98,11 +102,24 @@ class CatalogEntry(BaseModel):
         return value
 
 
+class CatalogOverride(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    order: int | None = Field(default=None, ge=0, le=10000)
+    featured: bool | None = None
+    badge: str | None = Field(default=None, max_length=24)
+    status: str | None = Field(default=None, max_length=24)
+    target_locales: list[str] | None = Field(default=None, max_length=16)
+    min_app_version: str | None = Field(default=None, max_length=32)
+
+
 class CatalogManifest(BaseModel):
     model_config = ConfigDict(extra='ignore')
     schema_version: Literal[1] = 1
+    catalog_revision: int | None = None
     updated_at: str = ''
     templates: list[CatalogEntry] = Field(default_factory=list)
+    overrides: dict[str, CatalogOverride] = Field(default_factory=dict)
+    removed_ids: list[str] = Field(default_factory=list)
 
 
 def catalog_urls() -> list[str]:
@@ -482,23 +499,106 @@ def _version_gt(candidate: str, current: str) -> bool:
     return registry._version_tuple(candidate) > registry._version_tuple(current)
 
 
+def _current_app_version() -> str:
+    env_ver = (os.getenv('AUTOCLIP_APP_VERSION') or '').strip()
+    if env_ver:
+        return env_ver
+    try:
+        from backend import __version__
+        return str(__version__)
+    except Exception:
+        return '0.0.0'
+
+
+def _app_version_allowed(min_app_version: str | None, current_app_version: str) -> bool:
+    if not min_app_version or not min_app_version.strip():
+        return True
+    return registry._version_tuple(current_app_version) >= registry._version_tuple(min_app_version)
+
+
+def _locale_allowed(target_locales: list[str], locale: str | None) -> bool:
+    if not target_locales:
+        return True
+    if not locale or not locale.strip():
+        return True
+    norm = locale.strip().lower().replace('_', '-')
+    short = norm.split('-', 1)[0]
+    targets = {item.strip().lower().replace('_', '-') for item in target_locales if item and item.strip()}
+    if not targets or 'global' in targets or '*' in targets:
+        return True
+    if 'overseas' in targets and short != 'zh':
+        return True
+    return norm in targets or short in targets
+
+
 def list_template_items(
     *,
     include_remote: bool = True,
     user_root: Path | None = None,
     asset_prefix: str = '/api/v1/studio/templates',
+    locale: str | None = None,
+    app_version: str | None = None,
 ) -> dict:
     """Build the unified template catalog payload for frontend / CLI / MCP."""
     loaded_list = registry.list_loaded(user_root=user_root)
     loaded_map = {item.spec.id: item for item in loaded_list}
     remote_manifest, meta = read_cached_catalog(user_root=user_root) if include_remote else (None, {})
     remote_map = {entry.id: entry for entry in (remote_manifest.templates if remote_manifest else [])}
+    overrides = remote_manifest.overrides if remote_manifest else {}
+    removed_set = set(remote_manifest.removed_ids) if remote_manifest else set()
+    effective_app_version = app_version or _current_app_version()
+
+    def _resolve_shelf(
+        item_id: str,
+        *,
+        default_order: int,
+        remote: CatalogEntry | None = None,
+    ) -> tuple[bool, int, bool, str | None]:
+        """Resolve cloud shelf overrides -> (visible, order, featured, badge)."""
+        ov = overrides.get(item_id)
+        status = (
+            ov.status if (ov and ov.status is not None)
+            else (remote.status if remote else 'published')
+        )
+        if item_id in removed_set or (status or 'published').strip().lower() != 'published':
+            return False, default_order, False, None
+        min_ver = (
+            ov.min_app_version if (ov and ov.min_app_version is not None)
+            else (remote.min_app_version if remote else None)
+        )
+        if not _app_version_allowed(min_ver, effective_app_version):
+            return False, default_order, False, None
+        target_locales = (
+            ov.target_locales if (ov and ov.target_locales is not None)
+            else (remote.target_locales if remote else [])
+        )
+        if not _locale_allowed(target_locales, locale):
+            return False, default_order, False, None
+        order = (
+            ov.order if (ov and ov.order is not None)
+            else (remote.order if remote else default_order)
+        )
+        featured = bool(
+            ov.featured if (ov and ov.featured is not None)
+            else (remote.featured if remote else False)
+        )
+        badge = (
+            ov.badge if (ov and ov.badge is not None)
+            else (remote.badge if remote else None)
+        )
+        return True, order, featured, badge
 
     items: list[dict] = []
     for loaded in loaded_list:
         spec = loaded.spec
         m = spec.effective_meta()
         remote = remote_map.get(spec.id)
+        visible, eff_order, eff_featured, eff_badge = _resolve_shelf(
+            spec.id, default_order=m.order, remote=remote,
+        )
+        if not visible:
+            # Soft-hide from new selection while keeping installed/built-in files intact for existing drafts.
+            continue
         has_poster = _local_preview_path(loaded.root, 'poster.webp') is not None
         has_mp4 = _local_preview_path(loaded.root, 'preview.mp4') is not None
         has_webm = _local_preview_path(loaded.root, 'preview.webm') is not None
@@ -508,41 +608,52 @@ def list_template_items(
             'desc': m.desc.model_dump(mode='json') if m.desc else {'zh': spec.name.zh, 'en': spec.name.en, 'locales': {}},
             'tags': m.tags,
             'category': m.category,
-            'order': m.order,
+            'order': eff_order,
+            'featured': eff_featured,
             'version': m.package_version,
             'source': loaded.source,
             'installed': True,
             'removable': loaded.source == 'installed',
             'update_available': bool(remote and _version_gt(remote.version, m.package_version)),
             'latest_version': remote.version if remote else m.package_version,
+            'badge': eff_badge,
             'poster_url': f'{asset_prefix}/{spec.id}/assets/poster.webp' if has_poster else (remote.poster_url if remote else None),
             'preview_mp4_url': f'{asset_prefix}/{spec.id}/assets/preview.mp4' if has_mp4 else (remote.preview_mp4_url if remote else None),
             'preview_webm_url': f'{asset_prefix}/{spec.id}/assets/preview.webm' if has_webm else (remote.preview_webm_url if remote else None),
         })
 
-    # Always append the built-in classic fallback.
-    items.append({
-        'id': 'classic',
-        'name': {'zh': '经典', 'en': 'Classic', 'locales': {}},
-        'desc': {'zh': '经典清晰字幕与居中画框，稳定兼容所有设备', 'en': 'Classic clean captions compatible with every device', 'locales': {}},
-        'tags': ['classic', 'fallback'],
-        'category': 'classic',
-        'order': 900,
-        'version': '1.0.0',
-        'source': 'builtin',
-        'installed': True,
-        'removable': False,
-        'update_available': False,
-        'latest_version': '1.0.0',
-        'poster_url': None,
-        'preview_mp4_url': None,
-        'preview_webm_url': None,
-    })
+    # Append built-in classic fallback unless cloud overrides hide it.
+    classic_visible, classic_order, classic_featured, classic_badge = _resolve_shelf('classic', default_order=900)
+    if classic_visible:
+        items.append({
+            'id': 'classic',
+            'name': {'zh': '经典', 'en': 'Classic', 'locales': {}},
+            'desc': {'zh': '经典清晰字幕与居中画框，稳定兼容所有设备', 'en': 'Classic clean captions compatible with every device', 'locales': {}},
+            'tags': ['classic', 'fallback'],
+            'category': 'classic',
+            'order': classic_order,
+            'featured': classic_featured,
+            'version': '1.0.0',
+            'source': 'builtin',
+            'installed': True,
+            'removable': False,
+            'update_available': False,
+            'latest_version': '1.0.0',
+            'badge': classic_badge,
+            'poster_url': None,
+            'preview_mp4_url': None,
+            'preview_webm_url': None,
+        })
 
     # Append installable remote templates not yet installed locally.
     if remote_manifest:
-        for entry in sorted(remote_manifest.templates, key=lambda e: (e.order, e.id)):
+        for entry in remote_manifest.templates:
             if entry.id in loaded_map:
+                continue
+            visible, eff_order, eff_featured, eff_badge = _resolve_shelf(
+                entry.id, default_order=entry.order, remote=entry,
+            )
+            if not visible:
                 continue
             items.append({
                 'id': entry.id,
@@ -550,18 +661,24 @@ def list_template_items(
                 'desc': entry.desc.model_dump(mode='json') if entry.desc else {'zh': entry.name.zh, 'en': entry.name.en, 'locales': {}},
                 'tags': entry.tags,
                 'category': entry.category,
-                'order': entry.order,
+                'order': eff_order,
+                'featured': eff_featured,
                 'version': entry.version,
                 'source': 'remote',
                 'installed': False,
                 'removable': False,
                 'update_available': False,
                 'latest_version': entry.version,
+                'badge': eff_badge,
                 'size_bytes': entry.size_bytes,
                 'poster_url': entry.poster_url,
                 'preview_mp4_url': entry.preview_mp4_url,
                 'preview_webm_url': entry.preview_webm_url,
             })
+
+    # Unified shelf sort across built-in, installed, and cloud templates:
+    # featured desc, order asc, id asc.
+    items.sort(key=lambda item: (not bool(item.get('featured')), int(item.get('order', 100)), str(item.get('id', ''))))
 
     remote_count = sum(1 for item in items if not item['installed'])
     return {

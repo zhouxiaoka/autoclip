@@ -18,6 +18,7 @@ from backend.core.provider_url import normalize_provider_base_url as rewrite_pro
 
 _KEY_HINTS = (
     (re.compile(r'^AIza'), 'gemini'),
+    (re.compile(r'^AQ\.'), 'gemini'),
     (re.compile(r'^xai-'), 'grok'),
     (re.compile(r'^sk-proj-'), 'openai'),
     (re.compile(r'^sk-svcacct-'), 'openai'),

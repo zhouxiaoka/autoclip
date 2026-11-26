@@ -1,0 +1,701 @@
+"""Regression tests for v1.6.2 P1 & P2 success-rate and clip-completion fixes."""
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from backend.services.studio import intelligence, jobs, preflight
+from backend.utils import download_failure_observe, download_recovery
+from backend.utils.llm_client import LLMClient, strip_thinking_blocks
+
+
+def test_thinking_model_json_extraction_strips_think_and_thought_blocks():
+    client = LLMClient.__new__(LLMClient)
+
+    # Qwen 3.5 / DeepSeek reasoning: <think> contains brackets [1, 2] before fenced JSON
+    qwen_raw = (
+        "<think>\nLet's compare segments [1, 2] and pick the strongest clip.\n</think>\n"
+        "Here is the result:\n"
+        "```json\n"
+        '[{"outline": "Core argument", "start_time": "00:00:10", "end_time": "00:01:05"}]\n'
+        "```\n"
+        "Hope this helps [note]."
+    )
+    parsed_qwen = client.parse_json_response(qwen_raw)
+    assert isinstance(parsed_qwen, list)
+    assert parsed_qwen[0]["outline"] == "Core argument"
+
+    # Gemma 4 / Gemini: <thought>...</thought> before raw JSON with trailing prose brackets
+    gemma_raw = '<thought>Check {foo} first.</thought>\n{"clips": [{"id": 1}]}\nDone [ok].'
+    parsed_gemma = client.parse_json_response(gemma_raw)
+    assert parsed_gemma == {"clips": [{"id": 1}]}
+    assert intelligence.decode_json('<thought>Reasoning</thought>\n{"goal": "highlight"}') == {"goal": "highlight"}
+
+    # Unclosed leading <think> tag before JSON
+    assert strip_thinking_blocks('<think>{"a": 1}') == '{"a": 1}'
+
+
+def test_transcription_empty_falls_back_to_visual_when_auto_and_vision_allowed(tmp_path):
+    video = tmp_path / "gameplay.mp4"
+    video.write_bytes(b"fake")
+    plan = {
+        "recommended_analysis": "subtitle",
+        "analysis_preferences": {"analysis_mode": "auto"},
+        "preferences": {"goal": "highlight", "language": "source", "aspect": "original", "duration": 30},
+        "overrides": {"goal": "auto"},
+    }
+    fake_event = type("Evt", (), {"model_dump": lambda self: {"start": 5, "end": 25}})()
+    fake_drafts = [{"id": "d1", "title": "Highlight", "scenes": [{"id": "s1", "start": 5, "end": 25}]}]
+
+    with (
+        patch.object(
+            jobs,
+            "run_content",
+            side_effect=jobs.ContentPipelineFailure("SUBTITLE", "empty", code="transcription_empty"),
+        ),
+        patch.object(intelligence, "_probe", return_value={"duration": 180.0}),
+        patch.object(intelligence, "source_frame_analysis_allowed", return_value=True),
+        patch.object(intelligence, "ready", return_value=True),
+        patch.object(jobs, "analyze", return_value=([fake_event], {"frames": 4})) as mock_analyze,
+        patch.object(jobs, "make_drafts", return_value=fake_drafts),
+    ):
+        result = jobs._content_drafts("proj-1", plan, video, platforms=("douyin",))
+
+    assert mock_analyze.called
+    drafts, events, coverage = result
+    assert drafts == fake_drafts
+    assert events == [{"start": 5, "end": 25}]
+    assert coverage == {"frames": 4}
+
+    # Explicit subtitle mode must NOT fall back to visual
+    subtitle_plan = {**plan, "analysis_preferences": {"analysis_mode": "subtitle"}}
+    with (
+        patch.object(
+            jobs,
+            "run_content",
+            side_effect=jobs.ContentPipelineFailure("SUBTITLE", "empty", code="transcription_empty"),
+        ),
+        patch.object(intelligence, "_probe", return_value={"duration": 180.0}),
+        patch.object(intelligence, "source_frame_analysis_allowed", return_value=True),
+    ):
+        with pytest.raises(jobs.ContentPipelineFailure) as exc_info:
+            jobs._content_drafts("proj-1", subtitle_plan, video, platforms=("douyin",))
+        assert exc_info.value.code == "transcription_empty"
+
+
+def test_download_recovery_and_error_classification_p1():
+    # New yt-dlp error classifications reduce opaque `unexpected` errors
+    assert download_failure_observe.observe_download_failure("ERROR: Use --cookies-from-browser for authentication")["code"] == "source_blocked"
+    assert download_failure_observe.observe_download_failure("ERROR: Sign in to view this video")["code"] == "source_blocked"
+    assert download_failure_observe.observe_download_failure("ERROR: Incomplete YouTube ID abc")["code"] == "source_not_found"
+    assert download_failure_observe.observe_download_failure("ERROR: Connection refused by peer")["code"] == "connection"
+    assert download_failure_observe.observe_download_failure("ERROR: Incomplete read (1024 bytes)")["code"] == "connection"
+
+    # YouTube format fallback triggers on 503 and empty downloaded file
+    seen_formats = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def download(self, urls):
+            seen_formats.append(self.opts.get("format"))
+            if len(seen_formats) == 1:
+                raise download_recovery.yt_dlp.utils.DownloadError("ERROR: The downloaded file is empty")
+            return 0
+
+    with patch.object(download_recovery.yt_dlp, "YoutubeDL", FakeYDL):
+        assert download_recovery.download_with_recovery("https://www.youtube.com/watch?v=dQw4w9WgXcQ", {"format": "best"}) == 0
+    assert len(seen_formats) == 2
+    assert "m3u8" in seen_formats[1]
+
+
+def test_extended_video_extensions_in_studio_and_preflight(tmp_path):
+    raw = tmp_path / "proj-ext" / "raw"
+    raw.mkdir(parents=True)
+    m4v = raw / "input.m4v"
+    m4v.write_bytes(b"video")
+
+    with patch("backend.core.path_utils.get_project_raw_directory", return_value=raw):
+        inputs = preflight.project_inputs("proj-ext")
+    assert inputs is not None
+    assert inputs.video == m4v
+
+    # Verify studio.py accepts .m4v/.flv/.ts/.wmv and strips whitespace on URLs
+    studio_src = Path("backend/api/v1/studio.py").read_text(encoding="utf-8")
+    for ext in (".m4v", ".flv", ".ts", ".wmv"):
+        assert f"'{ext}'" in studio_src
+    assert "url = url.strip()" in studio_src
+
+
+def test_clip_finder_accepts_english_titles_and_string_row_indices_for_english_video():
+    from backend.pipeline import clip_finder
+    from backend.pipeline.quality import to_srt_time
+
+    entries = [
+        {"index": i + 1, "start_time": to_srt_time(i * 5.0), "end_time": to_srt_time((i + 1) * 5.0), "text": f"English line {i}."}
+        for i in range(120)
+    ]
+    calls = []
+
+    def fake_call(prompt, payload):
+        calls.append(payload)
+        return {
+            "clips": [
+                {"start": "10", "end": 25.0, "title": "Why Startups Fail Early", "reason": "Clear punchline", "score": 0.9},
+                {"start_row": "40", "end_row": "45", "title": "Twenty-five second insight", "reason": "Tight point", "score": 0.85},
+                {"start": 100, "end": 120, "title": "End-of-window clamp", "reason": "Off-by-one end", "score": 0.8},
+            ]
+        }
+
+    clips = clip_finder.find_clips(entries, fake_call, threshold=0.7)
+    assert len(calls) == 1, "English video with English titles must succeed on first pass without retrying"
+    assert len(clips) == 3
+    assert clips[0]["generated_title"] == "Why Startups Fail Early"
+
+
+def test_gemini_default_model_404_fallback_and_thinking_budget():
+    import io
+    import json
+    import requests
+    from backend.core import job_budget, llm_providers, model_catalog
+
+    assert model_catalog.default_model_for("gemini") == "gemini-2.5-flash"
+    provider = llm_providers.GeminiProvider("AIza-test-key", model_name="gemini-3.8-flash")
+    assert llm_providers.GeminiProvider("AIza-test-key").model_name == "gemini-2.5-flash"
+
+    seen = []
+
+    def fake_post(url, headers=None, json=None, auth=None, timeout=None, stream=False):
+        seen.append((url, json))
+        resp = requests.Response()
+        resp.url = url
+        if "gemini-3.8-flash" in url:
+            resp.status_code = 404
+            resp.raw = io.BytesIO(b'{"error":{"message":"model not found"}}')
+        else:
+            resp.status_code = 200
+            resp.raw = io.BytesIO(
+                b'{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}'
+            )
+        return resp
+
+    with patch.object(requests, "post", side_effect=fake_post), job_budget.bound_clip_job():
+        res = provider.call("hello")
+
+    assert res.content == "ok"
+    assert res.model == "gemini-2.5-flash"
+    assert len(seen) == 2
+    assert "gemini-3.8-flash" in seen[0][0]
+    assert "gemini-2.5-flash" in seen[1][0]
+    assert seen[1][1]["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+
+
+def test_ollama_thinking_disabled_and_job_budget_legacy_fallback():
+    from backend.core import job_budget, llm_providers
+
+    req = llm_providers._ollama_thinking_chat_kwargs(
+        "http://127.0.0.1:11434/v1",
+        {"model": "qwen3.5:4b", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert req["extra_body"]["think"] is False
+    stripped = llm_providers._strip_thinking_extra_body(req)
+    assert stripped is not None and "extra_body" not in stripped
+
+    # Legacy settings fallback when ai_model_settings.load() returns None
+    fake_mgr = type("Mgr", (), {"settings": {"llm_provider": "openai", "openai_base_url": "http://127.0.0.1:11434/v1"}})()
+    with (
+        patch("backend.services.ai_model_settings.load", return_value=None),
+        patch("backend.core.llm_manager.get_llm_manager", return_value=fake_mgr),
+    ):
+        assert job_budget._is_local_analysis_provider() is True
+
+
+def test_wave2_gemini_native_root_and_vision_404_and_thinking_budget():
+    import io
+    import json
+    import urllib.error
+    from backend.core import gemini_transport
+
+    assert gemini_transport.native_root("https://generativelanguage.googleapis.com") == "https://generativelanguage.googleapis.com/v1beta"
+    assert gemini_transport.native_root("https://generativelanguage.googleapis.com/v1beta/openai/v1") == "https://generativelanguage.googleapis.com/v1beta"
+    assert gemini_transport.native_root("https://generativelanguage.googleapis.com/v1beta/openai/") == "https://generativelanguage.googleapis.com/v1beta"
+
+    seen = []
+
+    class FakeResp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen.append((req.full_url, json.loads(req.data.decode("utf-8"))))
+        if "gemini-3.8-flash" in req.full_url:
+            raise urllib.error.HTTPError(
+                req.full_url, 404, "Not Found", {},
+                io.BytesIO(b'{"error":{"status":"NOT_FOUND","message":"model not found"}}'),
+            )
+        return FakeResp(
+            b'{"candidates":[{"content":{"parts":[{"text":"{\\"goal\\":\\"highlight\\"}"}]},"finishReason":"STOP"}]}'
+        )
+
+    cfg = {
+        "provider": "gemini",
+        "api_key": "AIza-test",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-3.8-flash",
+        "model_source": "user",
+        "quick_screening": True,
+    }
+    with patch.object(intelligence.urllib.request, "urlopen", side_effect=fake_urlopen):
+        ans = intelligence.vision_call([{"type": "text", "text": "check"}], config=cfg)
+
+    assert ans == {"goal": "highlight"}
+    assert len(seen) == 2
+    assert "gemini-2.5-flash" in seen[1][0]
+    assert seen[1][1]["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+
+    # select_highlights tolerates whole-number float watch_score from small models while rejecting strings
+    scenes, _audit = intelligence.select_highlights(
+        [{"id": "e1", "label": "Action", "start": 1.0, "end": 12.0, "watch_score": 85.0}],
+        duration=30.0,
+    )
+    assert len(scenes) == 1 and scenes[0].id == "e1"
+
+
+def test_wave2_whisper_runtime_409_and_mirror_retry(tmp_path):
+    import asyncio
+    from fastapi import HTTPException
+    from backend.api.v1 import speech_recognition
+    from backend.services import whisper_model_manager as wmm
+
+    # Missing Whisper runtime returns 409 instead of HTTP 500
+    class FakeManager:
+        async def download_model(self, name):
+            raise RuntimeError("请先安装 Whisper 运行时")
+
+    with patch("backend.api.v1.speech_recognition.get_model_manager", return_value=FakeManager()):
+        try:
+            asyncio.run(speech_recognition.download_whisper_model(speech_recognition.DownloadModelRequest(model="base")))
+            raise AssertionError("expected HTTPException 409")
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            assert isinstance(exc.detail, dict) and exc.detail.get("code") == "whisper_not_installed"
+
+    # Transient network error retries once on the same source before failing over
+    mgr = wmm.WhisperModelManager()
+    calls = []
+
+    def fake_fetch(_sd, args, repo_id, endpoint):
+        calls.append(endpoint)
+        if len(calls) == 1:
+            raise ConnectionResetError("connection reset by peer")
+        return str(tmp_path)
+
+    fake_hf = type("HF", (), {"snapshot_download": lambda **kw: str(tmp_path)})()
+    with (
+        patch.object(wmm.whisper_runtime, "ensure_on_path", lambda: None),
+        patch.object(wmm.whisper_runtime, "get_models_dir", lambda: tmp_path),
+        patch.object(wmm, "download_plan", lambda: [("mirror", "https://hf-mirror.com"), ("official", "https://huggingface.co")]),
+        patch.object(wmm, "_fetch_snapshot", side_effect=fake_fetch),
+        patch.object(wmm.time, "sleep", lambda _s: None),
+        patch.dict("sys.modules", {"huggingface_hub": fake_hf}),
+    ):
+        mgr._download_blocking("base")
+
+    assert calls == ["https://hf-mirror.com", "https://hf-mirror.com"]
+    assert mgr._download_state["base"]["status"] == "downloaded"
+
+
+def test_wave2_download_hls_fallback_and_step1_step2_resilience(tmp_path):
+    # HLS fragment failure triggers non-HLS mp4 fallback once
+    seen_formats = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def download(self, urls):
+            seen_formats.append(self.opts.get("format"))
+            if len(seen_formats) == 1:
+                raise download_recovery.yt_dlp.utils.DownloadError("ERROR: fragment 3 failed: OSError")
+            return 0
+
+    with patch.object(download_recovery.yt_dlp, "YoutubeDL", FakeYDL):
+        assert download_recovery.download_with_recovery("https://www.youtube.com/watch?v=dQw4w9WgXcQ", {"format": "best"}) == 0
+    assert len(seen_formats) == 2
+    assert "[ext=mp4]" in seen_formats[1]
+
+    # Classify retry exhaustion and Windows fragment append lock
+    assert download_failure_observe.observe_download_failure("ERROR: Giving up after 5 retries")["code"] == "connection"
+    assert download_failure_observe.observe_download_failure("ERROR: unable to download video data: HTTP Error 503")["code"] == "connection"
+    assert download_failure_observe.observe_download_failure("ERROR: unable to open for writing: [WinError 32] sharing violation")["code"] == "file_locked"
+
+    # step1_outline strips <think> before parsing JSON/Markdown
+    from backend.pipeline.step1_outline import OutlineExtractor
+    ext = OutlineExtractor.__new__(OutlineExtractor)
+    outlines = ext._parse_outline_response('<think>consider topics</think>\n[{"title": "Intro", "subtopics": ["A"]}]', 0)
+    assert len(outlines) == 1 and outlines[0]["title"] == "Intro"
+
+    # step2_timeline unwraps {"clips": [...]} and start/end aliases
+    from backend.pipeline.step2_timeline import TimelineExtractor
+    from backend.utils.llm_client import LLMClient
+    tl = TimelineExtractor.__new__(TimelineExtractor)
+    tl.llm_client = LLMClient.__new__(LLMClient)
+    tl.llm_raw_output_dir = tmp_path
+    tl._save_debug_response = lambda *a, **kw: None
+    items = tl._parse_and_validate_response(
+        '{"clips": [{"title": "Intro", "start": "00:00:05,000", "end": "00:00:45,000"}]}',
+        "00:00:00,000",
+        "00:02:00,000",
+        0,
+    )
+    assert len(items) == 1 and items[0]["outline"] == "Intro"
+
+
+def test_b1_render_checkpoint_resume_preserves_completed_and_skips_llm(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from backend.api.v1 import studio as studio_api
+    from backend.services.studio import attempts, jobs, pipeline_resume, store
+
+    pid = "proj_b1_resume"
+    project_dir = tmp_path / "projects" / pid
+    (project_dir / "raw").mkdir(parents=True)
+    (project_dir / "metadata").mkdir(parents=True)
+    video = project_dir / "raw" / "input.mp4"
+    video.write_bytes(b"mp4")
+
+    monkeypatch.setattr(store, "directory", lambda p: tmp_path / "projects" / p)
+    monkeypatch.setattr(jobs, "source", lambda p: video)
+    monkeypatch.setattr("backend.services.publish_export.find_source_video", lambda p: video)
+    monkeypatch.setattr("backend.core.path_utils.get_project_directory", lambda p: tmp_path / "projects" / p)
+
+    state = {
+        "schema_version": 2,
+        "drafts": [
+            {"id": "d1", "title": "Clip 1", "scenes": [{"id": "s1", "label": "S1", "start": 0.0, "end": 15.0}]},
+            {"id": "d2", "title": "Clip 2", "scenes": [{"id": "s2", "label": "S2", "start": 20.0, "end": 35.0}]},
+            {"id": "d3", "title": "Clip 3", "scenes": [{"id": "s3", "label": "S3", "start": 40.0, "end": 55.0}]},
+        ],
+        "events": [],
+        "jobs": [],
+        "analysis": {
+            "status": "failed",
+            "phase": "rendering",
+            "error_code": "service_restarted",
+            "failure_stage": "render",
+            "run_id": "run-old",
+        },
+        "generation": {
+            "auto_start": True,
+            "status": "partial",
+            "attempt_id": "t-parent000001",
+            "requested_platforms": ["douyin"],
+        },
+        "attempts": [
+            {
+                "attempt_id": "t-parent000001",
+                "flow_id": "f-0001",
+                "sequence": 1,
+                "kind": "generation",
+                "state": "partial",
+                "run_id": "run-old",
+                "plan_id": "plan-1",
+            }
+        ],
+        "output_variants": [
+            {"id": "v1", "draft_id": "d1", "strategy_id": "douyin", "status": "completed", "produced_by_attempt": "t-parent000001", "branding": {}},
+            {"id": "v2", "draft_id": "d2", "strategy_id": "douyin", "status": "failed", "error_code": "service_restarted", "produced_by_attempt": "t-parent000001", "branding": {}},
+            {"id": "v3", "draft_id": "d3", "strategy_id": "douyin", "status": "failed", "error_code": "service_restarted", "produced_by_attempt": "t-parent000001", "branding": {}},
+        ],
+    }
+    store.write(pid, state)
+
+    # resume_point surfaces render checkpoint label
+    rp = pipeline_resume.resume_point_for_project(pid)
+    assert rp == {"point": "render", "label": "继续渲染剩余版本"}
+
+    dispatched = []
+    inspect_called = []
+    monkeypatch.setattr(jobs, "_dispatch_pending_variants", lambda p: dispatched.append(p))
+    monkeypatch.setattr(jobs, "inspect_project", lambda *a, **kw: inspect_called.append((a, kw)) or "inspect-run")
+    monkeypatch.setattr(
+        studio_api,
+        "project_or_404",
+        lambda p, db: SimpleNamespace(id=p, processing_config={"smart_import": {"auto_start": True}}, project_metadata={}),
+    )
+
+    body = studio_api.RetryCommand(scope="project", idempotency_key="retry-render-resume-1")
+    resp = studio_api.retry_command(pid, body, None)
+    assert inspect_called == []
+    assert dispatched == [pid]
+    assert resp["ok"] is True
+    assert resp["attempt"]["retry_of"] == "t-parent000001"
+    after = store.read(pid)
+    by_id = {v["id"]: v for v in after["output_variants"]}
+    assert by_id["v1"]["status"] == "completed"
+    assert by_id["v2"]["status"] == "queued"
+    assert by_id["v3"]["status"] == "queued"
+    assert by_id["v2"]["redone_by_attempt"] == resp["attempt"]["attempt_id"]
+    assert by_id["v3"]["redone_by_attempt"] == resp["attempt"]["attempt_id"]
+
+    # Idempotent replay does not dispatch a second time
+    resp2 = studio_api.retry_command(pid, body, None)
+    assert resp2["attempt"]["attempt_id"] == resp["attempt"]["attempt_id"]
+    assert len(dispatched) == 1
+
+
+def test_b3_success_rate_sql_figure_11_parallel_stability_metric():
+    from pathlib import Path
+    from backend.tests.success_rate_sql import run_sql, statements
+
+    sql_path = Path(__file__).resolve().parents[2] / "docs" / "analytics" / "stability_success_rate.sql"
+    [stmt] = statements(sql_path.read_text(encoding="utf-8"))
+    rows = run_sql(
+        stmt,
+        [
+            (
+                "uuid-1",
+                "studio_generation_finished",
+                "u1",
+                "2026-10-10 01:00:00",
+                {
+                    "attempt_id": "a1",
+                    "flow_id": "f1",
+                    "attempt_sequence": 1,
+                    "outcome": "completed",
+                    "analytics_environment": "production",
+                    "runtime": "desktop",
+                    "app_version": "1.6.1",
+                },
+            ),
+            (
+                "uuid-2",
+                "studio_generation_finished",
+                "u2",
+                "2026-10-10 02:00:00",
+                {
+                    "attempt_id": "a2",
+                    "flow_id": "f2",
+                    "attempt_sequence": 1,
+                    "outcome": "failed",
+                    "error_code": "service_restarted",
+                    "restart_reason": "user_quit",
+                    "analytics_environment": "production",
+                    "runtime": "desktop",
+                    "app_version": "1.6.1",
+                },
+            ),
+            (
+                "uuid-3",
+                "studio_generation_finished",
+                "u3",
+                "2026-10-10 03:00:00",
+                {
+                    "attempt_id": "a3",
+                    "flow_id": "f3",
+                    "attempt_sequence": 1,
+                    "outcome": "failed",
+                    "error_code": "service_restarted",
+                    "restart_reason": "crash",
+                    "analytics_environment": "production",
+                    "runtime": "desktop",
+                    "app_version": "1.6.1",
+                },
+            ),
+        ],
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["ok"] == 1
+    assert row["q_prod"] == 3
+    assert row["q_stability"] == 2
+    assert row["user_quit_restarts"] == 1
+    assert row["product_attempt_rate"] == 0.333
+    assert row["stability_attempt_rate"] == 0.5
+    assert row["product_flow_rate"] == 0.333
+    assert row["stability_flow_rate"] == 0.5
+
+
+def test_b2_render_replace_output_retries_windows_sharing_lock(tmp_path, monkeypatch):
+    from backend.services.studio import render
+
+    src = tmp_path / "ready.mp4"
+    dst = tmp_path / "out.mp4"
+    src.write_bytes(b"mp4-bytes")
+
+    real_replace = render.os.replace
+    calls = {"n": 0}
+
+    def flaky_replace(a, b):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            err = PermissionError("sharing violation")
+            err.winerror = 32
+            raise err
+        return real_replace(a, b)
+
+    monkeypatch.setattr(render.os, "replace", flaky_replace)
+    render._replace_output(src, dst)
+    assert calls["n"] == 3
+    assert dst.read_bytes() == b"mp4-bytes"
+    assert not src.exists()
+
+
+def test_wave3_sentry_161_six_fixes(tmp_path, monkeypatch):
+    import errno
+    import io
+    import json
+    from types import SimpleNamespace
+    from backend.core.failure_codes import UserFacingError
+    from backend.pipeline.failures import PipelineFailure
+    from backend.services import cloud_transcription, example_project
+    from backend.services.studio import game_highlights, intelligence, jobs, packaging_html
+    from backend.utils.speech_recognizer import SpeechRecognitionError
+
+    # 1. Official DeepSeek vision_call disables default thinking so quick_screening doesn't truncate
+    seen_vision = []
+
+    class FakeResp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen_vision.append(json.loads(req.data.decode("utf-8")))
+        return FakeResp(b'{"choices":[{"message":{"content":"{\\"goal\\":\\"content\\"}"},"finish_reason":"stop"}]}')
+
+    with patch.object(intelligence.urllib.request, "urlopen", side_effect=fake_urlopen):
+        out = intelligence.vision_call(
+            [{"type": "text", "text": "screen"}],
+            config={
+                "provider": "deepseek",
+                "api_key": "sk-test",
+                "base_url": "https://api.deepseek.com",
+                "model": "deepseek-flash",
+                "quick_screening": True,
+            },
+        )
+    assert out == {"goal": "content"}
+    assert seen_vision[0]["thinking"] == {"type": "disabled"}
+
+    # 2. DashScope cloud ASR normalizes trailing slash and /compatible-mode suffix (prevents bad_endpoint 404)
+    posted_urls = []
+
+    class FakeStreamResp:
+        status_code = 200
+        is_error = False
+        headers = {"content-type": "application/json"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return None
+
+        def json(self):
+            return {"output": {"sentence": {"sentence_end": True, "begin_time": 0, "end_time": 1000, "text": "hello"}}}
+
+    class FakeClient:
+        def stream(self, method, url, headers=None, json=None):
+            posted_urls.append(url)
+            return FakeStreamResp()
+
+    wav = tmp_path / "chunk.wav"
+    wav.write_bytes(b"RIFF")
+    for raw_base in (
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+        "https://dashscope.aliyuncs.com/compatible-mode/",
+    ):
+        conn = SimpleNamespace(provider="dashscope", base_url=raw_base, api_key="sk-test", id="c1", http_headers=None)
+        monkeypatch.setattr(cloud_transcription, "chat_endpoint", lambda c, m: {"base_url": c.base_url, "api_key": c.api_key})
+        sentences, _ = cloud_transcription._send_chunk(FakeClient(), conn, "qwen-audio-3.1-asr-flash", wav, "auto")
+        assert len(sentences) == 1
+    assert posted_urls == [
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    ]
+
+    # 3. game_highlights.subtitle_drafts converts SpeechRecognitionError into typed PipelineFailure(transcription_empty)
+    vid = tmp_path / "game.mp4"
+    vid.write_bytes(b"mp4")
+    monkeypatch.setattr(
+        "backend.utils.speech_recognizer.generate_subtitle_for_video",
+        lambda *a, **kw: (_ for _ in ()).throw(SpeechRecognitionError("Whisper 未识别出任何语音内容")),
+    )
+    try:
+        game_highlights.subtitle_drafts(vid, SimpleNamespace(goal="highlight"), 60.0)
+        raise AssertionError("expected PipelineFailure")
+    except PipelineFailure as pf:
+        assert pf.code == "transcription_empty"
+
+    # 4. _design_covers isolates optional request_ai_cover ValidationError/RuntimeError after render
+    from backend.services.studio import store
+    pid = "proj_ai_cover_isolated"
+    monkeypatch.setattr(store, "directory", lambda p: tmp_path / "projects" / p)
+    (tmp_path / "projects" / pid / "metadata").mkdir(parents=True)
+    store.write(pid, {
+        "schema_version": 2,
+        "drafts": [],
+        "events": [],
+        "jobs": [{"job_id": "j1", "status": "completed", "result": {"width": 1080, "height": 1920}}],
+        "output_variants": [{"id": "v1", "render_job_id": "j1", "strategy_id": "douyin", "status": "completed"}],
+        "analysis": None,
+    })
+    monkeypatch.setattr(jobs, "source", lambda p: vid)
+    monkeypatch.setattr("backend.services.studio.publish_kit.design_cover", lambda *a, **kw: None)
+    monkeypatch.setattr(jobs, "request_ai_cover", lambda *a, **kw: (_ for _ in ()).throw(ValueError("bad settings")))
+    jobs._design_covers(pid, {"id": "d1"}, "j1")
+
+    # 5. example_project._copy_file maps ENOSPC to UserFacingError & retries WinError 32
+    src_sample = tmp_path / "sample.mp4"
+    dst_sample = tmp_path / "copied.mp4"
+    src_sample.write_bytes(b"ok")
+    monkeypatch.setattr(example_project.shutil, "copyfile", lambda a, b: (_ for _ in ()).throw(OSError(errno.ENOSPC, "No space left on device")))
+    try:
+        example_project._copy_file(src_sample, dst_sample)
+        raise AssertionError("expected UserFacingError on ENOSPC")
+    except UserFacingError as err:
+        assert "磁盘空间不足" in str(err)
+
+    # 6. packaging_html._replace_movie retries WinError 32
+    p_src = tmp_path / "ov.mkv.partial"
+    p_dst = tmp_path / "ov.mkv"
+    p_src.write_bytes(b"mkv")
+    real_rep = packaging_html.os.replace
+    n_rep = {"c": 0}
+
+    def flaky_mkv_replace(a, b):
+        n_rep["c"] += 1
+        if n_rep["c"] == 1:
+            e = PermissionError("locked")
+            e.winerror = 32
+            raise e
+        return real_rep(a, b)
+
+    monkeypatch.setattr(packaging_html.os, "replace", flaky_mkv_replace)
+    packaging_html._replace_movie(p_src, p_dst)
+    assert n_rep["c"] == 2 and p_dst.read_bytes() == b"mkv"
+
+

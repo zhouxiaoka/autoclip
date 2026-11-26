@@ -600,12 +600,25 @@ class WhisperModelManager:
                 if endpoint != OFFICIAL_ENDPOINT:
                     _disable_xet()
                 logger.info("开始下载 Whisper 模型 %s (%s, 源 %s)", model_name, repo_id, source)
-                try:
-                    args = dict(repo_id=repo_id, cache_dir=str(whisper_runtime.get_models_dir() / "hub"), endpoint=endpoint)
-                    # A bad snapshot file is deleted and fetched again with a normal download.
-                    # force_download only refreshes the blob and leaves a copy-layout file in place.
-                    _fetch_snapshot(snapshot_download, args, repo_id, endpoint)
-                except Exception as e:  # noqa: BLE001
+                args = dict(repo_id=repo_id, cache_dir=str(whisper_runtime.get_models_dir() / "hub"), endpoint=endpoint)
+                # A bad snapshot file is deleted and fetched again with a normal download.
+                # force_download only refreshes the blob and leaves a copy-layout file in place.
+                last_source_err = None
+                for attempt in range(2):
+                    try:
+                        _fetch_snapshot(snapshot_download, args, repo_id, endpoint)
+                        last_source_err = None
+                        break
+                    except Exception as e:  # noqa: BLE001
+                        last_source_err = e
+                        if attempt == 0 and download_failure_code(e) == "network":
+                            logger.warning("Whisper 模型 %s 从 %s 网络中断（%s），2 秒后同源重试一次",
+                                           model_name, source, type(e).__name__)
+                            time.sleep(2.0)
+                            continue
+                        break
+                if last_source_err is not None:
+                    e = last_source_err
                     failures.append(f"{source}: {type(e).__name__}: {e}")
                     if index + 1 < len(plan):
                         logger.warning("Whisper 模型 %s 从 %s 下载失败（%s），改用 %s",
@@ -613,7 +626,7 @@ class WhisperModelManager:
                         continue
                     if len(failures) > 1:
                         raise RuntimeError("；".join(failures)) from e
-                    raise
+                    raise e
                 with self._lock:
                     self._download_state[model_name] = {
                         "status": "downloaded", "progress": 100, "error": None, "source": source,

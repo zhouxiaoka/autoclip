@@ -9,14 +9,17 @@ no model key.
 from __future__ import annotations
 
 import base64
+import errno
 import json
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from backend.core.failure_codes import UserFacingError
 from backend.core.path_utils import get_project_directory
 from backend.models.clip import Clip, ClipStatus
 from backend.models.project import Project, ProjectStatus, ProjectType
@@ -24,6 +27,23 @@ from backend.models.project import Project, ProjectStatus, ProjectType
 ASSETS = Path(__file__).resolve().parents[1] / 'assets' / 'example'
 MANIFEST = ASSETS / 'manifest.json'
 EXAMPLE_FLAG = 'example'
+
+
+def _copy_file(src: Path, dst: Path) -> None:
+    """Copy bundled sample asset with Windows sharing-lock retry and clear disk-full error."""
+    delays = (0.05, 0.1, 0.2, 0.4)
+    for attempt in range(len(delays) + 1):
+        try:
+            shutil.copyfile(src, dst)
+            return
+        except PermissionError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33) or attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
+        except OSError as error:
+            if getattr(error, 'errno', None) == errno.ENOSPC or getattr(error, 'winerror', None) == 112:
+                raise UserFacingError('磁盘空间不足，无法创建示例项目，请清理磁盘空间后重试') from None
+            raise
 
 
 def load_manifest() -> dict:
@@ -105,10 +125,10 @@ def create(db: Session) -> Project:
     for folder in (raw, clips_dir, root / 'metadata'):
         folder.mkdir(parents=True, exist_ok=True)
     source = raw / 'input.mp4'
-    shutil.copyfile(ASSETS / meta['source'], source)
-    shutil.copyfile(ASSETS / meta['subtitles'], raw / 'input.srt')
+    _copy_file(ASSETS / meta['source'], source)
+    _copy_file(ASSETS / meta['subtitles'], raw / 'input.srt')
     if meta.get('cover') and (ASSETS / meta['cover']).exists():
-        shutil.copyfile(ASSETS / meta['cover'], raw / 'input_cover.jpg')
+        _copy_file(ASSETS / meta['cover'], raw / 'input_cover.jpg')
     project.video_path = str(source)
     project.subtitle_path = str(raw / 'input.srt')
     try:

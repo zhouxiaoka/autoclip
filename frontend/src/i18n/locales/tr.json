@@ -2460,5 +2460,13 @@
   "editing_style.view_all": "Tümü ({{count}})",
   "editing_style.gallery_title": "Kurgu Stili Seç",
   "editing_style.scroll_prev": "Önceki",
-  "editing_style.scroll_next": "Sonraki"
+  "editing_style.scroll_next": "Sonraki",
+  "查看更新内容": "Yenilikleri gör",
+  "当前有项目正在制作，建议完成后再重启更新。": "Devam eden bir proje var. Güncellemek için yeniden başlatmadan önce bitmesini beklemeniz önerilir.",
+  "继续渲染未完成版本": "Tamamlanmamış dışa aktarmaları sürdür",
+  "继续渲染剩余版本": "Kalan dışa aktarmaları sürdür",
+  "还有 {{count}} 条未完成版本，已完成成片已保留。": "{{count}} tamamlanmamış sürüm kaldı. Tamamlanan klipler korundu.",
+  "上次重启中断的制作": "Yeniden başlatmayla kesintiye uğrayanlar",
+  "正在恢复…": "Sürdürülüyor…",
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Bu video 30 dakikadan uzun ve yerel döküm gerektiriyor; düşük donanımlı bilgisayarlarda uzun sürebilir. İlk 30 dakikayı deneyin veya Ayarlar'dan base modele / bulut döküme geçin."
 }
