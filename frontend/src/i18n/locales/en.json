@@ -2468,5 +2468,15 @@
   "还有 {{count}} 条未完成版本，已完成成片已保留。": "{{count}} unfinished render(s) remaining. Completed clips are kept.",
   "上次重启中断的制作": "Interrupted by restart",
   "正在恢复…": "Resuming…",
-  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "This video is over 30 minutes and needs local transcription, which can be slow on lower-spec PCs. Try the first 30 minutes, or switch to the base model or cloud transcription in Settings."
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "This video is over 30 minutes and needs local transcription, which can be slow on lower-spec PCs. Try the first 30 minutes, or switch to the base model or cloud transcription in Settings.",
+  "exportFolder.title": "Default export folder",
+  "exportFolder.hint": "Only changes where new files are saved. Projects, source videos and existing exports are not moved.",
+  "exportFolder.browser": "Your browser controls where files are saved on the web.",
+  "exportFolder.choose": "Choose folder",
+  "exportFolder.reset": "Use Downloads",
+  "exportFolder.retry": "Read again",
+  "exportFolder.unavailable": "Export folder unavailable. Choose another folder.",
+  "exportFolder.readError": "Cannot read the export folder preference. Choose again or reset it.",
+  "exportFolder.saveError": "The export folder preference was not saved. The previous setting is unchanged; please retry.",
+  "文件已保存": "File saved"
 }

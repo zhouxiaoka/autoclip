@@ -2468,5 +2468,15 @@
   "还有 {{count}} 条未完成版本，已完成成片已保留。": "{{count}} tamamlanmamış sürüm kaldı. Tamamlanan klipler korundu.",
   "上次重启中断的制作": "Yeniden başlatmayla kesintiye uğrayanlar",
   "正在恢复…": "Sürdürülüyor…",
-  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Bu video 30 dakikadan uzun ve yerel döküm gerektiriyor; düşük donanımlı bilgisayarlarda uzun sürebilir. İlk 30 dakikayı deneyin veya Ayarlar'dan base modele / bulut döküme geçin."
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Bu video 30 dakikadan uzun ve yerel döküm gerektiriyor; düşük donanımlı bilgisayarlarda uzun sürebilir. İlk 30 dakikayı deneyin veya Ayarlar'dan base modele / bulut döküme geçin.",
+  "exportFolder.title": "Varsayılan dışa aktarma klasörü",
+  "exportFolder.hint": "Yalnızca yeni dosyaların kaydedildiği yeri değiştirir. Projeler, kaynak videolar ve mevcut çıktılar taşınmaz.",
+  "exportFolder.browser": "Web’de kayıt konumunu tarayıcı belirler.",
+  "exportFolder.choose": "Klasör seç",
+  "exportFolder.reset": "İndirilenler’i kullan",
+  "exportFolder.retry": "Yeniden oku",
+  "exportFolder.unavailable": "Klasör kullanılamıyor. Başka bir klasör seçin.",
+  "exportFolder.readError": "Tercih okunamıyor. Yeniden seçin veya sıfırlayın.",
+  "exportFolder.saveError": "Tercih kaydedilmedi. Önceki ayar değişmedi; tekrar deneyin.",
+  "文件已保存": "File saved"
 }

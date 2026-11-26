@@ -2468,5 +2468,15 @@
   "还有 {{count}} 条未完成版本，已完成成片已保留。": "Còn {{count}} bản chưa xuất xong. Các clip đã hoàn thành vẫn được giữ lại.",
   "上次重启中断的制作": "Bị gián đoạn do khởi động lại",
   "正在恢复…": "Đang tiếp tục…",
-  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Video dài hơn 30 phút và cần chép lời cục bộ, có thể mất nhiều thời gian trên máy cấu hình thấp. Hãy thử xử lý 30 phút đầu, hoặc chuyển sang mô hình base / chép lời đám mây trong Cài đặt."
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Video dài hơn 30 phút và cần chép lời cục bộ, có thể mất nhiều thời gian trên máy cấu hình thấp. Hãy thử xử lý 30 phút đầu, hoặc chuyển sang mô hình base / chép lời đám mây trong Cài đặt.",
+  "exportFolder.title": "Thư mục xuất mặc định",
+  "exportFolder.hint": "Chỉ thay đổi nơi lưu tệp mới. Không di chuyển dự án, video gốc hoặc bản xuất hiện có.",
+  "exportFolder.browser": "Trên web, trình duyệt quyết định nơi lưu tệp.",
+  "exportFolder.choose": "Chọn thư mục",
+  "exportFolder.reset": "Dùng thư mục Tải xuống",
+  "exportFolder.retry": "Đọc lại",
+  "exportFolder.unavailable": "Thư mục xuất không khả dụng. Hãy chọn thư mục khác.",
+  "exportFolder.readError": "Không đọc được tùy chọn. Hãy chọn lại hoặc đặt lại.",
+  "exportFolder.saveError": "Tùy chọn chưa được lưu. Thiết lập cũ không thay đổi; hãy thử lại.",
+  "文件已保存": "File saved"
 }

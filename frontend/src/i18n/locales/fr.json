@@ -2468,5 +2468,15 @@
   "还有 {{count}} 条未完成版本，已完成成片已保留。": "Il reste {{count}} rendu(s) inachevé(s). Les clips terminés sont conservés.",
   "上次重启中断的制作": "Interrompus par un redémarrage",
   "正在恢复…": "Reprise…",
-  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Cette vidéo dépasse 30 minutes et nécessite une transcription locale, qui peut être longue sur un PC modeste. Essayez les 30 premières minutes ou passez au modèle base / transcription cloud dans les Paramètres."
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Cette vidéo dépasse 30 minutes et nécessite une transcription locale, qui peut être longue sur un PC modeste. Essayez les 30 premières minutes ou passez au modèle base / transcription cloud dans les Paramètres.",
+  "exportFolder.title": "Dossier d’exportation par défaut",
+  "exportFolder.hint": "Change uniquement où les nouveaux fichiers sont enregistrés. Aucun projet, vidéo source ou export existant n’est déplacé.",
+  "exportFolder.browser": "Sur le web, le navigateur contrôle le lieu d’enregistrement.",
+  "exportFolder.choose": "Choisir un dossier",
+  "exportFolder.reset": "Utiliser Téléchargements",
+  "exportFolder.retry": "Relire",
+  "exportFolder.unavailable": "Dossier indisponible. Choisissez-en un autre.",
+  "exportFolder.readError": "Impossible de lire la préférence. Choisissez à nouveau ou réinitialisez-la.",
+  "exportFolder.saveError": "La préférence n’a pas été enregistrée. La précédente est inchangée ; réessayez.",
+  "文件已保存": "File saved"
 }

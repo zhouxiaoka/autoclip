@@ -2468,5 +2468,15 @@
   "还有 {{count}} 条未完成版本，已完成成片已保留。": "Restam {{count}} versões inacabadas. Os clipes concluídos foram mantidos.",
   "上次重启中断的制作": "Interrompidos por reinicialização",
   "正在恢复…": "Retomando…",
-  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Este vídeo tem mais de 30 minutos e exige transcrição local, o que pode demorar em PCs mais simples. Processe apenas os primeiros 30 minutos ou mude para o modelo base / transcrição na nuvem nas Configurações."
+  "视频超过 30 分钟且需要本地转写，低配电脑耗时较长；可先处理前 30 分钟，或在设置中改用 base 模型 / 云端转写。": "Este vídeo tem mais de 30 minutos e exige transcrição local, o que pode demorar em PCs mais simples. Processe apenas os primeiros 30 minutos ou mude para o modelo base / transcrição na nuvem nas Configurações.",
+  "exportFolder.title": "Pasta padrão de exportação",
+  "exportFolder.hint": "Altera apenas onde novos arquivos são salvos. Não move projetos, vídeos originais ou exportações existentes.",
+  "exportFolder.browser": "Na web, o navegador controla o local de salvamento.",
+  "exportFolder.choose": "Escolher pasta",
+  "exportFolder.reset": "Usar Downloads",
+  "exportFolder.retry": "Ler novamente",
+  "exportFolder.unavailable": "Pasta indisponível. Escolha outra.",
+  "exportFolder.readError": "Não foi possível ler a preferência. Escolha novamente ou redefina.",
+  "exportFolder.saveError": "A preferência não foi salva. A anterior foi mantida; tente novamente.",
+  "文件已保存": "File saved"
 }

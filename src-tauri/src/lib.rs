@@ -7,6 +7,7 @@ mod backend_manager;
 #[cfg(windows)]
 mod windows_job;
 mod commands;
+mod export_directory;
 mod quit_guard;
 mod tray;
 mod power;
@@ -43,6 +44,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             start_backend_service,
             stop_backend_service,
@@ -59,6 +61,9 @@ pub fn run() {
             crate::tray::set_tray_language,
             crate::quit_guard::quit_guard_ready,
             save_local_download,
+            get_export_directory,
+            choose_export_directory,
+            reset_export_directory,
             reveal_in_folder
         ])
         .manage(BackendManager::new())
