@@ -1321,7 +1321,21 @@
     },
     "studio_output_rated": {
       "status": "keep",
-      "domain": "studio"
+      "domain": "studio",
+      "properties": {
+        "output_rating": {
+          "type": "string",
+          "values": ["ready", "needs_edit", "unusable"]
+        },
+        "rating_trigger": {
+          "type": "string",
+          "values": ["card_dislike", "post_download"]
+        },
+        "issue_tags": {
+          "type": "string",
+          "description": "Comma-joined allowlisted bad-case tags: text_overlap, cover_text, bad_crop, bad_selection, audio_sync."
+        }
+      }
     },
     "studio_auto_frame_finished": {
       "status": "keep",

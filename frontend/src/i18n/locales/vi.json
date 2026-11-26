@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
   "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
-  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser.",
+  "效果不好？点此反馈": "Chưa ưng ý? Báo lỗi",
+  "哪里不够理想？（可多选）": "Điểm nào chưa ổn? (có thể chọn nhiều)",
+  "字幕/标题叠字": "Chồng chữ phụ đề/tiêu đề",
+  "封面文字有误": "Lỗi chữ trên ảnh bìa",
+  "画面裁切不当": "Cắt khung hình chưa chuẩn",
+  "切片选段不准": "Chọn đoạn cắt chưa chuẩn",
+  "字幕/音画问题": "Lỗi phụ đề/đồng bộ âm thanh",
+  "补充一句具体问题（选填）": "Thêm ghi chú ngắn (không bắt buộc)",
+  "不含视频与字幕内容": "Không gửi video hay nội dung phụ đề",
+  "提交反馈": "Gửi phản hồi",
+  "已收到反馈，将用于优化模板与剪辑策略": "Đã nhận phản hồi — chúng tôi sẽ dùng để cải thiện mẫu và cách cắt."
 }

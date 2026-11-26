@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
   "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
-  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser.",
+  "效果不好？点此反馈": "İyi olmadı mı? Sorun bildir",
+  "哪里不够理想？（可多选）": "Ne yolunda gitmedi? (Birden fazla seçebilirsiniz)",
+  "字幕/标题叠字": "Altyazı/başlık çakışması",
+  "封面文字有误": "Kapak metni hatalı",
+  "画面裁切不当": "Kadro/kırpma hatalı",
+  "切片选段不准": "Klip seçimi isabetsiz",
+  "字幕/音画问题": "Altyazı/ses senkron sorunu",
+  "补充一句具体问题（选填）": "Kısa bir not ekleyin (isteğe bağlı)",
+  "不含视频与字幕内容": "Video veya altyazı içeriği gönderilmez",
+  "提交反馈": "Geri bildirim gönder",
+  "已收到反馈，将用于优化模板与剪辑策略": "Geri bildiriminiz alındı; şablonları ve kurguyu geliştirmek için kullanacağız."
 }

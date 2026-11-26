@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
   "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
-  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser.",
+  "效果不好？点此反馈": "Результат не устроил? Сообщить",
+  "哪里不够理想？（可多选）": "Что пошло не так? (можно выбрать несколько)",
+  "字幕/标题叠字": "Наложение субтитров/заголовка",
+  "封面文字有误": "Ошибка в тексте обложки",
+  "画面裁切不当": "Неудачная обрезка кадра",
+  "切片选段不准": "Неточный выбор фрагмента",
+  "字幕/音画问题": "Проблема с субтитрами/звуком",
+  "补充一句具体问题（选填）": "Короткий комментарий (необязательно)",
+  "不含视频与字幕内容": "Видео и субтитры не отправляются",
+  "提交反馈": "Отправить отзыв",
+  "已收到反馈，将用于优化模板与剪辑策略": "Отзыв получен — используем его для улучшения шаблонов и монтажа."
 }

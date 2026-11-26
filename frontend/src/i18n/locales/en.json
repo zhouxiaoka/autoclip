@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
   "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
-  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser.",
+  "效果不好？点此反馈": "Not great? Report an issue",
+  "哪里不够理想？（可多选）": "What wasn't right? (Select all that apply)",
+  "字幕/标题叠字": "Caption / title overlap",
+  "封面文字有误": "Cover text issue",
+  "画面裁切不当": "Awkward crop / framing",
+  "切片选段不准": "Weak clip selection",
+  "字幕/音画问题": "Caption / audio sync issue",
+  "补充一句具体问题（选填）": "Add a quick note (optional)",
+  "不含视频与字幕内容": "No video or transcript sent",
+  "提交反馈": "Send feedback",
+  "已收到反馈，将用于优化模板与剪辑策略": "Feedback received — we'll use it to improve templates and clipping."
 }

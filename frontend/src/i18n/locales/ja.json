@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
   "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
-  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser.",
+  "效果不好？点此反馈": "仕上がりが微妙？フィードバックを送る",
+  "哪里不够理想？（可多选）": "どこが気になりましたか？（複数選択可）",
+  "字幕/标题叠字": "字幕とタイトルの重なり",
+  "封面文字有误": "サムネ文字の誤り",
+  "画面裁切不当": "画面のトリミングが不自然",
+  "切片选段不准": "切り抜き箇所がズレている",
+  "字幕/音画问题": "字幕・音ズレの問題",
+  "补充一句具体问题（选填）": "具体的なメモを追加（任意）",
+  "不含视频与字幕内容": "動画や字幕内容は送信されません",
+  "提交反馈": "フィードバックを送信",
+  "已收到反馈，将用于优化模板与剪辑策略": "ご意見を受け取りました。テンプレートと編集品質の改善に活かします。"
 }

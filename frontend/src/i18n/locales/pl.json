@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Żądanie wysyłania nie powiodło się",
   "batchImport.failedHint": "Serwer zwrócił błąd wysyłania. Sprawdź listę projektów przed ponownym wyborem tego pliku. Ta pozycja nie jest powtarzana; pozostałe oczekujące pliki mogą kontynuować osobno.",
   "batchImport.backendUpgradeRequired": "Zaktualizuj zaplecze przed importem wsadowym; ten serwer nie potwierdza bezpiecznych potwierdzeń importu.",
-  "batchImport.secureRandomUnavailable": "Ta przeglądarka nie potrafi bezpiecznie identyfikować wysyłanych plików. Użyj zaktualizowanej aplikacji desktopowej lub przeglądarki."
+  "batchImport.secureRandomUnavailable": "Ta przeglądarka nie potrafi bezpiecznie identyfikować wysyłanych plików. Użyj zaktualizowanej aplikacji desktopowej lub przeglądarki.",
+  "效果不好？点此反馈": "Nie wyszło dobrze? Zgłoś problem",
+  "哪里不够理想？（可多选）": "Co nie zagrało? (możesz wybrać kilka)",
+  "字幕/标题叠字": "Nakładanie się napisów i tytułu",
+  "封面文字有误": "Błąd w tekście okładki",
+  "画面裁切不当": "Nieprawidłowe kadrowanie",
+  "切片选段不准": "Nietrafny wybór fragmentu",
+  "字幕/音画问题": "Problem z napisami/dźwiękiem",
+  "补充一句具体问题（选填）": "Dodaj krótką uwagę (opcjonalnie)",
+  "不含视频与字幕内容": "Wideo i napisy nie są wysyłane",
+  "提交反馈": "Wyślij opinię",
+  "已收到反馈，将用于优化模板与剪辑策略": "Dziękujemy! Wykorzystamy to do ulepszenia szablonów i montażu."
 }

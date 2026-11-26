@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
   "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
-  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser.",
+  "效果不好？点此反馈": "결과가 아쉬운가요? 피드백 보내기",
+  "哪里不够理想？（可多选）": "어떤 점이 아쉬웠나요? (복수 선택 가능)",
+  "字幕/标题叠字": "자막/제목 겹침",
+  "封面文字有误": "썸네일 문구 오류",
+  "画面裁切不当": "화면 크롭/구도 어색함",
+  "切片选段不准": "클립 구간 선택 아쉬움",
+  "字幕/音画问题": "자막/음성 싱크 문제",
+  "补充一句具体问题（选填）": "구체적인 내용을 남겨주세요 (선택)",
+  "不含视频与字幕内容": "영상과 자막 내용은 전송되지 않습니다",
+  "提交反馈": "피드백 보내기",
+  "已收到反馈，将用于优化模板与剪辑策略": "피드백이 접수되었습니다. 템플릿과 편집 품질 개선에 반영하겠습니다."
 }

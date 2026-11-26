@@ -79,6 +79,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion', 'copy_and_save'],
     output_rating: ['ready', 'needs_edit', 'unusable'],
+    rating_trigger: ['card_dislike', 'post_download'],
     template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
     requested_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
     from_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'news', 'cinema', 'classic'],
@@ -154,6 +155,12 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   const codes = causes(input.secondary_error_codes), upstreams = causes(input.secondary_upstream_error_types)
   if (codes) out.secondary_error_codes = codes.slice(0, 3).map(c => typeof c === 'string' && ERROR_CODE.test(c) ? c : 'unknown').join(',')
   if (upstreams) out.secondary_upstream_error_types = upstreams.slice(0, 3).map(c => typeof c === 'string' && enums.upstream_error_type.includes(c) ? c : '').join(',')
+  const ISSUE_TAGS = ['text_overlap', 'cover_text', 'bad_crop', 'bad_selection', 'audio_sync']
+  const rawTags = causes(input.issue_tags)
+  if (rawTags) {
+    const validTags = ISSUE_TAGS.filter(tag => rawTags.includes(tag))
+    if (validTags.length) out.issue_tags = validTags.join(',')
+  }
   if (typeof input.model === 'string' && /^[\w.\-:/]{1,64}$/.test(input.model) && !input.model.toLowerCase().includes('sk-') && !input.model.includes('://')) out.model = input.model
   if (typeof input.base_url_host === 'string' && (input.base_url_host === 'local' || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/.test(input.base_url_host))) out.base_url_host = input.base_url_host
   for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id', 'retry_of']) {

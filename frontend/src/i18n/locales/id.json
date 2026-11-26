@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Upload request failed",
   "batchImport.failedHint": "The server returned an upload error. Check the project list before re-selecting this file. This item is not replayed; other waiting files can continue separately.",
   "batchImport.backendUpgradeRequired": "Update the backend before batch importing; this server does not confirm safe import receipts.",
-  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser."
+  "batchImport.secureRandomUnavailable": "This browser cannot securely identify uploads. Use an updated desktop app or browser.",
+  "效果不好？点此反馈": "Kurang pas? Laporkan masalah",
+  "哪里不够理想？（可多选）": "Bagian mana yang kurang pas? (bisa pilih lebih dari satu)",
+  "字幕/标题叠字": "Subtitle/judul bertumpuk",
+  "封面文字有误": "Teks sampul keliru",
+  "画面裁切不当": "Pemotongan frame kurang pas",
+  "切片选段不准": "Pilihan potongan kurang tepat",
+  "字幕/音画问题": "Masalah subtitle/sinkron audio",
+  "补充一句具体问题（选填）": "Tambahkan catatan singkat (opsional)",
+  "不含视频与字幕内容": "Video dan transkrip tidak dikirim",
+  "提交反馈": "Kirim masukan",
+  "已收到反馈，将用于优化模板与剪辑策略": "Masukan diterima — akan kami gunakan untuk memperbaiki template dan klip."
 }

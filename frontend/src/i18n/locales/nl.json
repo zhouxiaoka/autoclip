@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Uploadaanvraag mislukt",
   "batchImport.failedHint": "De server gaf een uploadfout terug. Controleer de projectenlijst voordat je dit bestand opnieuw kiest. Dit item wordt niet opnieuw afgespeeld; andere wachtende bestanden kunnen apart doorgaan.",
   "batchImport.backendUpgradeRequired": "Werk de backend bij voordat je in batch importeert; deze server bevestigt geen veilige importontvangst.",
-  "batchImport.secureRandomUnavailable": "Deze browser kan uploads niet veilig identificeren. Gebruik een bijgewerkte desktop-app of browser."
+  "batchImport.secureRandomUnavailable": "Deze browser kan uploads niet veilig identificeren. Gebruik een bijgewerkte desktop-app of browser.",
+  "效果不好？点此反馈": "Niet helemaal goed? Meld een probleem",
+  "哪里不够理想？（可多选）": "Wat klopte er niet? (meerdere keuzes mogelijk)",
+  "字幕/标题叠字": "Ondertitels/titel overlappen",
+  "封面文字有误": "Fout in covertekst",
+  "画面裁切不当": "Onjuiste uitsnede / kadering",
+  "切片选段不准": "Clipselectie niet scherp",
+  "字幕/音画问题": "Ondertitel-/audioprobleem",
+  "补充一句具体问题（选填）": "Voeg een korte notitie toe (optioneel)",
+  "不含视频与字幕内容": "Geen video of transcript verzonden",
+  "提交反馈": "Feedback verzenden",
+  "已收到反馈，将用于优化模板与剪辑策略": "Feedback ontvangen — we gebruiken dit om templates en montage te verbeteren."
 }

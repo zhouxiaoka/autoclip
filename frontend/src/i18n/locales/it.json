@@ -2529,5 +2529,16 @@
   "batchImport.status.failed": "Richiesta di caricamento non riuscita",
   "batchImport.failedHint": "Il server ha restituito un errore di caricamento. Controlla l'elenco progetti prima di riselezionare questo file. Questo elemento non viene ripetuto automaticamente; gli altri file in attesa possono continuare separatamente.",
   "batchImport.backendUpgradeRequired": "Aggiorna il backend prima dell'importazione in blocco; questo server non conferma ricevute di importazione sicure.",
-  "batchImport.secureRandomUnavailable": "Questo browser non riesce a identificare in modo sicuro i caricamenti. Usa un'app desktop o un browser aggiornato."
+  "batchImport.secureRandomUnavailable": "Questo browser non riesce a identificare in modo sicuro i caricamenti. Usa un'app desktop o un browser aggiornato.",
+  "效果不好？点此反馈": "Non convince? Segnala un problema",
+  "哪里不够理想？（可多选）": "Cosa non è andato? (scelta multipla)",
+  "字幕/标题叠字": "Sovrapposizione titolo/sottotitoli",
+  "封面文字有误": "Errore nel testo di copertina",
+  "画面裁切不当": "Ritaglio o inquadratura errata",
+  "切片选段不准": "Selezione della clip imprecisa",
+  "字幕/音画问题": "Problema sottotitoli/audio",
+  "补充一句具体问题（选填）": "Aggiungi una breve nota (facoltativo)",
+  "不含视频与字幕内容": "Nessun video o trascrizione inviata",
+  "提交反馈": "Invia feedback",
+  "已收到反馈，将用于优化模板与剪辑策略": "Feedback ricevuto: lo useremo per migliorare template e montaggio."
 }
