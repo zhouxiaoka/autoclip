@@ -95,6 +95,13 @@ def test_docs_advertise_the_one_line_install_commands():
         ROOT / 'docs/i18n/README-TR.md',
         ROOT / 'docs/i18n/README-VI.md',
         ROOT / 'docs/i18n/README-DE.md',
+        ROOT / 'docs/i18n/README-IT.md',
+        ROOT / 'docs/i18n/README-PL.md',
+        ROOT / 'docs/i18n/README-TH.md',
+        ROOT / 'docs/i18n/README-NL.md',
+        ROOT / 'docs/i18n/README-UK.md',
+        ROOT / 'docs/i18n/README-HI.md',
+        ROOT / 'docs/i18n/README-AR.md',
         ROOT / 'docs' / 'CLI_AND_MCP.md',
         ROOT / 'skills' / 'autoclip' / 'SKILL.md',
     ]

@@ -7,7 +7,7 @@ const { loadTs, PRESETS } = require('./load-ts.cjs')
 const load = loadTs
 const providers = loadTs('providers.ts', { '../../i18n': { t: text => text } })
 const flatten = node => !React.isValidElement(node) ? [node] : [node, ...React.Children.toArray(node.props.children).flatMap(flatten)]
-const locales = Object.fromEntries(['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'id', 'tr', 'vi', 'de'].map(lang =>
+const locales = Object.fromEntries(['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar'].map(lang =>
   [lang, JSON.parse(fs.readFileSync(path.join(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))]))
 const OLLAMA = '长视频请把上下文调到 16384 以上（环境变量 OLLAMA_CONTEXT_LENGTH 或模型参数 num_ctx），否则字幕开头会被截掉。'
 const LMSTUDIO = '长视频请在 LM Studio 加载模型时把上下文长度（Context Length）调到 16384 以上，否则会报错或截断字幕。'
@@ -49,7 +49,7 @@ test('the address row shows the hint for local setups only', () => {
 test('the hints are translated in all 8 locales', () => {
   for (const key of [OLLAMA, LMSTUDIO, GENERIC]) {
     assert.equal(locales.zh[key], key)
-    for (const lang of ['en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
+    for (const lang of ['en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']) {
       assert.ok(locales[lang][key] && locales[lang][key] !== key, `${lang}: ${key}`)
       assert.ok(locales[lang][key].includes('16384'), lang)
     }

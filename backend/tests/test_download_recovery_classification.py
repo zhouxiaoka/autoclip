@@ -117,7 +117,7 @@ def test_ingest_connection_sentence_is_not_the_model_service_sentence():
     assert classify_download_error_text('ERROR: Private video')[0] == 'source_blocked'
     assert observe_download_failure('ERROR: timed out')['code'] == 'connection'
     root = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'i18n' / 'locales'
-    catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de')}
+    catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar')}
     assert catalogs['zh'][INGEST_CONNECTION_MESSAGE] == INGEST_CONNECTION_MESSAGE
     translations = {catalogs[lang][INGEST_CONNECTION_MESSAGE] for lang in catalogs}
     assert len(translations) == 13

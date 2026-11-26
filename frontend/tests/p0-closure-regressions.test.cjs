@@ -150,7 +150,7 @@ test('BackendCrashBanner invokes registered restart_backend_service command, is 
   const key = '本地后台服务多次意外退出，已暂停自动重启。请点击重启服务恢复使用。'
   const localesDir = path.join(ROOT, 'src/i18n/locales')
   const files = fs.readdirSync(localesDir).filter(f => f.endsWith('.json'))
-  assert.equal(files.length, 13)
+  assert.equal(files.length, 20)
   for (const file of files) {
     const data = JSON.parse(fs.readFileSync(path.join(localesDir, file), 'utf8'))
     assert.ok(data[key], `${file} missing translation for crash banner`)

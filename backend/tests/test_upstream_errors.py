@@ -344,7 +344,7 @@ def test_hint_keys_match_existing_model_call_messages():
 
 @pytest.mark.stdlib_only
 def test_hint_keys_exist_in_all_locales():
-    langs = ("zh", "zh-TW", "en", "ja", "ko", "es", "pt", "ru", "fr", "id", "tr", "vi", "de")
+    langs = ("zh", "zh-TW", "en", "ja", "ko", "es", "pt", "ru", "fr", "id", "tr", "vi", "de", "it", "pl", "th", "nl", "uk", "hi", "ar")
     catalogs = {lang: json.loads((LOCALES / f"{lang}.json").read_text(encoding="utf-8")) for lang in langs}
     for hint in HINT_KEYS.values():
         for lang, catalog in catalogs.items():

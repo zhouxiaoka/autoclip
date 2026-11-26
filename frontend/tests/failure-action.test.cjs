@@ -60,7 +60,7 @@ test('B2: whisper gate codes open speech settings, a normal failure still retrie
   assert.equal(auth.kind, 'settings')
   assert.equal(auth.destination, '/settings?section=analysis')
   assert.equal(auth.label, undefined)
-  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
+  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     assert.equal(typeof data['安装转写'], 'string', lang)
     assert.ok(data['安装转写'].length > 0, lang)
@@ -438,7 +438,7 @@ test('A3-3: insufficient_quota billable=0 / billable=3 copy + verify-balance loc
   const planSrc = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/FailureActions.tsx'), 'utf8')
   assert.match(planSrc, /QUOTA_RETRY_CHECK_BALANCE/)
   assert.match(planSrc, /returnedFromSettings/)
-  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
+  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     assert.equal(typeof data['核对余额并测试连接'], 'string', lang)
     assert.equal(typeof data['这次制作没有向服务商发出计费请求。'], 'string', lang)
@@ -486,7 +486,7 @@ test('ingest connection copy is the download sentence, not the model sentence or
   const presentation = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/failurePresentation.ts'), 'utf8')
   assert.match(presentation, /failure_stage === 'ingest' \|\| input\.failure_stage === 'download'/)
   assert.doesNotMatch(presentation, /模型设置/)
-  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
+  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     const text = data[card.reason]
     assert.equal(typeof text, 'string', lang)

@@ -203,7 +203,7 @@ test('key-guide strings exist in all eight locales', () => {
     'settings.key_guide.none', 'settings.key_guide.invalid_saved', 'settings.key_guide.unverified',
     'settings.key_guide.masked', 'settings.key_guide.title', 'settings.key_guide.conflict',
   ]
-  const locales = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de'].map(lang => (
+  const locales = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar'].map(lang => (
     JSON.parse(fs.readFileSync(path.join(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
   ))
   for (const key of keys) {

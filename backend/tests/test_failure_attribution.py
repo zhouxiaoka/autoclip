@@ -2293,7 +2293,7 @@ def test_i422_release_validation_splits_by_attribution_source():
     assert 'GROUP BY event, attribution_source, provider' in block
 
 
-LOCALES = ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de')
+LOCALES = ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar')
 
 
 @pytest.mark.usefixtures('isolated__r22_415')

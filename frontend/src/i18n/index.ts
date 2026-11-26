@@ -13,6 +13,13 @@ import id from './locales/id.json'
 import tr from './locales/tr.json'
 import vi from './locales/vi.json'
 import de from './locales/de.json'
+import it from './locales/it.json'
+import pl from './locales/pl.json'
+import th from './locales/th.json'
+import nl from './locales/nl.json'
+import uk from './locales/uk.json'
+import hi from './locales/hi.json'
+import ar from './locales/ar.json'
 import { resolveLanguage, readPreference, LANGUAGE_STORAGE_KEY, type LanguagePreference } from './language'
 import { setPromoLocale } from '../features/settings/sponsorPromoState'
 
@@ -24,9 +31,17 @@ export const languages = [
   { value: 'ru', label: 'Русский' }, { value: 'fr', label: 'Français' },
   { value: 'id', label: 'Bahasa Indonesia' }, { value: 'tr', label: 'Türkçe' },
   { value: 'vi', label: 'Tiếng Việt' }, { value: 'de', label: 'Deutsch' },
+  { value: 'it', label: 'Italiano' }, { value: 'pl', label: 'Polski' },
+  { value: 'th', label: 'ไทย' }, { value: 'nl', label: 'Nederlands' },
+  { value: 'uk', label: 'Українська' }, { value: 'hi', label: 'हिन्दी' },
+  { value: 'ar', label: 'العربية' },
 ] as const
 
-export const localeTags = { zh: 'zh-CN', 'zh-TW': 'zh-TW', en: 'en', ja: 'ja', ko: 'ko', es: 'es', pt: 'pt-BR', ru: 'ru', fr: 'fr', id: 'id', tr: 'tr', vi: 'vi', de: 'de' } as const
+export const localeTags = {
+  zh: 'zh-CN', 'zh-TW': 'zh-TW', en: 'en', ja: 'ja', ko: 'ko', es: 'es', pt: 'pt-BR',
+  ru: 'ru', fr: 'fr', id: 'id', tr: 'tr', vi: 'vi', de: 'de',
+  it: 'it', pl: 'pl', th: 'th', nl: 'nl', uk: 'uk', hi: 'hi', ar: 'ar',
+} as const
 export { readPreference } from './language'
 
 let currentPreference: LanguagePreference = readPreference()
@@ -37,6 +52,8 @@ void i18n.use(initReactI18next).init({
     ja: { translation: ja }, ko: { translation: ko }, es: { translation: es },
     pt: { translation: pt }, ru: { translation: ru }, fr: { translation: fr },
     id: { translation: id }, tr: { translation: tr }, vi: { translation: vi }, de: { translation: de },
+    it: { translation: it }, pl: { translation: pl }, th: { translation: th }, nl: { translation: nl },
+    uk: { translation: uk }, hi: { translation: hi }, ar: { translation: ar },
   },
   lng: resolveLanguage(currentPreference, navigator.languages),
   fallbackLng: 'en',
@@ -52,6 +69,7 @@ export const t = (key: string, values?: Record<string, unknown>): string => i18n
 export const getLocale = () => localeTags[i18n.language as keyof typeof localeTags] ?? 'en'
 const updateDocument = () => {
   document.documentElement.lang = getLocale()
+  document.documentElement.dir = i18n.language === 'ar' ? 'rtl' : 'ltr'
   setPromoLocale(i18n.language)
 }
 updateDocument()
