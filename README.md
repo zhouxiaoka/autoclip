@@ -8,7 +8,7 @@
 
 ### Turn any video, link, or live stream into ready-to-post clips.
 
-Open-source, local-first AI clipping for **podcasts, interviews, and gaming streams** — with smart reframing, captions, covers, and titles built in.
+**The open-source OpusClip alternative** — local-first AI clipping for **podcasts, interviews, and gaming streams** with smart reframing, captions, covers, titles, and built-in **MCP for AI agents**. Zero subscriptions, zero watermarks.
 
 <br>
 
@@ -285,7 +285,9 @@ Browse 16+ clips, covers, and post copy in the **[Showcase →](https://zhouxiao
 
 > Installers are built publicly on GitHub Actions (`Desktop Build`) with `build-provenance.json` SHA-256 verification. First launch on an unsigned build: on **macOS** run `xattr -dr com.apple.quarantine "/Applications/AutoClip Desktop.app"` (or *System Settings → Privacy &amp; Security → Open Anyway*); on **Windows** click **More info → Run anyway** on SmartScreen. See **[Code Signing &amp; Verification Policy](CODE_SIGNING.md)** (notarization tracked in [#119](https://github.com/zhouxiaoka/autoclip/issues/119)).
 
-### 2. CLI &amp; MCP (Claude Code, Codex, OpenCode &amp; scripts)
+### 2. CLI &amp; MCP (Claude Code, Cursor, Codex, OpenCode &amp; scripts)
+
+Let AI coding agents clip videos directly from your terminal (`claude mcp add autoclip -- uvx autoclip-mcp`). Full MCP setup guides: **[English](docs/MCP.en.md)** · [简体中文](docs/CLI_AND_MCP.md) · [日本語](docs/MCP.ja.md) · [한국어](docs/MCP.ko.md) · [Español](docs/MCP.es.md) · [Deutsch](docs/MCP.de.md).
 
 ```bash
 uvx autoclip-mcp
@@ -403,7 +405,7 @@ Check the failed stage: subtitles/transcription, model connection, FFmpeg, disk 
 | Topic | Guide |
 | :--- | :--- |
 | Install &amp; first clips | [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
-| Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [CLI &amp; MCP](docs/CLI_AND_MCP.md) (ZH) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
+| Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [MCP &amp; AI Agents](docs/MCP.en.md) ([ZH](docs/CLI_AND_MCP.md) · [JA](docs/MCP.ja.md) · [KO](docs/MCP.ko.md) · [ES](docs/MCP.es.md) · [DE](docs/MCP.de.md)) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
 | Models &amp; troubleshooting | [Multi-LLM Setup](docs/MULTI_LLM_PROVIDER_GUIDE.md) (ZH) · [FAQ](docs/FAQ.en.md) |
 | Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Code Signing](CODE_SIGNING.md) · [Roadmap](docs/ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |
 | Research | [Pick the Moment, Not the Effect](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |

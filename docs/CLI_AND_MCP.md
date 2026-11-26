@@ -1,5 +1,7 @@
 # AutoClip 命令行、MCP 与本地模型
 
+**简体中文** · [English](MCP.en.md) · [日本語](MCP.ja.md) · [한국어](MCP.ko.md) · [Español](MCP.es.md) · [Deutsch](MCP.de.md)
+
 面向开发者的三种用法，全部复用桌面应用同一条流水线、同一个数据目录：
 
 | 形态 | 一句话 | 入口 |
