@@ -59,11 +59,11 @@ export function loadStylePreview(id: EditingStyle, item?: TemplateCatalogItem): 
   }
   const loader = loaders[id as BuiltinTemplateChoice]
   if (!loader) {
-    return Promise.reject(new Error(`no preview for ${id}`))
+    return Promise.resolve({ webm: '', mp4: '' })
   }
   let pending = cache.get(id)
   if (!pending) {
-    pending = loader()
+    pending = loader().catch(() => ({ webm: '', mp4: '' }))
     cache.set(id, pending)
   }
   return pending
