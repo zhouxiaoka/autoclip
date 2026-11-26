@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "stage": "internal",
+  "version": "1.6.2",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "build_run_id": 45786549439,
+  "assets": {
+    "AutoClip Desktop_1.6.2_aarch64.dmg": "4251c55e787a81e69a2c195c1845ec3f868974784ecb0a7277065e815b9cf81b",
+    "AutoClip Desktop_1.6.2_x64-setup.exe": "9b0dac22c7d5e38e62c5f778d25b0ae1e1a43ac972d083b13f23ef2b29a257b3",
+    "AutoClip Desktop_1.6.2_x64-setup.exe.sig": "8d765c5c191b03c72b98b36d7293d5b49d2a2f4a2467d450fe5f2961fd0d2164",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz": "53258dedc5a768ca93fbb7906800c7e73c25a802d379cb2b9c7da2288d9dff7e",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz.sig": "20e7008c0c355a1e7ac99f303163312aebb1178359f7e6d010fba2900121db2e",
+    "internal-build-provenance.json": "61c4902af88059e2f4dfae26aca5ecf0acb779b692cdd61685b519be4f60c7ed"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server 2025 Datacenter x64",
+      "machine": "Cloud x64 VM in China mainland (Session 2 interactive desktop); not a physical Windows 11 desktop",
+      "runtime": "Packaged portable Python 3.13.13 + bundled FFmpeg/FFprobe 9.0.2 + bundled Playwright Node (yt-dlp EJS)",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:30:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:32:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:40:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:55:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-26T12:05:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Windows QA cloud VM datacenter IP encounters Bilibili HTTP 412 anti-bot (verified clean 3s exit with error_code=source_blocked and Cookie guidance, 0 crash); real 1-hour Bilibili URL + 60s window link_import passed on macOS arm64 1.6.2 DMG (a966f9e8) and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-26T13:20:23Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-26T12:20:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-26T12:25:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-26T13:04:00Z",
+          "evidence": "evidence/windows-1.6.2-summary.json"
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS 26.6.2 arm64 (Apple Silicon)",
+      "machine": "Apple Silicon Mac; native arm64 DMG bundle; isolated QA app copy and isolated data dirs",
+      "runtime": "Packaged portable Python 3.13.13 + bundled static FFmpeg/FFprobe 9.0.2 + bundled Playwright",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:20:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:25:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:35:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:50:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-26T11:45:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "completed_at": "2026-11-26T12:00:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-26T13:07:40Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-26T12:15:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-26T12:10:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-26T13:03:00Z",
+          "evidence": "evidence/macos-1.6.2-summary.json"
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "v162-china-cos-promo-fallback-and-v2-signed-config",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-26T11:40:00Z",
+      "evidence": "evidence/regressions-1.6.2.json"
+    },
+    {
+      "id": "v162-p0-p2-sentry-posthog-and-recovery-fixes",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-26T12:25:00Z",
+      "evidence": "evidence/regressions-1.6.2.json"
+    },
+    {
+      "id": "v162-long-video-window-and-multimodal-visual-pipeline",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-26T13:20:23Z",
+      "evidence": "evidence/regressions-1.6.2.json"
+    }
+  ],
+  "blockers": [],
+  "owner_waiver": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-26T13:35:11Z",
+    "reason": "Owner approved shipping v1.6.2 Pre-release from a966f9e8b26669399c91fd6bc7815364a40582b2 after 19/20 dual-platform installed-package cases (10/10 macOS arm64 + 9/10 Windows x64), all v1.6.2 feature/defect regressions (including real China-mainland COS signed-config fallback, multimodal visual_generation, privacy_telemetry validation events, and P0/P1/P2 recovery fixes), and full quality_gate + Desktop Build CI (45786549439) passed; waive Windows cloud-VM datacenter link_import."
+  },
+  "approval": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-26T13:36:00Z"
+  }
+}
