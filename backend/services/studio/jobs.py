@@ -2328,8 +2328,7 @@ def resumable_failed_variants(state) -> list[dict]:
     render_interrupted = (
         generation.get('status') == 'partial'
         or analysis.get('phase') == 'rendering'
-        or generation.get('failure_stage') == 'render'
-        or analysis.get('failure_stage') == 'render'
+        or any(item.get('status') == 'completed' for item in variants)
     )
     if not render_interrupted:
         return []
