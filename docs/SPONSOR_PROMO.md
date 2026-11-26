@@ -33,8 +33,10 @@ v1.5.8 和当前 RC（`8fb72a745d8080225e371d60ee325f5431b6e195`）的服务商�
 
 生产静态文件地址：
 
-- `v1`（兼容 v1.6.0 等存量客户端）：`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json`
-- `v2`（支持签名动态下发新的 OpenAI 兼容服务商，不可达时自动回退到 `v1`）：`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo-v2.json`
+- `v1`（兼容 v1.6.0 等存量客户端）：`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo.json`（国内兜底镜像：`https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/sponsor-promo.json`）
+- `v2`（支持签名动态下发新的 OpenAI 兼容服务商，主地址不可达时按顺序回退国内兜底镜像再回退 `v1`）：`https://autoclip-sponsor-promo.autoclip-val-3f71ee83.workers.dev/sponsor-promo-v2.json`（国内兜底镜像：`https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/sponsor-promo-v2.json`）
+
+所有主备地址共享同一把打包 Ed25519 公钥与递增 `sequence` 水位；镜像仅承担静态分发，无法绕过验签或降级。
 
 只放静态签名 JSON。签名在文件内部，不跟随跳转。TLS 负责传输，Ed25519 负责内容。私钥留在维护者自己的密码管理器里，不进仓库、不进客户端、不进日志。
 
