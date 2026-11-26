@@ -14,7 +14,7 @@ function flatten(node) {
 }
 
 test('extractImportUrl normalizes bare YouTube/Bilibili links and isVideoFile supports extended formats', () => {
-  const paste = require('../src/features/studio/pasteStart.ts')
+  const paste = loadTs(path.join(__dirname, '../src/features/studio/pasteStart.ts'))
   assert.equal(
     paste.extractImportUrl('www.youtube.com/watch?v=dQw4w9WgXcQ'),
     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -36,7 +36,7 @@ test('extractImportUrl normalizes bare YouTube/Bilibili links and isVideoFile su
 })
 
 test('resolveLanguage maps zh-TW/zh-Hant and legacy Indonesian in/in-ID', () => {
-  const { resolveLanguage } = require('../src/i18n/language.ts')
+  const { resolveLanguage } = loadTs(path.join(__dirname, '../src/i18n/language.ts'))
   assert.equal(resolveLanguage('system', ['zh-TW']), 'zh-TW')
   assert.equal(resolveLanguage('system', ['zh-Hant-TW']), 'zh-TW')
   assert.equal(resolveLanguage('system', ['in']), 'id')
@@ -140,7 +140,7 @@ test('CreativeImport pre-intercepts local_transcription preview even when previe
 })
 
 test('parseUpdateNotes extracts localized bullet lists without truncation and UpdatePrompt collapses notes by default', () => {
-  const schedule = require('../src/desktop/updateSchedule.ts')
+  const schedule = loadTs(path.join(__dirname, '../src/desktop/updateSchedule.ts'))
   const bilingual = [
     '#### 中文',
     '- 修复 Gemini 接入与默认模型回退（#657）',
@@ -151,19 +151,19 @@ test('parseUpdateNotes extracts localized bullet lists without truncation and Up
     '- Improved local `Ollama` timeout budget and thinking-model JSON parsing',
   ].join('\n')
 
-  assert.deepEqual(schedule.parseUpdateNotes(bilingual, 'zh'), [
+  assert.deepEqual([...schedule.parseUpdateNotes(bilingual, 'zh')], [
     '修复 Gemini 接入与默认模型回退',
     '优化本地 Ollama 超时预算与思考模型解析',
   ])
-  assert.deepEqual(schedule.parseUpdateNotes(bilingual, 'en'), [
+  assert.deepEqual([...schedule.parseUpdateNotes(bilingual, 'en')], [
     'Fixed Gemini setup and automatic fallback to an available model',
     'Improved local Ollama timeout budget and thinking-model JSON parsing',
   ])
-  assert.deepEqual(schedule.parseUpdateNotes(bilingual, 'ja'), [
+  assert.deepEqual([...schedule.parseUpdateNotes(bilingual, 'ja')], [
     'Fixed Gemini setup and automatic fallback to an available model',
     'Improved local Ollama timeout budget and thinking-model JSON parsing',
   ])
-  assert.deepEqual(schedule.parseUpdateNotes('AutoClip Desktop v1.6.2', 'en'), [])
+  assert.deepEqual([...schedule.parseUpdateNotes('AutoClip Desktop v1.6.2', 'en')], [])
 
   const promptSrc = fs.readFileSync(
     path.join(__dirname, '../src/desktop/UpdatePrompt.tsx'),
