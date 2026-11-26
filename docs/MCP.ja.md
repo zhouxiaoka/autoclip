@@ -2,7 +2,7 @@
 
 [English](MCP.en.md) · [简体中文](CLI_AND_MCP.md) · **日本語** · [한국어](MCP.ko.md) · [Español](MCP.es.md) · [Deutsch](MCP.de.md)
 
-Claude Code、Cursor、Windsurf、OpenCode などの MCP 対応 AI エージェントから AutoClip を直接操作し、長尺動画や配信アーカイブからショート動画を自動生成できます。デスクトップ版と同一のローカルパイプラインを使用するため、サブスク不要・透かしなし・完全ローカルレンダリングで動作します。
+Claude Code、Cursor、Windsurf、OpenCode などの MCP 対応 AI エージェントから AutoClip を直接操作し、長尺動画や配信アーカイブからショート動画を自動生成できます。デスクトップ版と同一のローカルパイプラインを使用するため、サブスク不要・ペイウォールなし・完全ローカルレンダリングで動作します。
 
 ---
 

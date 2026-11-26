@@ -2,7 +2,7 @@
 
 [English](MCP.en.md) · [简体中文](CLI_AND_MCP.md) · [日本語](MCP.ja.md) · **한국어** · [Español](MCP.es.md) · [Deutsch](MCP.de.md)
 
-Claude Code, Cursor, Windsurf, OpenCode 등 MCP 호환 AI 에이전트에서 AutoClip을 바로 호출해 팟캐스트·인터뷰·방송 녹화본을 숏폼 클립으로 자동 제작할 수 있습니다. 데스크톱 앱과 동일한 로컬 파이프라인을 공유하므로 구독료·워터마크 없이 100% 로컬에서 렌더링됩니다.
+Claude Code, Cursor, Windsurf, OpenCode 등 MCP 호환 AI 에이전트에서 AutoClip을 바로 호출해 팟캐스트·인터뷰·방송 녹화본을 숏폼 클립으로 자동 제작할 수 있습니다. 데스크톱 앱과 동일한 로컬 파이프라인을 공유하므로 구독료·페이월 없이 100% 로컬에서 렌더링됩니다.
 
 ---
 

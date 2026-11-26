@@ -8,7 +8,7 @@
 
 ### Turn any video, link, or live stream into ready-to-post clips.
 
-**The open-source OpusClip alternative** — local-first AI clipping for **podcasts, interviews, and gaming streams** with smart reframing, captions, covers, titles, and built-in **MCP for AI agents**. Zero subscriptions, zero watermarks.
+**The open-source OpusClip alternative** — local-first AI clipping for **podcasts, interviews, and gaming streams** with smart reframing, captions, covers, titles, and built-in **MCP for AI agents**. Zero subscriptions, no paywall.
 
 <br>
 

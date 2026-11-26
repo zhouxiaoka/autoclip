@@ -2,7 +2,7 @@
 
 [English](MCP.en.md) · [简体中文](CLI_AND_MCP.md) · [日本語](MCP.ja.md) · [한국어](MCP.ko.md) · **Español** · [Deutsch](MCP.de.md)
 
-Conecta Claude Code, Cursor, Windsurf, OpenCode o cualquier cliente MCP a AutoClip para convertir podcasts, entrevistas o transmisiones en clips verticales listos para publicar. Usa exactamente el mismo motor local que la app de escritorio: sin suscripciones, sin marcas de agua y 100% en tu equipo.
+Conecta Claude Code, Cursor, Windsurf, OpenCode o cualquier cliente MCP a AutoClip para convertir podcasts, entrevistas o transmisiones en clips verticales listos para publicar. Usa exactamente el mismo motor local que la app de escritorio: sin suscripciones, sin muros de pago y 100% en tu equipo.
 
 ---
 

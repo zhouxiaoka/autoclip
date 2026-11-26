@@ -2,7 +2,7 @@
 
 **English** · [简体中文](CLI_AND_MCP.md) · [日本語](MCP.ja.md) · [한국어](MCP.ko.md) · [Español](MCP.es.md) · [Deutsch](MCP.de.md)
 
-Turn Claude Code, Cursor, Windsurf, OpenCode, or any MCP-compatible AI agent into an autonomous short-form video editor. AutoClip's MCP server reuses the exact same local-first pipeline, rendering engine, and model settings as the desktop app — zero subscriptions, zero watermarks, 100% local rendering.
+Turn Claude Code, Cursor, Windsurf, OpenCode, or any MCP-compatible AI agent into an autonomous short-form video editor. AutoClip's MCP server reuses the exact same local-first pipeline, rendering engine, and model settings as the desktop app — zero subscriptions, no paywall, 100% local rendering.
 
 ---
 

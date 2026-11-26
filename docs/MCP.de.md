@@ -2,7 +2,7 @@
 
 [English](MCP.en.md) · [简体中文](CLI_AND_MCP.md) · [日本語](MCP.ja.md) · [한국어](MCP.ko.md) · [Español](MCP.es.md) · **Deutsch**
 
-Verbinde Claude Code, Cursor, Windsurf, OpenCode oder jeden MCP-fähigen KI-Agenten direkt mit AutoClip, um aus Podcasts, Interviews und Streams automatisch fertige Kurzvideos zu schneiden. Der MCP-Server nutzt dieselbe lokale Pipeline wie die Desktop-App – kostenlos, ohne Wasserzeichen und 100 % lokal gerendert.
+Verbinde Claude Code, Cursor, Windsurf, OpenCode oder jeden MCP-fähigen KI-Agenten direkt mit AutoClip, um aus Podcasts, Interviews und Streams automatisch fertige Kurzvideos zu schneiden. Der MCP-Server nutzt dieselbe lokale Pipeline wie die Desktop-App – kostenlos, ohne Paywall und 100 % lokal gerendert.
 
 ---
 
