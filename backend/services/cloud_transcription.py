@@ -185,7 +185,11 @@ def _send_chunk(client, connection, model, audio, language):
     endpoint = chat_endpoint(connection, model)
     headers = {'Authorization': 'Bearer ' + endpoint['api_key']} if endpoint['api_key'] else {}
     if route == 'dashscope':
-        base = (connection.base_url or 'https://dashscope.aliyuncs.com/compatible-mode/v1').removesuffix('/compatible-mode/v1').rstrip('/')
+        base = (connection.base_url or 'https://dashscope.aliyuncs.com/compatible-mode/v1').strip().rstrip('/')
+        for suffix in ('/compatible-mode/v1', '/compatible-mode'):
+            if base.endswith(suffix):
+                base = base[:-len(suffix)].rstrip('/')
+                break
         if not base.endswith('/api/v1'):
             base += '/api/v1'
         params = {'format': 'wav', 'sample_rate': '16000'}

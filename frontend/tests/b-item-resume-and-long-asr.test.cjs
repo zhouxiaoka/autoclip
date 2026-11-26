@@ -114,6 +114,8 @@ test('B1: StudioResults and HomePage wire partial/interrupted resume affordances
   assert.ok(apiSrc.includes("scope: 'failed_variants'"))
   assert.ok(importSrc.includes('data-testid="file-long-local-asr-tip"'))
   assert.ok(importSrc.includes('data-testid="file-long-local-window-partial"'))
+  const obsSrc = fs.readFileSync(path.join(__dirname, '../src/features/settings/ObsSettings.tsx'), 'utf8')
+  assert.ok(obsSrc.includes('(state?.recipients ?? []).map('), 'ObsSettings must guard undefined recipients (AUTOCLIP-FRONTEND-S)')
 
   const localesDir = path.join(__dirname, '../src/i18n/locales')
   const files = fs.readdirSync(localesDir).filter((f) => f.endsWith('.json'))

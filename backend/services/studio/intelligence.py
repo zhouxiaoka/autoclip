@@ -194,7 +194,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
         _rejects_thinking_param,
         asks_for_max_completion_tokens,
         disables_qwen_thinking,
-        relay_thinking_chat_kwargs,
+        guarded_chat_kwargs,
         to_max_completion_tokens,
         token_param_kwargs,
     )
@@ -223,7 +223,7 @@ def vision_call(content, config=None, *, allow_event_list=False):
         if native and name.removeprefix('models/').lower().startswith('gemini-2.5-flash') and 'thinking_budget' not in config:
             payload['thinking_budget'] = 0
         elif not native:
-            payload = _ollama_thinking_chat_kwargs(base, relay_thinking_chat_kwargs(base, payload))
+            payload = _ollama_thinking_chat_kwargs(base, guarded_chat_kwargs(base, payload))
         # Long vision thinks keep the socket alive. A refusal or a JSON 2xx is read in load().
         payload['stream'] = True
         from backend.core.custom_request_options import apply_chat_options

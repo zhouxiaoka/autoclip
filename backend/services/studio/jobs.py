@@ -940,6 +940,7 @@ def _content_drafts(project_id, plan, video, platforms=()):
         # Pass the minimum only when a long platform asked for it. A two-argument mock
         # still matches every short-platform import.
         if not min_sec and prefs.goal == 'highlight' and (plan.get('local_evidence') or {}).get('commentary'):
+            from backend.pipeline.failures import PipelineFailure
             from backend.services.studio.game_highlights import subtitle_drafts
             selection = []
             can_frame_review = (
@@ -947,13 +948,31 @@ def _content_drafts(project_id, plan, video, platforms=()):
                 and not plan.get('degrade_reason')
                 and (plan.get('source_duration') or 0) <= VISUAL_MAX_SOURCE_SEC
             )
-            drafts = subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
-                                     auto_frame_review=can_frame_review,
-                                     selection_log=selection)
-            return (drafts, [], {'selection': selection}) if selection else drafts
-        try:
+            try:
+                drafts = subtitle_drafts(video, prefs, plan['source_duration'], (plan.get('overrides') or {}).get('instruction', ''),
+                                         auto_frame_review=can_frame_review,
+                                         selection_log=selection)
+                return (drafts, [], {'selection': selection}) if selection else drafts
+            except PipelineFailure as error:
+                source_duration = float(intelligence._probe(video).get('duration') or 0)
+                analysis_mode = (plan.get('analysis_preferences') or {}).get('analysis_mode') or 'auto'
+                requested_goal = (plan.get('overrides') or {}).get('goal') or 'auto'
+                can_visual_fallback = (
+                    error.code == 'transcription_empty'
+                    and analysis_mode != 'subtitle'
+                    and requested_goal != 'content'
+                    and 0 < source_duration <= VISUAL_MAX_SOURCE_SEC
+                    and intelligence.source_frame_analysis_allowed()
+                )
+                if not can_visual_fallback:
+                    raise
+                logger.info('Gameplay commentary transcription empty on %s; falling back to visual highlight analysis', project_id)
+                route = 'visual'
+                prefs = prefs.model_copy(update={'goal': 'highlight'})
+        if route == 'subtitle' or prefs.goal == 'content':
+          try:
             clips = run_content(project_id, video, min_sec, label) if min_sec else run_content(project_id, video)
-        except ContentPipelineFailure as error:
+          except ContentPipelineFailure as error:
             source_duration = float(intelligence._probe(video).get('duration') or 0)
             analysis_mode = (plan.get('analysis_preferences') or {}).get('analysis_mode') or 'auto'
             requested_goal = (plan.get('overrides') or {}).get('goal') or 'auto'
@@ -969,7 +988,7 @@ def _content_drafts(project_id, plan, video, platforms=()):
             logger.info('Transcription empty on %s; falling back to visual highlight analysis', project_id)
             route = 'visual'
             prefs = prefs.model_copy(update={'goal': 'highlight'})
-        else:
+          else:
             source_duration = float(intelligence._probe(video).get('duration') or 0)
             drafts = _drafts_from_content_clips(
                 project_id,
@@ -1347,7 +1366,14 @@ def _design_covers(project_id, draft, job_id):
                     item['cover'] = 'design'
         store.change(project_id, mark)
     for variant in targets:
-        request_ai_cover(project_id, variant['id'], job_id)
+        try:
+            request_ai_cover(project_id, variant['id'], job_id)
+        except Exception as error:  # Optional AI cover config/dispatch errors must never fail a completed render.
+            from backend.core import project_cancellation
+            if isinstance(error, (project_cancellation.ProjectDeleted, project_cancellation.JobStopped)):
+                raise
+            store.raise_owned_read_error(error)
+            logger.warning('Optional AI cover request skipped after render: %s', type(error).__name__)
 
 
 # Cap background cover work to 1 worker so PIL/OpenCV jobs do not spike RAM alongside renders on 8GB machines.

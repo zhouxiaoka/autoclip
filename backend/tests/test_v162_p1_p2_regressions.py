@@ -558,3 +558,144 @@ def test_b2_render_replace_output_retries_windows_sharing_lock(tmp_path, monkeyp
     assert not src.exists()
 
 
+def test_wave3_sentry_161_six_fixes(tmp_path, monkeypatch):
+    import errno
+    import io
+    import json
+    from types import SimpleNamespace
+    from backend.core.failure_codes import UserFacingError
+    from backend.pipeline.failures import PipelineFailure
+    from backend.services import cloud_transcription, example_project
+    from backend.services.studio import game_highlights, intelligence, jobs, packaging_html
+    from backend.utils.speech_recognizer import SpeechRecognitionError
+
+    # 1. Official DeepSeek vision_call disables default thinking so quick_screening doesn't truncate
+    seen_vision = []
+
+    class FakeResp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen_vision.append(json.loads(req.data.decode("utf-8")))
+        return FakeResp(b'{"choices":[{"message":{"content":"{\\"goal\\":\\"content\\"}"},"finish_reason":"stop"}]}')
+
+    with patch.object(intelligence.urllib.request, "urlopen", side_effect=fake_urlopen):
+        out = intelligence.vision_call(
+            [{"type": "text", "text": "screen"}],
+            config={
+                "provider": "deepseek",
+                "api_key": "sk-test",
+                "base_url": "https://api.deepseek.com",
+                "model": "deepseek-flash",
+                "quick_screening": True,
+            },
+        )
+    assert out == {"goal": "content"}
+    assert seen_vision[0]["thinking"] == {"type": "disabled"}
+
+    # 2. DashScope cloud ASR normalizes trailing slash and /compatible-mode suffix (prevents bad_endpoint 404)
+    posted_urls = []
+
+    class FakeStreamResp:
+        status_code = 200
+        is_error = False
+        headers = {"content-type": "application/json"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return None
+
+        def json(self):
+            return {"output": {"sentence": {"sentence_end": True, "begin_time": 0, "end_time": 1000, "text": "hello"}}}
+
+    class FakeClient:
+        def stream(self, method, url, headers=None, json=None):
+            posted_urls.append(url)
+            return FakeStreamResp()
+
+    wav = tmp_path / "chunk.wav"
+    wav.write_bytes(b"RIFF")
+    for raw_base in (
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+        "https://dashscope.aliyuncs.com/compatible-mode/",
+    ):
+        conn = SimpleNamespace(provider="dashscope", base_url=raw_base, api_key="sk-test", id="c1", http_headers=None)
+        monkeypatch.setattr(cloud_transcription, "chat_endpoint", lambda c, m: {"base_url": c.base_url, "api_key": c.api_key})
+        sentences, _ = cloud_transcription._send_chunk(FakeClient(), conn, "qwen-audio-3.1-asr-flash", wav, "auto")
+        assert len(sentences) == 1
+    assert posted_urls == [
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    ]
+
+    # 3. game_highlights.subtitle_drafts converts SpeechRecognitionError into typed PipelineFailure(transcription_empty)
+    vid = tmp_path / "game.mp4"
+    vid.write_bytes(b"mp4")
+    monkeypatch.setattr(
+        "backend.utils.speech_recognizer.generate_subtitle_for_video",
+        lambda *a, **kw: (_ for _ in ()).throw(SpeechRecognitionError("Whisper 未识别出任何语音内容")),
+    )
+    try:
+        game_highlights.subtitle_drafts(vid, SimpleNamespace(goal="highlight"), 60.0)
+        raise AssertionError("expected PipelineFailure")
+    except PipelineFailure as pf:
+        assert pf.code == "transcription_empty"
+
+    # 4. _design_covers isolates optional request_ai_cover ValidationError/RuntimeError after render
+    from backend.services.studio import store
+    pid = "proj_ai_cover_isolated"
+    monkeypatch.setattr(store, "directory", lambda p: tmp_path / "projects" / p)
+    (tmp_path / "projects" / pid / "metadata").mkdir(parents=True)
+    store.write(pid, {
+        "schema_version": 2,
+        "drafts": [],
+        "events": [],
+        "jobs": [{"job_id": "j1", "status": "completed", "result": {"width": 1080, "height": 1920}}],
+        "output_variants": [{"id": "v1", "render_job_id": "j1", "strategy_id": "douyin", "status": "completed"}],
+        "analysis": None,
+    })
+    monkeypatch.setattr(jobs, "source", lambda p: vid)
+    monkeypatch.setattr("backend.services.studio.publish_kit.design_cover", lambda *a, **kw: None)
+    monkeypatch.setattr(jobs, "request_ai_cover", lambda *a, **kw: (_ for _ in ()).throw(ValueError("bad settings")))
+    jobs._design_covers(pid, {"id": "d1"}, "j1")
+
+    # 5. example_project._copy_file maps ENOSPC to UserFacingError & retries WinError 32
+    src_sample = tmp_path / "sample.mp4"
+    dst_sample = tmp_path / "copied.mp4"
+    src_sample.write_bytes(b"ok")
+    monkeypatch.setattr(example_project.shutil, "copyfile", lambda a, b: (_ for _ in ()).throw(OSError(errno.ENOSPC, "No space left on device")))
+    try:
+        example_project._copy_file(src_sample, dst_sample)
+        raise AssertionError("expected UserFacingError on ENOSPC")
+    except UserFacingError as err:
+        assert "磁盘空间不足" in str(err)
+
+    # 6. packaging_html._replace_movie retries WinError 32
+    p_src = tmp_path / "ov.mkv.partial"
+    p_dst = tmp_path / "ov.mkv"
+    p_src.write_bytes(b"mkv")
+    real_rep = packaging_html.os.replace
+    n_rep = {"c": 0}
+
+    def flaky_mkv_replace(a, b):
+        n_rep["c"] += 1
+        if n_rep["c"] == 1:
+            e = PermissionError("locked")
+            e.winerror = 32
+            raise e
+        return real_rep(a, b)
+
+    monkeypatch.setattr(packaging_html.os, "replace", flaky_mkv_replace)
+    packaging_html._replace_movie(p_src, p_dst)
+    assert n_rep["c"] == 2 and p_dst.read_bytes() == b"mkv"
+
+
