@@ -1533,7 +1533,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     './importPreferencesStore': { readImportPreferences: () => null },
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
-    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
   }
   // with autostart the real pasteStart decides, so a global paste really reaches arm and its lock.
   if (autostart) delete mocks['./pasteStart']

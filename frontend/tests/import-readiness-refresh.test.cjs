@@ -166,7 +166,7 @@ test('saving the first-run dialog makes the import page ready without a reload',
     './settingsReturn': settingsReturn,
     './BatchVideoImport': { default: () => null, batchSession: { items: [] } }, './studio.css': {},
     './quick-output.css': {},
-    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
     './ImportSetupCard': { default: function ImportSetupCard() { return null } },
   }
   runInSandbox(code, {

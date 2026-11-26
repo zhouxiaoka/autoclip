@@ -141,7 +141,7 @@ test('#481 import expands the browser picker and keeps the chosen browser on sub
       './transcriptionRecovery': { isRecoveryCode: () => false, probeConfig: () => ({}) },
       './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
       './settingsReturn': { SETTINGS_SAVED_EVENT: 'autoclip:model-settings-saved' },
-      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
       './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
     }
@@ -213,7 +213,7 @@ test('#481 a normal import keeps the browser picker inside the closed preference
       './transcriptionRecovery': { isRecoveryCode: () => false, probeConfig: () => ({}) },
       './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
       './settingsReturn': { SETTINGS_SAVED_EVENT: 'autoclip:model-settings-saved' },
-      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
       './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
     }

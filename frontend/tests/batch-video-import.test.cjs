@@ -38,7 +38,7 @@ async function fixture(options = {}) {
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './ImportPreferences': { default: () => null }, './importPreferencesStore': { readImportPreferences: () => null },
     './LiveReplayPicker': { default: () => null }, './ImportSetupCard': { default: () => null }, './StyleProbeLine': { default: () => null },
-    './TranscriptionGatePrompt': { default: () => null }, '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+    './TranscriptionGatePrompt': { default: () => null }, '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
     './transcriptionRecovery': { isRecoveryCode: () => false }, './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle' }, { open() {}, close() {}, install() {}, retry() {}, state: { phase: 'idle' } }] },
     './studio.css': {}, './quick-output.css': {},
   }

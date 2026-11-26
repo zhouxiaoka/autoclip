@@ -143,7 +143,7 @@ function studioMocks(templates) {
     './importPreferencesStore': { readImportPreferences: () => null },
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
-    '../settings/OutputCaptionsSetting': captionsModule,
+    '../settings/OutputCaptionsSetting': captionsModule, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
   }
 }
 
