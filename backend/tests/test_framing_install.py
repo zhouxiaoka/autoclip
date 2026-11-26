@@ -53,7 +53,7 @@ def test_falls_back_from_pypi_to_mirror_with_whisper_budgets(monkeypatch):
     framing._do_install(None)
     assert [c["url"] for c in calls] == ["https://pypi.org/simple", "https://pypi.tuna.tsinghua.edu.cn/simple"]
     assert [c["timeout"] for c in calls] == [pip_install.PIP_OFFICIAL_TIMEOUT_SECONDS, pip_install.PIP_MIRROR_TIMEOUT_SECONDS]
-    assert all(c["stall"] == pip_install.PIP_STALL_SECONDS for c in calls)
+    assert [c["stall"] for c in calls] == [pip_install.PIP_OFFICIAL_STALL_SECONDS, pip_install.PIP_STALL_SECONDS]
     assert "--only-binary=:all:" in calls[0]["cmd"]
     assert framing._state["status"] == "installed"
     assert framing.cooldown_remaining() == 0
