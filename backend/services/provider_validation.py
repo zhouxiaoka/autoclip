@@ -346,6 +346,7 @@ def _probe(base: str, api_key: str, model: str, provider: str = 'compatible', *,
         to_max_completion_tokens,
         token_param_kwargs,
     )
+    from backend.core.provider_model_fetch import _should_retry_direct_without_proxy
     from backend.core.upstream_errors import symbolic_error_code
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
     from backend.core.custom_request_options import apply_chat_options
@@ -364,28 +365,31 @@ def _probe(base: str, api_key: str, model: str, provider: str = 'compatible', *,
         url, headers, payload = gemini_transport.request(base, api_key, payload)
     stream_retried = False
     probe_timeout = LOCAL_PROBE_TIMEOUT if is_local_url(base) else PROBE_TIMEOUT
-    try:
-        with httpx.Client(timeout=probe_timeout, trust_env=not is_local_url(base)) as client:
-            response = client.post(url, json=payload, headers=headers)
+    use_env_proxy = not is_local_url(base)
+
+    def _run_probe(trust_env: bool):
+        nonlocal payload, stream_retried
+        with httpx.Client(timeout=probe_timeout, trust_env=trust_env) as client:
+            resp = client.post(url, json=payload, headers=headers)
             # Relay / Azure / OpenRouter models that require max_completion_tokens on HTTP 400.
-            if response.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(response.text or ''):
+            if resp.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(resp.text or ''):
                 payload = to_max_completion_tokens(payload)
                 if payload.get('max_completion_tokens', 0) < PROBE_REASONING_MAX_TOKENS:
                     payload['max_completion_tokens'] = PROBE_REASONING_MAX_TOKENS
-                response = client.post(url, json=payload, headers=headers)
+                resp = client.post(url, json=payload, headers=headers)
             # Stream-only thinking models (e.g., DashScope qwq-plus) reject stream=False with 400.
-            if response.status_code == 400 and not payload.get('stream') and _stream_only_400(response.text or ''):
+            if resp.status_code == 400 and not payload.get('stream') and _stream_only_400(resp.text or ''):
                 payload = dict(payload)
                 payload['stream'] = True
                 for key in ('max_tokens', 'max_completion_tokens'):
                     if key in payload and payload[key] < PROBE_REASONING_MAX_TOKENS:
                         payload[key] = PROBE_REASONING_MAX_TOKENS
                 stream_retried = True
-                response = client.post(url, json=payload, headers=headers)
+                resp = client.post(url, json=payload, headers=headers)
             # Reasoning/hybrid models on non-OpenAI hosts can exhaust PROBE_MAX_TOKENS inside reasoning_content.
-            if response.status_code == 200 and not stream_retried:
+            if resp.status_code == 200 and not stream_retried:
                 try:
-                    first_parsed = response.json()
+                    first_parsed = resp.json()
                 except Exception:  # noqa: BLE001
                     first_parsed = None
                 if (
@@ -397,7 +401,20 @@ def _probe(base: str, api_key: str, model: str, provider: str = 'compatible', *,
                     if int(payload.get(token_key) or 0) < PROBE_REASONING_MAX_TOKENS:
                         retry_payload = dict(payload)
                         retry_payload[token_key] = PROBE_REASONING_MAX_TOKENS
-                        response = client.post(url, json=retry_payload, headers=headers)
+                        resp = client.post(url, json=retry_payload, headers=headers)
+            return resp
+
+    try:
+        try:
+            response = _run_probe(use_env_proxy)
+        except httpx.RequestError as first_exc:
+            if _should_retry_direct_without_proxy(first_exc, use_env_proxy):
+                try:
+                    response = _run_probe(False)
+                except httpx.RequestError:
+                    raise first_exc
+            else:
+                raise
     except httpx.TimeoutException:
         return _with_detail(_classify(None, '', error_name='TimeoutError'))
     except httpx.RequestError as exc:
