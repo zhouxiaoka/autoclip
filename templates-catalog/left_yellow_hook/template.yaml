@@ -1,0 +1,48 @@
+id: left_yellow_hook
+version: 2
+name: {zh: "左对齐黄字钩子", en: "Left Yellow Hook"}
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.38
+  head_zone: [240, 1200]
+  zoom:
+    mode: creep
+    creep: 0.025
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.04:saturation=1.02"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 180, alt_top: 180}
+    subtitle: {top: 1180, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 46
+  inset_px: 88
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "暖米调色 + 左侧对齐大号堆叠无衬线字幕 + 核心词亮黄高亮，对标百万播放干货口播", en: "Warm studio grade with left-aligned stacked sans-serif captions and punchy yellow keyword highlights"}
+  tags: [knowledge, yellow, left-align, hook, viral]
+  category: knowledge
+  order: 70
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}

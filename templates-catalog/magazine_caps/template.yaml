@@ -1,0 +1,48 @@
+id: magazine_caps
+version: 2
+name: {zh: "时尚杂志全大写", en: "Magazine Caps Serif"}
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.38
+  head_zone: [240, 1200]
+  zoom:
+    mode: creep
+    creep: 0.025
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.02:saturation=0.96"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 180, alt_top: 180}
+    subtitle: {top: 1060, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 46
+  inset_px: 88
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "画面中轴大号全大写白色衬线排版 + 顶部期刊细字，适合美学改造、花艺、穿搭与高端品牌感切片", en: "Luxury magazine centered uppercase serif display typography with whisper-clean editorial styling"}
+  tags: [magazine, serif, fashion, aesthetic, editorial]
+  category: general
+  order: 84
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}

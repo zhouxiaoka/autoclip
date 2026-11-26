@@ -1,0 +1,48 @@
+id: dark_pill_shout
+version: 2
+name: {zh: "黑底高反差胶囊", en: "Dark Pill Shout"}
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.38
+  head_zone: [240, 1200]
+  zoom:
+    mode: creep
+    creep: 0.025
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.06:saturation=1.05"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 180, alt_top: 180}
+    subtitle: {top: 1360, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 46
+  inset_px: 88
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "全大写纯黑胶囊白字强对比字幕 + 极简互动条，适合数码好物、外设开箱与高节奏种草", en: "High-contrast uppercase white text in jet-black pills for gear showcases, unboxings & punchy product shorts"}
+  tags: [product, gear, bold, pill, gaming]
+  category: gaming
+  order: 76
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}
