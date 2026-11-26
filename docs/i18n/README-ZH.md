@@ -22,9 +22,12 @@
 
 <br>
 
+<!-- hero-cta:start -->
 <p>
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/"><img src="../../docs/images/download-button.svg" alt="Download AutoClip" width="248" height="55"></a>&nbsp;&nbsp;
   <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 </p>
+<!-- hero-cta:end -->
 
 <br>
 
@@ -53,6 +56,22 @@
 <p>
   ⭐ <em>免费开源（MIT）、无月费订阅 —— 剪辑与渲染全部在你的电脑上完成。觉得好用欢迎点一个 Star！</em>
 </p>
+
+<!-- top-sponsors:start -->
+<table width="100%">
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://go.apimart.ai/tw-autoclip"><img src="../../docs/sponsors/apimart.png" alt="APIMart" width="64"></a><br>
+      <a href="https://go.apimart.ai/tw-autoclip"><strong>APIMart</strong></a><br>
+      <sub>Low-cost AI image &amp; video API · GPT-Image-2 from $0.006/img</sub>
+    </td>
+    <td align="center" width="50%">
+      <a href="mailto:christine_zhouye@163.com?subject=AutoClip%20Sponsor%20%2F%20Provider%20Partnership"><strong>Sponsor / Partner with AutoClip</strong></a><br>
+      <sub>Put your AI API or creator tool in front of AutoClip users worldwide (cloud dynamic provider listing supported, zero client release needed).<br><a href="mailto:christine_zhouye@163.com">christine_zhouye@163.com</a></sub>
+    </td>
+  </tr>
+</table>
+<!-- top-sponsors:end -->
 
 </div>
 
