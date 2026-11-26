@@ -518,9 +518,24 @@ def keeps_scene(reference: bytes, candidate) -> bool:
     return all(new - old < .42 for old, new in zip(original, changed))
 
 
+_LEADING_FILLER_RE = re.compile(r'^(?:(?:嗯+|啊+|呃+|额+|那个+|就是说|就是|然后|其实吧|你看|对吧)[，,、\s]*)+')
+# Leading single-char ASR stutter before a 2-char phrase starting with the same char, e.g. "法把法律当傻子" -> "把法律当傻子"
+_LEADING_STUTTER_RE = re.compile(r'^([\u4e00-\u9fff])([\u4e00-\u9fff]{1,2}\1[\u4e00-\u9fff])')
+
+
+def clean_cover_headline(title: str) -> str:
+    """Strip common ASR leading fillers and single-character stutters from auto cover headlines."""
+    text = ' '.join((title or '').split())
+    text = _LEADING_FILLER_RE.sub('', text)
+    m = _LEADING_STUTTER_RE.match(text)
+    if m:
+        text = text[1:]
+    return text.strip() or ' '.join((title or '').split())
+
+
 def headline_lines(title: str) -> list[str]:
     """Prefer a complete pull quote on a small cover. Keep the publishing title intact."""
-    title = ' '.join(title.split())
+    title = clean_cover_headline(title)
     if len(title) > 55:
         quotes = re.findall(r'“([^”]+)”|‘(.+?)’(?=$|[.,:;!?—\s])|"([^"]+)"|「([^」]+)」', title)
         phrases = [next(part for part in match if part) for match in quotes]

@@ -279,14 +279,16 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     # interview window; on full-bleed 9:16 crop clips, keep nameplate/tags inside
     # the safe zone above the bottom platform UI dead-zone.
     full_bleed_interview = interview and layout == 'crop'
-    plate_y = 1180 if (not interview or full_bleed_interview) else WIN_Y + WIN_H + 370
+    # Keep nameplate and accent TagPill well above the 2-line CaptionBox (bottom-aligned at y=1420,
+    # reaching up to ~y=1265 on portrait 1080x1920) so opening badges never collide with subtitles.
+    plate_y = 1040 if (not interview or full_bleed_interview) else WIN_Y + WIN_H + 370
     for speaker in packaging.speakers:
         at = to_output(speaker.at, rows)
         if at is not None:
             _nameplate(out, at, speaker.name, speaker.role, plate_y)
 
     if interview and packaging.tags_enabled and style != 'spotlight':
-        tag_y = 1280 if full_bleed_interview else WIN_Y + WIN_H + 260
+        tag_y = 1150 if full_bleed_interview else WIN_Y + WIN_H + 260
         for tag in packaging.tags:
             at = to_output(tag.at, rows)
             if at is None:
