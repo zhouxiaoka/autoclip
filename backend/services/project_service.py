@@ -310,17 +310,15 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         """将UTC时间转换为本地时间（SQLite存储时丢失了时区信息）"""
         if dt is None:
             return None
-        
-        from datetime import datetime, timezone
-        import pytz
-        
-        # 由于SQLite存储时丢失了时区信息，我们假设这些时间是UTC时间
-        # 将其转换为本地时间
-        local_tz = pytz.timezone('Asia/Shanghai')
-        utc_time = dt.replace(tzinfo=timezone.utc)
-        local_time = utc_time.astimezone(local_tz)
-        
-        return local_time
+
+        from datetime import timedelta, timezone
+
+        # Asia/Shanghai has been a fixed UTC+8 offset since 1991; avoid pytz
+        # zoneinfo file lookups that can raise UnknownTimeZoneError on Windows
+        # portable builds (PYTHON-FASTAPI-8A / 8B).
+        local_tz = timezone(timedelta(hours=8))
+        utc_time = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        return utc_time.astimezone(local_tz)
     
     def delete_project_with_files(self, project_id: str) -> bool:
         """
