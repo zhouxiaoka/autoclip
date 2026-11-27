@@ -1,6 +1,6 @@
 id: depth_neon_glow
 version: 2
-name: {zh: "霓虹光晕景深", en: "Depth Neon Glow"}
+name: { zh: "赛博背光", en: "Cyber Halo" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9}
   needs_face: true

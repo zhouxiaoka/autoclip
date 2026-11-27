@@ -1,6 +1,6 @@
 id: streamer_pip
 version: 2
-name: {zh: "全屏游戏大浮窗", en: "Full-Bleed PiP"}
+name: { zh: "画中画战局", en: "Clutch PiP" }
 fit:
   formats: {gaming_stream: 1.0, live_replay: 1.0, vlog: 0.5}
   needs_face: false

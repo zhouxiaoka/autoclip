@@ -1,6 +1,6 @@
 id: dynamic_word_shout
 version: 2
-name: {zh: "动态大白字强节奏", en: "Dynamic Word Shout"}
+name: { zh: "重拍炸词", en: "Kinetic Shout" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

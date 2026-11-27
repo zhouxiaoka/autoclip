@@ -1,6 +1,6 @@
 id: cinema_letterbox
 version: 2
-name: {zh: "影院留白极简", en: "Cinema Letterbox"}
+name: { zh: "银幕留白", en: "Cinema 24" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

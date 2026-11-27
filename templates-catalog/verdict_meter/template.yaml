@@ -1,6 +1,6 @@
 id: verdict_meter
 version: 2
-name: {zh: "三段评测打分条", en: "Verdict Meter"}
+name: { zh: "红黑裁判", en: "Verdict Bar" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

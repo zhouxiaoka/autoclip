@@ -1,6 +1,6 @@
 id: depth_zen
 version: 2
-name: {zh: "禅意景深排版", en: "Zen Depth Editorial"}
+name: { zh: "浮世留白", en: "Zen Behind" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9}
   needs_face: true

@@ -1,6 +1,6 @@
 id: depth_chapter_num
 version: 2
-name: {zh: "景深大号章节号", en: "Depth Chapter Num"}
+name: { zh: "序幕破界", en: "Chapter Zero" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9}
   needs_face: true

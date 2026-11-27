@@ -1,6 +1,6 @@
 id: split_headline_pop
 version: 2
-name: {zh: "荧光胶囊逐词高亮", en: "Lime Word Pill"}
+name: { zh: "酸橙跳词", en: "Acid Pop" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

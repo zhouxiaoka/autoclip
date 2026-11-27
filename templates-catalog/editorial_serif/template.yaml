@@ -1,6 +1,6 @@
 id: editorial_serif
 version: 2
-name: {zh: "极简杂志衬线", en: "Editorial Serif Mix"}
+name: { zh: "画报诗行", en: "Atelier Serif" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

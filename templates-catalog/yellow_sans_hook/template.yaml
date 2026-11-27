@@ -1,6 +1,6 @@
 id: yellow_sans_hook
 version: 2
-name: {zh: "无衬线亮黄干货", en: "Yellow Sans Hook"}
+name: { zh: "高光金句", en: "Spotlight Gold" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

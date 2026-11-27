@@ -1,6 +1,6 @@
 id: depth_card_peek
 version: 2
-name: {zh: "景深数据卡探出", en: "Depth Card Peek"}
+name: { zh: "肩后情报", en: "Alpha Peek" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9}
   needs_face: true

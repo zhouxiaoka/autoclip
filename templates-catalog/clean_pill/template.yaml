@@ -1,6 +1,6 @@
 id: clean_pill
 version: 2
-name: {zh: 极简白胶囊, en: Clean White Pill}
+name: { zh: "白瓷胶囊", en: "Porcelain Pill" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.9, keynote_stage: 0.8}
   needs_face: true

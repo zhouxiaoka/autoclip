@@ -1,6 +1,6 @@
 id: magazine_issue
 version: 2
-name: {zh: "时尚刊号杂志风", en: "Magazine Issue"}
+name: { zh: "封面特刊", en: "Cover Issue" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

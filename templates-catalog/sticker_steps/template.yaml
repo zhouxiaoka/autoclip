@@ -1,6 +1,6 @@
 id: sticker_steps
 version: 2
-name: {zh: "步骤贴纸字幕", en: "Sticker Steps"}
+name: { zh: "贴纸攻略", en: "Step Sticker" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false

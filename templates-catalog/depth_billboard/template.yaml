@@ -1,6 +1,6 @@
 id: depth_billboard
 version: 2
-name: {zh: "景深大字穿背", en: "Depth Billboard"}
+name: { zh: "穿影巨幕", en: "Depth Titan" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9}
   needs_face: true

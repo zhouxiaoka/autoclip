@@ -1,6 +1,6 @@
 id: garden_vlog
 version: 2
-name: {zh: "手绘涂鸦日记", en: "Garden Storytime"}
+name: { zh: "手账漫记", en: "Doodle Diary" }
 fit:
   formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false
