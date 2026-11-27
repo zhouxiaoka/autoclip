@@ -31,7 +31,9 @@ AutoClip itself is 100% free. You only need an LLM to find highlights and write 
    - **OpenAI / DeepSeek / DashScope (Qwen)**: also built-in as presets
 2. **Copy your API key and switch back to AutoClip**:
    - AutoClip detects the key in your clipboard and pops up a one-click **Fill into Provider** bar at the bottom. Confirm once and you're done.
-   - Or open **Settings → AI Model**, choose your provider, paste the key, and click **Save / Test**.
+   - Or open **Settings → Providers & models**, choose your provider, paste the key, click **Test & enable**, and then **Save settings**.
+
+![AutoClip API key setup walkthrough](./images/quickstart/step2-api-setup-en.gif)
 
 ### Option B: Local Ollama (100% Free & Offline)
 Install [Ollama](https://ollama.com/), pull a model (e.g. `qwen2.5:7b`), and select **Ollama** in **Settings → AI Model**.
@@ -44,9 +46,13 @@ Install [Ollama](https://ollama.com/), pull a model (e.g. `qwen2.5:7b`), and sel
 2. **Pick target platforms & template**:
    - **TikTok / Instagram Reels / YouTube Shorts**: Portrait 9:16 with automatic framing, animated captions, and cover/post copy. Toggle captions or brand outro on/off right from the import screen.
    - **YouTube Landscape (16:9)**: Keeps widescreen framing with title, cover, and description ready to publish.
-3. **Generate & Export**:
+3. **Click "Generate videos"**:
    - AutoClip transcribes, selects the strongest moments, reframes, packages captions/covers, and renders clips locally.
    - Preview each clip, tweak titles or trim points if needed, and export straight to your folder.
+
+![AutoClip import video and select platforms walkthrough](./images/quickstart/step3-import-output-en.gif)
+
+![AutoClip generated clip cards preview](./images/v1.6/en-05-result-card.jpg)
 
 ---
 
