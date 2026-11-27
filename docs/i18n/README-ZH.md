@@ -283,6 +283,8 @@
 2. 打开 **设置**，选择云端模型服务商（或启动 Ollama / LM Studio），测试连接后保存；也可以免 Key 直接点 **先看自带示例** 体验。
 3. 贴入链接、拖入本地文件，或切到 **直播回放** 连接 OBS / 导入录像，选好发布平台点 **生成**。
 
+> **第一次上手？** 直接看 **[2 分钟桌面版图文动图指南 →](../QUICKSTART.md)**（含安装防拦截、复制 Key 自动填入与出片操作动图，无需付费代配置）。
+
 > 安装包均在公开 GitHub Actions（`Desktop Build`）构建，支持通过 `build-provenance.json` 校验 SHA-256；代码签名与公证进展跟踪见 [#119](https://github.com/zhouxiaoka/autoclip/issues/119)。
 
 ### 2. CLI 与 MCP（Claude Code、Codex、OpenCode 与脚本）
@@ -402,7 +404,7 @@ docker compose up -d --build
 
 | 主题 | 指南 |
 | :--- | :--- |
-| 安装与首次出片 | [安装指南](../USER_INSTALLATION_GUIDE.md) |
+| 安装与首次出片 | **[2 分钟动图快速上手](../QUICKSTART.md)** · [安装指南](../USER_INSTALLATION_GUIDE.md) |
 | 自部署与 Agent | [Docker](../DOCKER.md) · [CLI 与 MCP](../CLI_AND_MCP.md) · [Agent Skill](../../skills/autoclip/SKILL.md) · [OpenCode](../OPENCODE.md) |
 | 模型与排错 | [多模型配置](../MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](../FAQ.md) |
 | 版本与隐私 | [更新日志](../../CHANGELOG.md) · [路线图](../ROADMAP.md) · [社区看板](../COMMUNITY_BOARD.md) · [隐私说明](../PRIVACY.md) |

@@ -283,6 +283,8 @@ Browse 16+ clips, covers, and post copy in the **[Showcase →](https://zhouxiao
 2. Open **Settings**, pick a cloud provider (or start Ollama / LM Studio), test the connection, and save — or click **Try the built-in example** with no API key.
 3. Paste a video link, drop a file, or switch to **Live Replay** to connect OBS or import a stream recording. Pick your platforms and click **Generate**.
 
+> **New to AutoClip?** Follow the **[2-Minute Desktop Quickstart (with UI GIFs) →](docs/QUICKSTART.en.md)** — step-by-step setup with zero paid configuration needed.
+
 > Installers are built publicly on GitHub Actions (`Desktop Build`) with `build-provenance.json` SHA-256 verification. First launch on an unsigned build: on **macOS** run `xattr -dr com.apple.quarantine "/Applications/AutoClip Desktop.app"` (or *System Settings → Privacy &amp; Security → Open Anyway*); on **Windows** click **More info → Run anyway** on SmartScreen. See **[Code Signing &amp; Verification Policy](CODE_SIGNING.md)** (notarization tracked in [#119](https://github.com/zhouxiaoka/autoclip/issues/119)).
 
 ### 2. CLI &amp; MCP (Claude Code, Cursor, Codex, OpenCode &amp; scripts)
@@ -404,7 +406,7 @@ Check the failed stage: subtitles/transcription, model connection, FFmpeg, disk 
 
 | Topic | Guide |
 | :--- | :--- |
-| Install &amp; first clips | [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
+| Install &amp; first clips | **[2-Minute Quickstart (with GIFs)](docs/QUICKSTART.en.md)** · [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
 | Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [MCP &amp; AI Agents](docs/MCP.en.md) ([ZH](docs/CLI_AND_MCP.md) · [JA](docs/MCP.ja.md) · [KO](docs/MCP.ko.md) · [ES](docs/MCP.es.md) · [DE](docs/MCP.de.md)) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
 | Models &amp; troubleshooting | [Multi-LLM Setup](docs/MULTI_LLM_PROVIDER_GUIDE.md) (ZH) · [FAQ](docs/FAQ.en.md) |
 | Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Code Signing](CODE_SIGNING.md) · [Roadmap](docs/ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |
