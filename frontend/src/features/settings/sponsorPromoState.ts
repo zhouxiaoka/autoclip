@@ -138,6 +138,10 @@ function trustedHostFor(id: string): string {
   return dynamic ? hostOf(dynamic.registerUrl) : ''
 }
 
+export function promotionDelisted(id?: string | null): boolean {
+  return !!id && current?.statuses?.[id] === 'out_of_service'
+}
+
 export function promotionEligible(id: string, locale?: string | null): boolean {
   if (current?.statuses?.[id] === 'out_of_service') return false
   const slice = resolvePromoSlice(current, locale)

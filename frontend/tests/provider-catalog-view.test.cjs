@@ -343,3 +343,41 @@ test('unsavedConnectionIds flags added and modified connections until saved', ()
   assert.deepEqual([...view.unsavedConnectionIds(withAdded, saved)], ['gw-2'])
   assert.equal(view.unsavedConnectionIds(withAdded, withAdded).size, 0)
 })
+
+test('out_of_service hides unconfigured built-in providers from catalog while preserving existing saved connections', () => {
+  const promoState = loadTs('sponsorPromoState.ts')
+  const scopedView = loadTs('providerCatalogView.ts', {
+    '../../i18n': { t: text => text },
+    './sponsorPromoState': promoState,
+  })
+  promoState.writePromoSnapshot({
+    choices: ['apimart', 'other'],
+    defaultChoice: 'apimart',
+    statuses: { apimart: 'healthy', api88: 'out_of_service', infistar: 'out_of_service' },
+    registerUrls: { apimart: 'https://go.apimart.ai/tw-autoclip' },
+    notices: {},
+    source: 'cache',
+  })
+  try {
+    const emptyVisible = scopedView.filterCatalog('', 'all', blank()).map(row => row.id)
+    assert.equal(emptyVisible.includes('api88'), false)
+    assert.equal(emptyVisible.includes('infistar'), false)
+    assert.equal(emptyVisible.includes('apimart'), true)
+    assert.equal(scopedView.filterCatalog('88API', 'all', blank()).length, 0)
+
+    const withSavedApi88 = {
+      ...blank(),
+      saved: true,
+      connections: [{
+        id: 'legacy-api88', name: '88API', provider: 'api88',
+        base_url: 'https://88api.ai/v1', api_key: '', has_key: true,
+        image_api: 'auto', image_base_url: '',
+      }],
+    }
+    const existingVisible = scopedView.filterCatalog('', 'all', withSavedApi88).map(row => row.id)
+    assert.equal(existingVisible.includes('api88'), true)
+    assert.equal(existingVisible.includes('infistar'), false)
+  } finally {
+    promoState.writePromoSnapshot(null)
+  }
+})
