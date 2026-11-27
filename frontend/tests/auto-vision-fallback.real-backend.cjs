@@ -40,7 +40,8 @@ test('S5 AUTO fallback message renders from the plan in all eight locales',()=>{
     suggested_goals:['content'],preferences:{goal:'content',aspect:'original',language:'source'},overrides:{},
    },
   }))
-  assert.ok(html.includes(catalogs[lang][MESSAGE]),lang+' must show the localized fallback message')
+  const decoded=html.replaceAll('&#x27;',"'").replaceAll('&amp;','&').replaceAll('&quot;','"')
+  assert.ok(decoded.includes(catalogs[lang][MESSAGE]),lang+' must show the localized fallback message')
  }
 })
 

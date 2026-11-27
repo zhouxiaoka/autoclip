@@ -120,7 +120,7 @@ def test_ingest_connection_sentence_is_not_the_model_service_sentence():
     catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in ('zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar')}
     assert catalogs['zh'][INGEST_CONNECTION_MESSAGE] == INGEST_CONNECTION_MESSAGE
     translations = {catalogs[lang][INGEST_CONNECTION_MESSAGE] for lang in catalogs}
-    assert len(translations) == 13
+    assert len(translations) == len(catalogs)
     for text in translations:
         assert '模型' not in text
         assert sentence('connection') not in text
