@@ -2,7 +2,7 @@ id: magazine_caps
 version: 2
 name: {zh: "时尚杂志全大写", en: "Magazine Caps Serif"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.02:saturation=0.96"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "画面中轴大号全大写白色衬线排版 + 顶部期刊细字，适合美学改造、花艺、穿搭与高端品牌感切片", en: "Luxury magazine centered uppercase serif display typography with whisper-clean editorial styling"}
-  tags: [magazine, serif, fashion, aesthetic, editorial]
+  desc: {zh: "Playfair Display 宽字距全大写衬线 + 裁切遮罩丝滑升起动效，高级时尚期刊质感", en: "Playfair Display luxury uppercase serif with masked editorial line slide-up reveal"}
+  tags: [magazine, serif, fashion, aesthetic, animated]
   category: general
   order: 84
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

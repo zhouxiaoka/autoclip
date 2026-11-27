@@ -2,7 +2,7 @@ id: dual_voice_type
 version: 2
 name: {zh: "双层反差字体", en: "Dual Voice Type"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.03:saturation=0.96"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "上方粗体无衬线+琥珀色重点词，下方纤细衬线副句，适合艺术、文化与深度叙事视频", en: "Editorial contrast pairing bold amber-highlighted sans thesis at top with delicate serif narrative captions below"}
-  tags: [editorial, culture, serif, essay, interview]
+  desc: {zh: "Space Grotesk 琥珀重点主标题 + Playfair Display 斜体衬线模糊浮现副句，艺术人文质感", en: "Editorial contrast pairing Space Grotesk amber thesis at top with Playfair Display italic blur-reveal below"}
+  tags: [editorial, culture, serif, essay, animated]
   category: interview
   order: 74
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

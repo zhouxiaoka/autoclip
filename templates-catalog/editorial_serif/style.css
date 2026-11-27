@@ -1,3 +1,17 @@
+@font-face {
+  font-family: 'ACInstrument';
+  src: url('./fonts/InstrumentSerif-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'ACInstrument';
+  src: url('./fonts/InstrumentSerif-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #stage {
   width: 1080px;

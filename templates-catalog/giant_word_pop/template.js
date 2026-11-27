@@ -3,13 +3,38 @@
   var state = {};
   var root = document.getElementById('stage');
   var mctx = document.createElement('canvas').getContext('2d');
-  var SANS = '"Inter", "SF Pro Display", "Helvetica Neue", "PingFang SC", "Noto Sans CJK SC", sans-serif';
-  var SERIF = '"Georgia", "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif';
+  var SANS = "'ACSpace', Inter, Helvetica, sans-serif";
+  var POSTER = "'ACAnton', 'ACBarlow', Impact, sans-serif";
+  var SERIF = "'ACInstrument', 'ACPlayfair', Georgia, serif";
+  var PLAYFAIR = "'ACPlayfair', Georgia, serif";
+  var BRUSH = "'ACCaveat', Georgia, cursive";
 
   function esc(v) {
     return String(v || '').replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c];
     });
+  }
+
+  function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
+  function easeOutCubic(x) { var p = clamp01(x); return 1 - Math.pow(1 - p, 3); }
+  function easeOutBack(x) {
+    var p = clamp01(x);
+    var c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+  }
+  function springPop(age, dur) {
+    var p = clamp01(age / (dur || 0.24));
+    if (p >= 1) return 1;
+    return 0.78 + 0.22 * easeOutBack(p);
+  }
+  function blurReveal(age, dur) {
+    var p = easeOutCubic(age / (dur || 0.26));
+    return {
+      alpha: p,
+      blur: Math.max(0, (1 - p) * 7.5),
+      dy: (1 - p) * 20,
+      step: Math.round(p * 20),
+    };
   }
 
   function measureW(text, sz, weight, family) {
@@ -58,30 +83,39 @@
     var raw = cueText(moment, lang);
     var titleText = (state.title_lines || []).join(' ').trim();
 
-    var svg = '<defs>'
-      + '<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#000" flood-opacity="0.65"/></filter>'
-      + '</defs>';
-
-    var activeWord = '';
+    var activeWord = '', wordAge = 0;
     if (raw) {
       var words = raw.split(/\s+/).filter(Boolean);
-      var dur = Math.max(0.2, ((moment && moment.end) || (t + 1.5)) - ((moment && moment.start) || 0));
-      var rel = Math.max(0, t - ((moment && moment.start) || 0));
-      var idx = Math.min(words.length - 1, Math.floor((rel / dur) * words.length));
+      var mStart = (moment && moment.start) || 0;
+      var dur = Math.max(0.2, ((moment && moment.end) || (t + 1.5)) - mStart);
+      var rel = Math.max(0, t - mStart);
+      var slotDur = dur / words.length;
+      var idx = Math.min(words.length - 1, Math.floor(rel / slotDur));
       activeWord = (words[idx] || words[0] || '').toLowerCase();
+      wordAge = rel - idx * slotDur;
     } else if (titleText) {
       activeWord = titleText.split(/\s+/)[0].toLowerCase();
+      wordAge = t;
     }
 
+    var sc = springPop(wordAge, 0.18);
+    var rev = blurReveal(wordAge, 0.14);
+    var svg = '<defs>'
+      + '<filter id="sh" x="-20%" y="-20%" width="140%" height="140%">'
+      + '<feGaussianBlur in="SourceGraphic" stdDeviation="' + (rev.blur * 0.6).toFixed(2) + '"/>'
+      + '<feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#000" flood-opacity="0.68"/></filter>'
+      + '</defs>';
+
     if (activeWord) {
-      var sz = 128;
-      var ww = measureW(activeWord, sz, 900, SANS);
-      if (ww > 880) sz = Math.max(68, Math.floor((sz * 880) / ww));
-      svg += '<text x="540" y="990" text-anchor="middle" font-family=' + JSON.stringify(SANS) + ' font-size="' + sz + '" font-weight="900" letter-spacing="-2.5" fill="#FFFFFF" filter="url(#sh)">' + esc(activeWord) + '</text>';
+      var sz = 164;
+      var ww = measureW(activeWord, sz, 400, POSTER);
+      if (ww > 880) sz = Math.max(76, Math.floor((sz * 880) / ww));
+      svg += '<g transform="translate(540,990) scale(' + sc.toFixed(3) + ')" opacity="' + rev.alpha.toFixed(2) + '">'
+        + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + sz + '" letter-spacing="1" fill="#FFFFFF" filter="url(#sh)">' + esc(activeWord) + '</text></g>';
     }
 
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
-    return activeWord;
+    return activeWord + '@' + Math.round(sc * 40);
   };
-  window.occupiedRects = function () { return [{ slot: 'caption', x: 90, y: 860, w: 900, h: 180 }]; };
+  window.occupiedRects = function () { return [{ slot: 'caption', x: 90, y: 840, w: 900, h: 200 }]; };
 })();

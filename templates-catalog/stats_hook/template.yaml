@@ -1,8 +1,8 @@
 id: stats_hook
 version: 2
-name: {zh: "顶部数据战绩卡", en: "Stats Card Hook"}
+name: {zh: "动态数据战绩卡", en: "Animated Stats Hook"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.05:saturation=0.98"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "顶部深色磨砂数据战绩卡片 + 底部米白干货字幕，适合商业复盘、副业变现与增长案例", en: "Floating dark frosted analytics card at top paired with crisp off-white lower captions for growth & business clips"}
-  tags: [business, stats, analytics, growth, knowledge]
+  desc: {zh: "Space Grotesk 磨砂数据卡片 + 数字实时滚数增长 + 绿线折线图动态绘制，适合商业与增长复盘", en: "Frosted Space Grotesk analytics card with live animated metric counter and real-time SVG sparkline draw-in"}
+  tags: [business, stats, counter, growth, animated]
   category: knowledge
   order: 66
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

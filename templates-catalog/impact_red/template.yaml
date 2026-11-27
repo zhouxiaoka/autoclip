@@ -1,8 +1,8 @@
 id: impact_red
 version: 2
-name: {zh: "红白大字冲击", en: "Impact Red Stack"}
+name: {zh: "红白海报冲击", en: "Impact Red Stack"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.08:saturation=0.92"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "居中超大无衬线堆叠字 + 核心数字/词深红撞色高亮，适合创业观点与反常识开场", en: "Bold centered stacked sans-serif typography with crimson accent words for high-retention hooks"}
-  tags: [editorial, impact, crimson, hook, viral]
+  desc: {zh: "Anton 海报粗体居中堆叠 + 逐行弹簧缩放弹出 + 深红核心词撞色，对标百万播放创业钩子", en: "Anton poster display stack with staggered spring-overshoot pop and crimson emphasis words"}
+  tags: [editorial, impact, crimson, hook, animated]
   category: general
   order: 62
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

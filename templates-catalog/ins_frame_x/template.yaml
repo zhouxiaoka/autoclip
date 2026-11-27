@@ -2,7 +2,7 @@ id: ins_frame_x
 version: 2
 name: {zh: "极简卡片红叉判定", en: "Verdict Card Frame"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.03:saturation=1.0"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "暗黑画框嵌套圆角内容窗 + 红叉/绿勾判定角标 + 宽字距底部标签，适合避坑对比与收纳测评", en: "Minimalist dark gallery frame with verdict badge (X / Check) and wide-tracked editorial label below"}
-  tags: [verdict, card, minimal, review, comparison]
+  desc: {zh: "Space Grotesk 极简画框嵌套视窗 + 弹性红叉/绿勾角标 + 宽字距大写判定标签，适合避坑对比", en: "Minimalist gallery frame with spring-popping X/Check verdict badge and wide-tracked Space Grotesk label"}
+  tags: [verdict, card, minimal, review, animated]
   category: knowledge
   order: 80
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

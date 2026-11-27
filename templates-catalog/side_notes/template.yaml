@@ -2,7 +2,7 @@ id: side_notes
 version: 2
 name: {zh: "左侧竖排清单", en: "Side Notes Margin"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.06:saturation=0.98"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "左侧暗角竖排要点/参数清单栏，右侧完整保留主体画面，适合摄影、产品教程与专业拆解", en: "Clean left-margin vertical spec/checklist notes leaving the main visual subject completely unobstructed"}
-  tags: [tutorial, specs, checklist, minimal, knowledge]
+  desc: {zh: "Space Grotesk 左侧竖线动态生长 + 逐条清单滑入，完整避让右侧核心画面，适合摄影与拆解", en: "Animated left-margin Space Grotesk spec/checklist notes with vertical rule draw-in"}
+  tags: [tutorial, specs, checklist, minimal, animated]
   category: knowledge
   order: 82
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

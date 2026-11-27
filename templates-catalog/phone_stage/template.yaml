@@ -2,7 +2,7 @@ id: phone_stage
 version: 2
 name: {zh: "黑底悬浮手机框", en: "Phone Stage Frame"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.04:saturation=1.02"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "纯黑极简画布悬浮圆角手机取景框 + 顶部亮黄小标签，适合日常房间、好物与极简 Vlog", en: "Minimalist floating rounded phone viewport on pure black canvas with a bold yellow top tag"}
-  tags: [frame, minimal, vlog, lifestyle, phone]
+  desc: {zh: "Space Grotesk 极简纯黑悬浮手机视窗 + 弹性黄标 + 底部柔焦字幕，任何竖屏日常实拍秒变大片", en: "Minimalist floating rounded phone viewport on jet-black matte with Space Grotesk tag & blur-reveal captions"}
+  tags: [frame, minimal, vlog, lifestyle, animated]
   category: general
   order: 78
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

@@ -2,7 +2,7 @@ id: tier_verdict
 version: 2
 name: {zh: "红黄绿避坑评级", en: "Tier Verdict Bar"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.04:saturation=1.03"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "顶部红/黄/绿三栏评级表（HURTS / NEUTRAL / HELPS）+ 底部结论高亮字幕，适合数码与工具评测", en: "Gamified 3-column red/yellow/green verdict header (HURTS / NEUTRAL / HELPS) with color-coded captions"}
-  tags: [review, tier, tech, comparison, knowledge]
+  desc: {zh: "Space Grotesk 三栏动态评级条（HURTS / NO EFFECT / HELPS）+ 随节奏弹性弹出结论胶囊", en: "Space Grotesk 3-column animated verdict bar with spring-popping color-coded takeaway pills"}
+  tags: [review, tier, tech, comparison, animated]
   category: knowledge
   order: 68
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

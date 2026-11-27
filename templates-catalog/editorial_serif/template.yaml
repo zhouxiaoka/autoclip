@@ -2,7 +2,7 @@ id: editorial_serif
 version: 2
 name: {zh: "极简杂志衬线", en: "Editorial Serif"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.9, podcast_studio: 0.85, keynote_stage: 0.85}
+  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
@@ -11,7 +11,7 @@ base:
   head_zone: [240, 1200]
   zoom:
     mode: creep
-    creep: 0.025
+    creep: 0.028
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.02:saturation=0.92:brightness=0.01"
   picture_layout: crop
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "柔和 35mm 胶片质感 + 中轴极简白色衬线字幕，零黑框零厚描边，适合生活方式与美学口播", en: "Soft 35mm film aesthetic with minimal centered white serif captions and zero heavy boxes"}
-  tags: [editorial, serif, minimal, lifestyle, aesthetic]
+  desc: {zh: "Instrument Serif 正斜体混排 + Higgsfield 招牌模糊渐清晰浮现动效，高级电影感生活口播", en: "Instrument Serif editorial typography with signature blur-to-sharp focus reveal animation"}
+  tags: [editorial, serif, minimal, blur-reveal, aesthetic]
   category: general
   order: 64
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}
