@@ -86,31 +86,32 @@
     var sc = springPop(mAge, 0.2);
 
     var svg = '<defs>'
-      + '<filter id="sh" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.52"/></filter>'
+      + '<filter id="sh" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000" flood-opacity="0.65"/></filter>'
       + '</defs>';
 
+    // Centerpiece: HUGE bold white impact word stacked directly above tight black subtitle pill (matching Build Your Keyboard)
+    var baseY = 1280;
     if (kicker) {
-      var ksz = 42;
+      var ksz = 126;
       var kw = measureW(kicker, ksz, 900, POSTER);
-      var kpw = Math.min(760, Math.round(kw + 48));
+      if (kw > 860) ksz = Math.max(74, Math.floor((ksz * 860) / kw));
       var ksc = springPop(t, 0.22);
-      svg += '<g transform="translate(540,242) scale(' + ksc.toFixed(3) + ')" filter="url(#sh)">'
-        + '<rect x="' + (-kpw / 2) + '" y="-32" width="' + kpw + '" height="64" rx="12" fill="#09090B" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="2"/>'
-        + '<text x="0" y="14" text-anchor="middle" font-family="' + POSTER + '" font-size="' + ksz + '" font-weight="900" letter-spacing="2" fill="#FFFFFF">' + esc(kicker) + '</text></g>';
+      svg += '<g transform="translate(540,' + baseY + ') scale(' + ksc.toFixed(3) + ')" filter="url(#sh)">'
+        + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + ksz + '" font-weight="900" letter-spacing="1.5" fill="#FFFFFF">' + esc(kicker) + '</text></g>';
     }
 
     var capD = '';
     if (raw) {
       var up = raw.toUpperCase();
-      var lines = wrapLines(up, 800, 58, 900, POSTER, 2);
-      var y0 = lines.length === 1 ? 1435 : 1395;
+      var lines = wrapLines(up, 820, 44, 900, POSTER, 2);
+      var y0 = baseY + 62;
       svg += '<g transform="translate(540,' + y0 + ') scale(' + sc.toFixed(3) + ')" filter="url(#sh)">';
       for (var i = 0; i < lines.length; i++) {
-        var lw = measureW(lines[i], 58, 900, POSTER);
-        var pw = Math.min(900, Math.round(lw + 52));
-        var ly = i * 86;
-        svg += '<rect x="' + (-pw / 2) + '" y="' + (ly - 38) + '" width="' + pw + '" height="76" rx="12" fill="#09090B" fill-opacity="0.96"/>'
-          + '<text x="0" y="' + (ly + 19) + '" text-anchor="middle" font-family="' + POSTER + '" font-size="58" font-weight="900" letter-spacing="1.5" fill="#FFFFFF">' + esc(lines[i]) + '</text>';
+        var lw = measureW(lines[i], 44, 900, POSTER);
+        var pw = Math.min(880, Math.round(lw + 42));
+        var ly = i * 68;
+        svg += '<rect x="' + (-pw / 2) + '" y="' + (ly - 28) + '" width="' + pw + '" height="58" rx="8" fill="#09090B" fill-opacity="0.96"/>'
+          + '<text x="0" y="' + (ly + 14) + '" text-anchor="middle" font-family="' + POSTER + '" font-size="44" font-weight="900" letter-spacing="1.2" fill="#FFFFFF">' + esc(lines[i]) + '</text>';
       }
       svg += '</g>';
       capD = up + '@' + Math.round(sc * 40);
