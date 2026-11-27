@@ -277,6 +277,7 @@ def _encode_draft(
     """ffmpeg / HTML overlay wall clock. Paused from the clip-job model budget (P1 #8)."""
     packaged = draft.packaging is not None
     overlay_path = None
+    back_overlay_path = None
     overlay_grade = ''
     overlay_spec = None
     overlay_job = None
@@ -317,6 +318,22 @@ def _encode_draft(
                 features=features, safe_area=safe_area, scenes=draft.scenes,
                 creator_pack_overrides=effective_cp_overrides,
             )
+            if (
+                overlay_job
+                and overlay_job.path
+                and overlay_spec
+                and overlay_spec.base.subject_layer
+                and overlay_spec.overlay.back_entry
+            ):
+                back_job = packaging_html.prepare_overlay(
+                    project_id, html_template, overlay_packaging,
+                    sum(audio.scene_duration(scene) for scene in draft.scenes),
+                    features=features, safe_area=safe_area, scenes=draft.scenes,
+                    creator_pack_overrides=effective_cp_overrides,
+                    entry=overlay_spec.overlay.back_entry,
+                )
+                if back_job and back_job.path:
+                    back_overlay_path = back_job.path
         except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise
         except (TemplateRegistryError, OSError) as error:
@@ -357,6 +374,8 @@ def _encode_draft(
                         spec = {'layout': draft.layout, 'w': w, 'h': h}
                         req = ExportRequest(project_id, draft.id, layout=draft.layout)
                         scene_overlay = overlay_path
+                        scene_back_overlay = back_overlay_path if scene_overlay else None
+                        scene_matte = None
                         camera_video = None
                         if scene_overlay:
                             from backend.services.studio import packaging_html, packaging_render
@@ -403,11 +422,39 @@ def _encode_draft(
                                     )
                                 else:
                                     picture, label = packaging_render.picture_only(picture_draft, scene, w, h)
+                            # Optional 3-layer local ONNX subject matte (behind-subject depth typography).
+                            if overlay_spec and overlay_spec.base.subject_layer:
+                                from backend.services.studio import subject_matte
+                                matte_pic = picture
+                                if draft.layout == 'crop':
+                                    from backend.services.studio.framing import layout_filter
+                                    matte_pic = matte_pic.replace(
+                                        f'[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[base]',
+                                        layout_filter(scene, draft.crop_x, w, h),
+                                    )
+                                scene_matte = subject_matte.generate_scene_matte(
+                                    video, start=scene.start, duration=duration,
+                                    picture_filter=matte_pic, picture_label=label,
+                                    fps=30, dest=folder / f'{i}_matte.mp4',
+                                )
+                                if scene_matte is None:
+                                    # Graceful degradation: without matte, do not double-draw back overlay over face.
+                                    scene_back_overlay = None
+                            next_in = 2 + int(camera_video is not None)
+                            back_idx = None
+                            if scene_back_overlay is not None:
+                                back_idx = next_in
+                                next_in += 1
+                            matte_idx = None
+                            if scene_matte is not None:
+                                matte_idx = next_in
+                                next_in += 1
                             # Street and editorial paint captions in the template safe zone.
                             # The cover owns the title; this overlay does not burn a headline.
                             tail, label = packaging_html.composite_tail(
                                 label, 1, w, h, overlay_grade,
                                 template=html_template or '', offset=offsets[i], total=clip_total,
+                                back_overlay_index=back_idx, matte_index=matte_idx,
                             )
                             built = (picture + ';' + tail, label)
                         elif packaged:
@@ -435,11 +482,23 @@ def _encode_draft(
                             cmd += ['-ss', f'{max(0.0, offsets[i]):.3f}', '-i', str(scene_overlay)]
                             if camera_video is not None:
                                 cmd += ['-ss', str(scene.start), '-i', str(camera_video)]
+                            if scene_back_overlay is not None:
+                                cmd += ['-ss', f'{max(0.0, offsets[i]):.3f}', '-i', str(scene_back_overlay)]
+                            if scene_matte is not None:
+                                cmd += ['-i', str(scene_matte)]
                         elif artwork:
                             cmd += ['-loop', '1', '-i', str(artwork)]
                         if backdrop:
                             cmd += ['-loop', '1', '-framerate', '30', '-i', str(backdrop)]
-                        silence_input = 1 + int(scene_overlay is not None) + int(camera_video is not None) + int(artwork is not None) + int(backdrop is not None)
+                        silence_input = (
+                            1
+                            + int(scene_overlay is not None)
+                            + int(camera_video is not None)
+                            + int(scene_back_overlay is not None)
+                            + int(scene_matte is not None)
+                            + int(artwork is not None)
+                            + int(backdrop is not None)
+                        )
                         if keep_audio:
                             cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
                         cmd += ['-t', str(duration)]

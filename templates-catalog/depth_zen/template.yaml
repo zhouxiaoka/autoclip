@@ -1,0 +1,51 @@
+id: depth_zen
+version: 2
+name: {zh: "禅意景深排版", en: "Zen Depth Editorial"}
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.36
+  head_zone: [240, 1140]
+  zoom:
+    mode: creep
+    creep: 0.02
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.05:saturation=0.94"
+  picture_layout: crop
+  subject_layer: true
+overlay:
+  entry: index.html
+  back_entry: back.html
+  slots:
+    hook: {top: 320, alt_top: 320}
+    subtitle: {top: 1380, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 46
+  inset_px: 88
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "对标 Bonsai Patience：3 层人像抠图实现句首文字藏于人物背后，前景以修长斜体衬线大字承接金句", en: "Faithful to Bonsai Patience: 3-layer subject matte puts lead-in text behind the speaker with foreground italic serif emphasis"}
+  tags: [depth, serif, editorial, zen, animated]
+  category: general
+  order: 71
+  package_version: "1.0.0"
+  min_app_version: "1.6.3"
+  author: AutoClip
+  preview_layout: crop
+qa: {}
