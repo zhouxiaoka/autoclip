@@ -113,7 +113,11 @@ function ProviderCard({
         <span className="ac-provider-card-title">
           {t(displayNameOf(preset))}
           {(preset.sponsor || recommended) && recommended && <span className="ac-badge">{t('推荐')}</span>}
-          {preset.sponsor && !recommended && upsell && <span className="ac-badge">{t('settings.providers.badge.sponsor')}</span>}
+          {preset.sponsor && !recommended && upsell && (
+            preset.dynamic
+              ? (preset.sponsor.offer ? <span className="ac-badge">{preset.sponsor.offer}</span> : null)
+              : <span className="ac-badge">{t('settings.providers.badge.sponsor')}</span>
+          )}
         </span>
         {caps.length > 0 && (
           <span className="ac-provider-caps">

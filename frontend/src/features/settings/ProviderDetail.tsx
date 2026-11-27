@@ -145,18 +145,22 @@ export default function ProviderDetail({
             </span>
           )}
           {name}
-          {showPromo && (
+          {showPromo && (!preset.dynamic || Boolean(preset.sponsor?.offer)) && (
             <span className="ac-badge" data-promo="sponsor">
-              {preset.sponsor?.offer
-                ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor.offer) })
-                : t('settings.providers.badge.sponsor')}
+              {preset.dynamic
+                ? preset.sponsor!.offer
+                : (preset.sponsor?.offer
+                  ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor.offer) })
+                  : t('settings.providers.badge.sponsor'))}
             </span>
           )}
           {connected && <StatusDot tone="ok" label={preset.auth === 'none' ? t('settings.providers.available') : t('settings.providers.connected')} />}
           {!connected && isCatalogConfigured(settings, preset, persisted) && <span className="ac-badge">{t('已配置')}</span>}
         </h3>
-        {/* Active promotion hides the long hint. A removed or stopped sponsor keeps the neutral caps. */}
-        {!showPromo && <p className="ac-note">{t(preset.sponsor ? NEUTRAL_PROVIDER_COPY : preset.hint)}</p>}
+        {/* Active promotion hides the long hint for built-in sponsors; dynamic providers keep their concise note. */}
+        {(!showPromo || (preset.dynamic && Boolean(preset.hint))) && (
+          <p className="ac-note">{preset.dynamic ? preset.hint : t(preset.sponsor ? NEUTRAL_PROVIDER_COPY : preset.hint)}</p>
+        )}
         <ProviderQualityMarks preset={preset} />
         {!showPromo && (
           <div className="ac-provider-caps">

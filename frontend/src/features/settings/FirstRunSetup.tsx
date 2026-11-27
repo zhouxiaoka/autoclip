@@ -253,7 +253,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
               return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={choice === id}
                 onClick={() => { touched.current = true; choiceRef.current = id; setChoice(id) }}>
                 <span className="ac-choice-text">
-                  <b>{title()}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{promoted && !promotionRecommends(id) && offerText && <span className="ac-badge">{`${t('赞助')} · ${offerText}`}</span>}</b>
+                  <b>{title()}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{promoted && !promotionRecommends(id) && offerText && <span className="ac-badge">{dynamic ? offerText : `${t('赞助')} · ${offerText}`}</span>}</b>
                   <span>{choiceDetail(id, otherName, language)}</span>
                 </span>
                 {choice === id && <Icon.Check />}
