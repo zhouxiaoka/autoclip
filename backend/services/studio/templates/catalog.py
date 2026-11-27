@@ -46,6 +46,7 @@ DEFAULT_CATALOG_MIRRORS = (
 )
 CATALOG_CACHE_TTL_SEC = 3600
 CATALOG_TIMEOUT_SEC = 12.0
+CATALOG_PRIMARY_TIMEOUT_SEC = 6.0
 ARCHIVE_TIMEOUT_SEC = 30.0
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 15 * 1024 * 1024
@@ -195,7 +196,9 @@ def _open_with_proxy_fallback(req: urllib.request.Request, *, timeout: float):
     try:
         return urllib.request.urlopen(req, timeout=timeout)
     except (urllib.error.URLError, TimeoutError, OSError):
-        has_proxy = any(os.environ.get(k) for k in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'))
+        has_proxy = bool(urllib.request.getproxies()) or any(
+            os.environ.get(k) for k in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy')
+        )
         if not has_proxy:
             raise
         direct_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -263,10 +266,11 @@ def sync_catalog(
     do_fetch = fetcher or _http_get
     last_error: TemplateCatalogError | None = None
     saw_404 = False
-    for target_url in candidates:
+    for idx, target_url in enumerate(candidates):
+        attempt_timeout = CATALOG_PRIMARY_TIMEOUT_SEC if idx < len(candidates) - 1 else CATALOG_TIMEOUT_SEC
         try:
             status, body, resp_headers = do_fetch(
-                target_url, headers=headers, timeout=CATALOG_TIMEOUT_SEC, max_bytes=MAX_CATALOG_BYTES,
+                target_url, headers=headers, timeout=attempt_timeout, max_bytes=MAX_CATALOG_BYTES,
             )
         except TemplateCatalogError as error:
             last_error = error
@@ -447,6 +451,24 @@ def install_from_archive(
     return registry.get_loaded(spec.id, user_root=base)
 
 
+def _archive_download_urls(download_url: str) -> list[str]:
+    """Return ordered archive URLs: primary download_url plus matching filenames on catalog mirrors."""
+    urls = [download_url]
+    if '/' not in download_url:
+        return urls
+    base_dir, filename = download_url.rsplit('/', 1)
+    if not filename or filename in {'.', '..'} or '/' in filename or '\\' in filename:
+        return urls
+    mirror_bases = [u.rsplit('/', 1)[0] for u in catalog_urls() if '/' in u]
+    if base_dir not in mirror_bases:
+        return urls
+    for mirror_base in mirror_bases:
+        candidate = f'{mirror_base}/{filename}'
+        if candidate not in urls:
+            urls.append(candidate)
+    return urls
+
+
 def install_remote_template(
     template_id: str,
     *,
@@ -469,14 +491,29 @@ def install_remote_template(
         raise TemplateCatalogError(f'模板目录中未找到模板: {template_id}')
 
     do_fetch = fetcher or _http_get
-    status, archive_bytes, _ = do_fetch(entry.download_url, timeout=ARCHIVE_TIMEOUT_SEC, max_bytes=MAX_ARCHIVE_BYTES)
-    if status != 200 or not archive_bytes:
+    archive_bytes = b''
+    used_url = entry.download_url
+    last_error: TemplateCatalogError | None = None
+    for candidate_url in _archive_download_urls(entry.download_url):
+        try:
+            status, body, _ = do_fetch(candidate_url, timeout=ARCHIVE_TIMEOUT_SEC, max_bytes=MAX_ARCHIVE_BYTES)
+        except TemplateCatalogError as error:
+            last_error = error
+            logger.debug('Template archive mirror failed (%s): %s', candidate_url, error)
+            continue
+        if status == 200 and body:
+            archive_bytes = body
+            used_url = candidate_url
+            break
+    if not archive_bytes:
+        if last_error is not None:
+            raise last_error
         raise TemplateCatalogError(f'下载模板包失败: {template_id}')
     return install_from_archive(
         archive_bytes,
         expected_sha256=entry.sha256,
         expected_id=entry.id,
-        source_url=entry.download_url,
+        source_url=used_url,
         user_root=user_root,
     )
 

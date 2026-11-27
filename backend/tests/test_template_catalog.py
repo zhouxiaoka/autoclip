@@ -377,3 +377,58 @@ def test_catalog_overrides_builtin_order_featured_locale_and_unlisted(tmp_path, 
 
     zh_items = catalog.list_template_items(include_remote=True, locale='zh-CN', app_version='1.6.2')['templates']
     assert 'street' in [item['id'] for item in zh_items]
+
+
+def test_install_remote_template_falls_back_to_cos_mirror_and_system_proxy_direct_retry(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
+    monkeypatch.delenv('AUTOCLIP_TEMPLATE_CATALOG_URL', raising=False)
+    monkeypatch.delenv('AUTOCLIP_TEMPLATE_CATALOG_MIRRORS', raising=False)
+
+    # 1. Archive download falls back from GitHub Release URL to Shanghai COS mirror when GitHub times out
+    folder = _scaffold_template(tmp_path / 'src_mirror', 'mirror_demo')
+    zip_bytes = _zip_dir(folder)
+    sha = hashlib.sha256(zip_bytes).hexdigest()
+    gh_url = 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog/mirror_demo-1.0.0.zip'
+    cos_url = 'https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/templates-catalog/mirror_demo-1.0.0.zip'
+    manifest = catalog.CatalogManifest(
+        schema_version=1,
+        templates=[
+            catalog.CatalogEntry(
+                id='mirror_demo',
+                version='1.0.0',
+                name={'zh': '镜像测试', 'en': 'Mirror Demo'},
+                sha256=sha,
+                download_url=gh_url,
+                size_bytes=len(zip_bytes),
+            )
+        ],
+    )
+    tried: list[str] = []
+
+    def archive_fetcher(url: str, **_kw):
+        tried.append(url)
+        if 'github.com' in url:
+            raise catalog.TemplateCatalogError('timeout')
+        return 200, zip_bytes, {}
+
+    loaded = catalog.install_remote_template('mirror_demo', catalog=manifest, fetcher=archive_fetcher)
+    assert loaded.spec.id == 'mirror_demo'
+    assert tried == [gh_url, cos_url]
+
+    # 2. _open_with_proxy_fallback retries direct when OS/registry proxy is set (urllib.request.getproxies()) even if env vars are empty
+    for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(catalog.urllib.request, 'getproxies', lambda: {'https': 'http://127.0.0.1:7890'})
+    monkeypatch.setattr(catalog.urllib.request, 'urlopen', lambda *_a, **_kw: (_ for _ in ()).throw(TimeoutError('proxy dead')))
+
+    direct_calls: list[str] = []
+
+    class FakeDirectOpener:
+        def open(self, req, *, timeout):
+            direct_calls.append(req.full_url)
+            return 'direct-ok'
+
+    monkeypatch.setattr(catalog.urllib.request, 'build_opener', lambda *_a, **_kw: FakeDirectOpener())
+    req = catalog.urllib.request.Request(cos_url)
+    assert catalog._open_with_proxy_fallback(req, timeout=6.0) == 'direct-ok'
+    assert direct_calls == [cos_url]
