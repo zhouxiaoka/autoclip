@@ -1,0 +1,48 @@
+id: finance_versus_bar
+version: 2
+name: { zh: "双栏对比卡", en: "Versus Split" }
+fit:
+  formats: {vlog: 0.95, sit_down_interview: 1.0, podcast_studio: 1.0}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.42
+  head_zone: [340, 1200]
+  zoom:
+    mode: creep
+    creep: 0.02
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.06:saturation=1.02"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 150, alt_top: 150}
+    subtitle: {top: 1460, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 48
+  inset_px: 84
+  source_limit: 36
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "顶部磨砂玻璃双栏对比卡（左/右方案随口播动态高亮进度条）+ 底部锐利数字标亮字幕，适合财经复盘、AI 工具横评与方法论对比", en: "Frosted glass A-vs-B comparison header card with cue-synced side highlights and crisp lower captions for finance, tech, and product breakdowns"}
+  tags: [finance, versus, comparison, business, tech, animated]
+  category: knowledge
+  order: 83
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}

@@ -1,0 +1,51 @@
+id: depth_vertical_zen
+version: 2
+name: { zh: "竖排墨境", en: "Ink Vertical" }
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.38
+  head_zone: [240, 1140]
+  zoom:
+    mode: creep
+    creep: 0.02
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.06:saturation=0.92"
+  picture_layout: crop
+  subject_layer: true
+overlay:
+  entry: index.html
+  back_entry: back.html
+  slots:
+    hook: {top: 260, alt_top: 260}
+    subtitle: {top: 1440, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 44
+  inset_px: 96
+  source_limit: 38
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "3 层人像景深抠图：东方极简竖排大字与朱砂印章从人物肩后滑出，前景配克制衬线字幕，适合人文、认知与高级感口播", en: "3-layer subject matte: monumental vertical editorial typography and vermilion seal glide behind the speaker's shoulder with calm lower captions"}
+  tags: [depth, 3d, zen, editorial, chinese, animated]
+  category: general
+  order: 80
+  package_version: "1.0.0"
+  min_app_version: "1.6.3"
+  author: AutoClip
+  preview_layout: crop
+qa: {}
