@@ -611,20 +611,28 @@ def _validate_resolved(
     validated_model = ''
     if (
         probe_error
-        and probe_error.error_type is UpstreamErrorType.MODEL_NOT_FOUND
+        and probe_error.error_type in (
+            UpstreamErrorType.MODEL_NOT_FOUND,
+            UpstreamErrorType.PERMISSION_DENIED,
+            UpstreamErrorType.INSUFFICIENT_QUOTA,
+        )
         and list_known
         and models
-        and selected not in models
     ):
         from backend.core.provider_presets import get_provider
         preset = get_provider(resolved.provider)
         preset_defaults = {preset.default_model, *(preset.candidates.get('analysis') or ())} if preset else set()
         preset_defaults.discard('')
         if selected in preset_defaults:
-            live_candidates = [m for m in (extras.get('recommended', {}).get('analysis') or []) if m in models and m != selected]
+            live_candidates: list[str] = []
+            if preset and preset.default_model and preset.default_model in models and preset.default_model != selected:
+                live_candidates.append(preset.default_model)
+            for m in (extras.get('recommended', {}).get('analysis') or []):
+                if m in models and m != selected and m not in live_candidates:
+                    live_candidates.append(m)
             if not live_candidates:
                 live_candidates = [m for m in models if m != selected][:2]
-            for fallback_model in live_candidates[:2]:
+            for fallback_model in live_candidates[:3]:
                 fb_err = _probe(base, api_key, fallback_model, provider=resolved.provider, **({'options': options} if options else {}))
                 if fb_err is None:
                     probe_error = None
