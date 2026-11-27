@@ -31,7 +31,10 @@ from backend.core.job_budget import JobDurationExceeded, clip_job_read_timeout, 
 from backend.core.llm_retry import backoff_seconds, classify_for_retry
 from backend.core.project_cancellation import JobStopped, ProjectDeleted, ServiceRestarted, checkpoint
 
-from .quality import DurationProfile, profile_from_srt, refine_timeline, save_profile, save_report, select_clips, to_seconds, to_srt_time
+from .quality import (
+    DurationProfile, SHORT_MIN_CLIP_SEC, profile_from_srt, refine_timeline,
+    save_profile, save_report, select_clips, to_seconds, to_srt_time,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +306,13 @@ def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, met
                       'chunk_index': 0, 'final_score': clip['score'], 'recommend_reason': clip['reason'],
                       'generated_title': clip['title'], 'score_source': 'llm'})
     refined, report = refine_timeline(items, srt_entries, profile)
+    if not refined and items and profile.min_clip_sec > SHORT_MIN_CLIP_SEC:
+        relaxed = dataclasses.replace(profile, min_clip_sec=SHORT_MIN_CLIP_SEC)
+        refined, report = refine_timeline(items, srt_entries, relaxed)
+        if refined:
+            report['relaxed_min_clip_sec'] = SHORT_MIN_CLIP_SEC
+            logger.info('Clip finder relaxed min_clip_sec from %ss to %ss to preserve %d clips',
+                        profile.min_clip_sec, SHORT_MIN_CLIP_SEC, len(refined))
     chosen, selection = select_clips(refined, threshold, profile)
     if metadata_dir is not None:
         metadata_dir = Path(metadata_dir)
