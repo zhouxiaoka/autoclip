@@ -69,8 +69,8 @@
     if (w > 980) sz = Math.max(140, Math.floor((sz * 980) / w));
 
     var svg = '<defs><filter id="bsh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.45"/></filter></defs>';
-    // Crown-level depth band (y=340): top 80% of letters stay crisp & readable while hair/head overlaps the lower edge!
-    svg += '<g transform="translate(540,' + (340 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + easeOutCubic(t / 0.25).toFixed(2) + '" filter="url(#bsh)">'
+    // Crown-level depth band (y=520): top 75% of hero stays crystal-clear above head while hair cuts the baseline!
+    svg += '<g transform="translate(540,' + (520 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + easeOutCubic(t / 0.25).toFixed(2) + '" filter="url(#bsh)">'
       + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + sz + '" letter-spacing="4" fill="#F8FAFC" fill-opacity="0.96">' + esc(hero) + '</text>';
     if (sub) {
       var ssz = 165;
