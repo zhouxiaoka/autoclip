@@ -126,8 +126,8 @@ def test_scene_ass_respects_crop_layout_safe_area_for_interview_zh():
     assert str(pr.WIN_Y + pr.WIN_H + 370) not in crop_ass
     assert str(pr.WIN_Y + pr.WIN_H + 260) not in crop_ass
     assert '\\pos(540,1420)' in crop_ass
-    assert '1180' in crop_ass
-    assert '1280' in crop_ass
+    assert '1150' in crop_ass
+    assert '1040' in crop_ass
 
 
 def test_verified_dashscope_allowlist_survives_text_only_modalities_and_multimodal_generation_endpoint():

@@ -724,7 +724,11 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
         packaging,
         template,
     )
-    dest = overlay_cache_path(project_id, template, fill, frames=frames, entry=entry)
+    dest = (
+        overlay_cache_path(project_id, template, fill, frames=frames, entry=entry)
+        if entry != 'index.html'
+        else overlay_cache_path(project_id, template, fill, frames=frames)
+    )
     _enforce_overlay_cap(dest.parent)
     if _cached_overlay_fits(dest, frames, fps):
         return finish(OverlayJob(dest, template, False, 'none', 'none', 'completed', requested_template=template))
@@ -745,7 +749,9 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
             token = _capture_out_dir.set(temp_dir)
             try:
                 produced = asyncio.run(asyncio.wait_for(
-                    _bounded_capture(template, fill, frames, fps, capture, entry=entry),
+                    _bounded_capture(template, fill, frames, fps, capture, entry=entry)
+                    if entry != 'index.html'
+                    else _bounded_capture(template, fill, frames, fps, capture),
                     timeout=remaining(),
                 ))
             finally:

@@ -1325,11 +1325,18 @@
       "properties": {
         "output_rating": {
           "type": "string",
-          "values": ["ready", "needs_edit", "unusable"]
+          "values": [
+            "ready",
+            "needs_edit",
+            "unusable"
+          ]
         },
         "rating_trigger": {
           "type": "string",
-          "values": ["card_dislike", "post_download"]
+          "values": [
+            "card_dislike",
+            "post_download"
+          ]
         },
         "issue_tags": {
           "type": "string",

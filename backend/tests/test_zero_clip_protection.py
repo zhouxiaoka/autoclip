@@ -72,9 +72,9 @@ def test_clip_finder_preserves_top_clips_when_all_below_threshold_and_short(tmp_
     assert report["clip_finder"]["selection"]["fallback_selected"] == 2
 
 
-def test_youtube_long_infers_duration_when_probe_returns_none(monkeypatch):
-    """When ffprobe cannot report duration, youtube_long still extends coverage from draft timestamps."""
-    monkeypatch.setattr(jobs, "_known_source_duration", lambda _video: None)
+def test_youtube_long_extends_short_drafts_when_source_duration_is_long(monkeypatch):
+    """When source duration >= 180s, youtube_long extends short picks instead of returning 0 clips."""
+    monkeypatch.setattr(jobs, "_known_source_duration", lambda _video: 300.0)
     monkeypatch.setattr(
         jobs,
         "_content_drafts",

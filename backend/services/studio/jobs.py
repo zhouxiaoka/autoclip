@@ -1760,17 +1760,8 @@ def _initial_derive(project_id, plan, video, generation, platforms, branding, sk
             events = reviewed
         if not base_drafts:
             return [], [], events, coverage
-    if min_sec:
-        effective_duration = duration
-        if effective_duration is None:
-            inferred = max(
-                (float(scene.get('end') or 0) for draft in base_drafts for scene in (draft.get('scenes') or [])),
-                default=0.0,
-            )
-            if inferred >= min_sec:
-                effective_duration = inferred
-        if effective_duration is not None:
-            base_drafts = _ensure_long_coverage(base_drafts, effective_duration, min_sec)
+    if min_sec and duration is not None:
+        base_drafts = _ensure_long_coverage(base_drafts, duration, min_sec)
     variants = []
     derived_drafts = []
     burned = _source_has_burned_subtitles(project_id, video)

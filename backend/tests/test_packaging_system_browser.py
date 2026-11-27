@@ -68,7 +68,7 @@ def test_no_browser_gives_a_readable_hint_and_falls_back_to_classic(monkeypatch,
 @pytest.mark.parametrize('key', [runtime.NO_BROWSER_WARNING, runtime.NO_RUNTIME_WARNING])
 def test_hints_are_translated_in_all_eight_locales(key):
     files = sorted(LOCALES.glob('*.json'))
-    assert len(files) == 13
+    assert len(files) == 20
     for file in files:
         value = json.loads(file.read_text(encoding='utf-8')).get(key)
         assert value, f'{file.name} lacks {key}'

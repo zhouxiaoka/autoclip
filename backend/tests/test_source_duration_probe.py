@@ -77,7 +77,7 @@ def test_i18n_keys_present_in_all_locales():
     from pathlib import Path
     root = Path(__file__).resolve().parents[2] / 'frontend/src/i18n/locales'
     files = list(root.glob('*.json'))
-    assert len(files) == 13
+    assert len(files) == 20
     for f in files:
         data = json.loads(f.read_text(encoding='utf-8'))
         assert media_precheck.UNREADABLE_MESSAGE in data and media_precheck.TOO_SHORT_1S_MESSAGE in data

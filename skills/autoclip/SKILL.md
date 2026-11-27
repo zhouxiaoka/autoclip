@@ -60,7 +60,7 @@ autoclip outputs PROJECT_ID --export-kits
 
 ## 示例 2：选剪辑风格
 
-内置风格有五个：`editorial`（杂志风）、`street`（街头快剪）、`news`（新闻）、`cinema`（电影）、`classic`（经典）；除此之外，AutoClip 还支持云端热更新目录中的 **29+ 款动态模版**（含 `solo_magenta`、`cinema_letterbox`、`red_list_hook`、`impact_red`、`editorial_serif`、`garden_vlog`、`stats_kpi`、`editorial_pairing`、`sticker_steps`、`red_white_kinetic`、`dynamic_word_shout`、`yellow_sans_hook`、`verdict_meter`、`split_headline_pop`、`magazine_issue` 等纯代码模版，以及 `1.6.3+` 专属的 5 款本地 3 层 ONNX 景深模版 `depth_billboard`、`depth_zen`、`depth_chapter_num`、`depth_neon_glow`、`depth_card_peek`）。竖版版式 `portrait_style`（`auto` / `interview` / `podcast`）只改竖版布局，不代替剪辑风格。`template` / `--template` 只在 `mcp_v2_tools` 打开时接受。不支持或未安装的 id 返回 `invalid_input`。
+内置风格有五个：`editorial`（杂志风）、`street`（街头快剪）、`news`（新闻）、`cinema`（电影）、`classic`（经典）；除此之外，AutoClip 还支持云端热更新目录中的 **29+ 款动态模版**（含 `solo_magenta`、`cinema_letterbox`、`red_list_hook`、`impact_red`、`editorial_serif`、`garden_vlog`、`stats_kpi`、`editorial_pairing`、`sticker_steps`、`red_white_kinetic`、`dynamic_word_shout`、`yellow_sans_hook`、`verdict_meter`、`split_headline_pop`、`magazine_issue` 等纯代码模版，以及 5 款本地 3 层 ONNX 景深模版 `depth_billboard`、`depth_zen`、`depth_chapter_num`、`depth_neon_glow`、`depth_card_peek`）。竖版版式 `portrait_style`（`auto` / `interview` / `podcast`）只改竖版布局，不代替剪辑风格。`template` / `--template` 只在 `mcp_v2_tools` 打开时接受。不支持或未安装的 id 返回 `invalid_input`。
 
 1. 如果工具列表里有 `list_styles`，先调用它获取本机已安装及可用的全部风格 id 和名称给用户选。没有 list_styles 就不要传 template。
 2. 用户选定后，MCP 在 `start_quick_output` 上传 `template`。命令行用 `--template`。开关关闭时不要传；不传则按经典制作。注意：桌面导入页默认是杂志风，但 CLI / MCP 不传时默认经典；用户想要和桌面一样的效果，就显式传 `editorial` 或具体已安装的目录模版 id（如 `solo_magenta`、`depth_billboard`）。

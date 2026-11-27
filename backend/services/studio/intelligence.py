@@ -489,13 +489,12 @@ def sample(video, times, folder, width=640):
         timestamp = min(timestamp, last_seek)
         frame = folder / f'{index}.jpg'
         # VFR, OBS recordings, or sparse keyframes can make fast input seek (-ss before -i)
-        # output an empty frame. Try fast seek first, then accurate seek (-ss after -i),
-        # and retry once earlier near EOF before failing.
-        attempts: list[tuple[float, bool]] = [(timestamp, True), (timestamp, False)]
+        # output an empty frame. Keep recovery bounded to 2 attempts: fast seek first, then
+        # accurate seek (-ss after -i) — stepping back once when near EOF.
         if timestamp >= last_seek - retry_step and timestamp > 0:
-            earlier = max(0, timestamp - retry_step)
-            attempts.append((earlier, True))
-            attempts.append((earlier, False))
+            attempts: list[tuple[float, bool]] = [(timestamp, True), (max(0, timestamp - retry_step), False)]
+        else:
+            attempts = [(timestamp, True), (timestamp, False)]
         for seek, fast_seek in attempts:
             try:
                 frame.unlink(missing_ok=True)
