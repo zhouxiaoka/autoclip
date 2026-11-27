@@ -1,0 +1,48 @@
+id: verdict_meter
+version: 2
+name: {zh: "三段评测打分条", en: "Verdict Meter"}
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.36
+  head_zone: [240, 1140]
+  zoom:
+    mode: creep
+    creep: 0.022
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.05:saturation=1.02"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 170, alt_top: 170}
+    subtitle: {top: 1320, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 46
+  inset_px: 88
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "对标 20 万播放 Battery Health Myth：顶部动态三档评测条（MYTH / NEUTRAL / PROVEN）随口播高亮 + 底部白字黑边字幕", en: "Faithful to 204K-view Battery Health Myth: animated 3-tier verdict meter bar at top + crisp white outlined captions"}
+  tags: [review, verdict, myth, tech, animated]
+  category: knowledge
+  order: 74
+  package_version: "1.0.0"
+  author: AutoClip
+  preview_layout: crop
+qa: {}
