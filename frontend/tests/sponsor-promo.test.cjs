@@ -410,3 +410,41 @@ test('cloud-configurable sponsor badges parse cleanly and reject unsafe strings'
     badges: { apimart: 'https://evil.example' },
   }), null)
 })
+
+test('first_run_choices subsets are validated and preserved separately from settings choices', () => {
+  const applied = promo.applySponsorPromo({
+    choices: ['apimart', 'cometapi', 'novita', 'other'],
+    default: 'apimart',
+    first_run_choices: ['apimart', 'other'],
+    first_run_default: 'apimart',
+    statuses: { apimart: 'healthy', cometapi: 'healthy', novita: 'healthy' },
+    by_locale: {
+      en: {
+        choices: ['apimart', 'cometapi', 'other'],
+        default: 'apimart',
+        first_run_choices: ['apimart', 'other'],
+        first_run_default: 'apimart',
+        register_urls: {},
+      },
+    },
+  })
+  assert.ok(applied)
+  assert.equal(JSON.stringify(applied.choices), JSON.stringify(['apimart', 'cometapi', 'novita', 'other']))
+  assert.equal(JSON.stringify(applied.firstRunChoices), JSON.stringify(['apimart', 'other']))
+  assert.equal(applied.firstRunDefault, 'apimart')
+  assert.equal(JSON.stringify(applied.byLocale.en.firstRunChoices), JSON.stringify(['apimart', 'other']))
+
+  // Reject first_run_choices containing an id outside choices or missing trailing 'other'
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    first_run_choices: ['cometapi', 'other'],
+    first_run_default: 'cometapi',
+  }), null)
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    first_run_choices: ['apimart'],
+    first_run_default: 'apimart',
+  }), null)
+})

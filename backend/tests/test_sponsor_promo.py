@@ -978,6 +978,97 @@ def test_sponsor_cloud_configurable_badges_and_security_validation(tmp_path, pro
         assert bad_client.refresh_sync() == "sponsors"
 
 
+def test_sponsor_first_run_flag_decouples_first_run_modal_from_settings_recommended(tmp_path, profiles):
+    private, public = _keys()
+    payload = _payload(
+        sequence=27,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider(id="cloudgw")],
+        sponsors=[
+            {
+                "id": "apimart",
+                "order": 1,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["zh", "en"],
+            },
+            {
+                "id": "cloudgw",
+                "order": 2,
+                "status": "healthy",
+                "locales": ["zh", "en"],
+                "first_run": True,
+            },
+            {
+                "id": "cometapi",
+                "order": 3,
+                "status": "healthy",
+                "locales": ["en"],
+                "first_run": False,
+                "register_url": "https://www.cometapi.com/?ref=kris",
+            },
+            {
+                "id": "novita",
+                "order": 4,
+                "status": "healthy",
+                "locales": ["en"],
+                "first_run": False,
+                "register_url": "https://novita.ai/?ref=nzvindf",
+            },
+        ],
+    )
+    client = _client(
+        tmp_path / "fr",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, payload),
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert client.refresh_sync() == "ok"
+    en = client.view(locale="en")
+    assert en["choices"] == ["apimart", "cloudgw", "cometapi", "novita", "other"]
+    assert en["default"] == "apimart"
+    assert en["first_run_choices"] == ["apimart", "cloudgw", "other"]
+    assert en["first_run_default"] == "apimart"
+    assert en["by_locale"]["en"]["first_run_choices"] == ["apimart", "cloudgw", "other"]
+    assert en["by_locale"]["zh"]["first_run_choices"] == ["apimart", "cloudgw", "other"]
+    assert en["register_urls"]["cometapi"] == "https://www.cometapi.com/?ref=kris"
+
+    # When the default sponsor itself has first_run=False, first_run_default falls back to the first visible modal choice.
+    fallback_payload = _payload(
+        sequence=28,
+        sponsors=[
+            {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "first_run": False},
+            {"id": "cometapi", "order": 2, "status": "healthy", "first_run": True},
+        ],
+    )
+    fb_client = _client(
+        tmp_path / "fr-fallback",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, fallback_payload),
+    )
+    assert fb_client.refresh_sync() == "ok"
+    fb = fb_client.view(locale="en")
+    assert fb["choices"] == ["apimart", "cometapi", "other"]
+    assert fb["default"] == "apimart"
+    assert fb["first_run_choices"] == ["cometapi", "other"]
+    assert fb["first_run_default"] == "cometapi"
+
+    # Non-boolean first_run must be rejected.
+    bad_payload = _payload(
+        sequence=29,
+        sponsors=[{"id": "apimart", "order": 1, "status": "healthy", "first_run": "no"}],
+    )
+    bad_client = _client(
+        tmp_path / "fr-bad",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, bad_payload),
+    )
+    assert bad_client.refresh_sync() == "sponsors"
+
+
 def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_path, profiles):
     assert sponsor_promo.builtin_sponsor_hosts()["cometapi"] == "www.cometapi.com"
     private, public = _keys()

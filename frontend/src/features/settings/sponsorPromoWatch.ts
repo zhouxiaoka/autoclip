@@ -43,6 +43,8 @@ function publish(next: AppliedSponsorPromo) {
   writePromoSnapshot({
     choices: [...next.choices],
     defaultChoice: next.defaultChoice,
+    ...(next.firstRunChoices ? { firstRunChoices: [...next.firstRunChoices] } : {}),
+    ...(next.firstRunDefault ? { firstRunDefault: next.firstRunDefault } : {}),
     statuses: next.statuses,
     registerUrls: next.registerUrls,
     notices: next.notices,

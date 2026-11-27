@@ -35,7 +35,7 @@ PAYLOAD_KEYS = frozenset({
 PAYLOAD_KEYS_V2 = PAYLOAD_KEYS | frozenset({"providers"})
 SPONSOR_KEYS = frozenset({
     "id", "order", "new_user_default", "status", "notices",
-    "register_url", "register_urls", "locales", "badge",
+    "register_url", "register_urls", "locales", "badge", "first_run",
 })
 DYNAMIC_PROVIDER_KEYS = frozenset({
     "id", "name", "base_url", "register_url", "docs_url",
@@ -468,6 +468,8 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
             return None
         if row.get("new_user_default") not in (None, True, False):
             return None
+        if row.get("first_run") not in (None, True, False):
+            return None
         raw_locales = row.get("locales")
         locales: Optional[list[str]] = None
         all_target_locales: Optional[list[str]] = None
@@ -545,6 +547,8 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
             item["locales"] = locales
         if badge is not None:
             item["badge"] = badge
+        if row.get("first_run") is False:
+            item["first_run"] = False
         cleaned.append(item)
     if len(orders) != len(cleaned):
         return None
@@ -589,11 +593,21 @@ def _locale_slice(visible: list[dict[str, Any]], locale_key: Optional[str]) -> d
         resolved = _resolve_register_url(row, locale_key)
         if resolved:
             register_urls[row["id"]] = resolved
-    return {
+    out: dict[str, Any] = {
         "choices": choices,
         "default": default,
         "register_urls": register_urls,
     }
+    if any(row.get("first_run") is False for row in visible):
+        fr_matched = [row for row in matched if row.get("first_run") is not False]
+        fr_choices = [row["id"] for row in fr_matched] + ["other"]
+        fr_marked = next((row["id"] for row in fr_matched if row.get("new_user_default")), None)
+        fr_default = fr_marked or (fr_choices[0] if fr_choices else "other")
+        if fr_default not in fr_choices:
+            fr_default = "other"
+        out["first_run_choices"] = fr_choices
+        out["first_run_default"] = fr_default
+    return out
 
 
 def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, locale: Optional[str] = None) -> dict:
@@ -614,6 +628,9 @@ def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, lo
         "register_urls": active["register_urls"],
         "sequence": payload.get("sequence"),
     }
+    if "first_run_choices" in active:
+        view["first_run_choices"] = active["first_run_choices"]
+        view["first_run_default"] = active["first_run_default"]
     if dynamic_providers:
         view["providers"] = dynamic_providers
     badges = {row["id"]: row["badge"] for row in rows if "badge" in row}

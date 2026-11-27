@@ -132,13 +132,13 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
       const applied = readSponsorPromo()
       const snap = readPromoSnapshot()
       const resolved = resolvePromoSlice(snap, languageRef.current) || resolvePromoSlice(applied, languageRef.current)
-      const nextChoices = resolved?.choices
+      const nextChoices = resolved?.firstRunChoices || resolved?.choices
       if (!nextChoices) return
       setNotices(snap?.notices || applied?.notices || {})
       const locked = touched.current || frozen.current || stepRef.current !== 'choose'
       setChoices(choicesFor(nextChoices, choiceRef.current, locked))
       if (locked) return
-      const nextDefault = resolved?.defaultChoice || FIRST_RUN_DEFAULT
+      const nextDefault = resolved?.firstRunDefault || resolved?.defaultChoice || FIRST_RUN_DEFAULT
       choiceRef.current = nextDefault
       setChoice(nextDefault)
     }

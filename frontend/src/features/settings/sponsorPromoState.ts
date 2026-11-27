@@ -6,6 +6,8 @@ export interface LocalePromoSlice {
   choices: string[]
   defaultChoice: string
   registerUrls: Record<string, string>
+  firstRunChoices?: string[]
+  firstRunDefault?: string
 }
 
 export interface DynamicProviderSpec {
@@ -27,6 +29,8 @@ export interface DynamicProviderSpec {
 export interface PromoSnapshot {
   choices: string[]
   defaultChoice: string
+  firstRunChoices?: string[]
+  firstRunDefault?: string
   statuses: Record<string, string>
   registerUrls: Record<string, string>
   notices: Record<string, Record<string, string>>
@@ -116,6 +120,8 @@ export function resolvePromoSlice(snap: PromoSnapshot | null, locale?: string | 
     choices: snap.choices,
     defaultChoice: snap.defaultChoice,
     registerUrls: snap.registerUrls,
+    ...(snap.firstRunChoices ? { firstRunChoices: snap.firstRunChoices } : {}),
+    ...(snap.firstRunDefault ? { firstRunDefault: snap.firstRunDefault } : {}),
   }
 }
 

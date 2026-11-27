@@ -28,6 +28,8 @@ const NOTICE_IDS = Object.keys(TRUSTED_REGISTER_HOSTS)
 export interface AppliedSponsorPromo {
   choices: string[]
   defaultChoice: string
+  firstRunChoices?: string[]
+  firstRunDefault?: string
   notices: Record<string, Record<string, string>>
   badges?: Record<string, string | Record<string, string>>
   registerUrls: Record<string, string>
@@ -215,6 +217,8 @@ function parseSlice(
   statuses: Record<string, string>,
   promoChoices: readonly string[],
   dynamicHosts: Record<string, string>,
+  rawFirstRunChoices?: unknown,
+  rawFirstRunDefault?: unknown,
 ): LocalePromoSlice | null {
   if (!Array.isArray(rawChoices) || typeof rawDefault !== 'string') return null
   const choices: string[] = []
@@ -234,7 +238,27 @@ function parseSlice(
     if (hostOf(url) !== packagedHost(id, dynamicHosts) || !url.startsWith('https://')) return null
     registerUrls[id] = url
   }
-  return { choices, defaultChoice, registerUrls }
+  let firstRunChoices: string[] | undefined
+  let firstRunDefault: string | undefined
+  if (rawFirstRunChoices !== undefined) {
+    if (!Array.isArray(rawFirstRunChoices)) return null
+    const parsedFr: string[] = []
+    for (const id of rawFirstRunChoices) {
+      if (typeof id !== 'string' || !choices.includes(id) || parsedFr.includes(id)) return null
+      parsedFr.push(id)
+    }
+    if (parsedFr[parsedFr.length - 1] !== 'other') return null
+    firstRunChoices = parsedFr
+    firstRunDefault = typeof rawFirstRunDefault === 'string' && parsedFr.includes(rawFirstRunDefault)
+      ? rawFirstRunDefault
+      : parsedFr[0]
+  }
+  return {
+    choices,
+    defaultChoice,
+    registerUrls,
+    ...(firstRunChoices ? { firstRunChoices, firstRunDefault } : {}),
+  }
 }
 
 export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
@@ -254,7 +278,16 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     if (!STATUSES.has(String(status))) return null
     statuses[id] = String(status)
   }
-  const top = parseSlice(record.choices, record.default, record.register_urls, statuses, promoChoices, dynamicHosts)
+  const top = parseSlice(
+    record.choices,
+    record.default,
+    record.register_urls,
+    statuses,
+    promoChoices,
+    dynamicHosts,
+    record.first_run_choices,
+    record.first_run_default,
+  )
   if (!top) return null
   let byLocale: Record<string, LocalePromoSlice> | undefined
   if (record.by_locale !== undefined) {
@@ -263,7 +296,16 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     for (const [loc, rawSlice] of Object.entries(record.by_locale as Record<string, unknown>)) {
       if (!LOCALE_CODE_RE.test(loc) || !rawSlice || typeof rawSlice !== 'object' || Array.isArray(rawSlice)) return null
       const entry = rawSlice as Record<string, unknown>
-      const parsed = parseSlice(entry.choices, entry.default, entry.register_urls, statuses, promoChoices, dynamicHosts)
+      const parsed = parseSlice(
+        entry.choices,
+        entry.default,
+        entry.register_urls,
+        statuses,
+        promoChoices,
+        dynamicHosts,
+        entry.first_run_choices,
+        entry.first_run_default,
+      )
       if (!parsed) return null
       if (SUPPORTED_LOCALES.has(loc)) byLocale[loc] = parsed
     }
@@ -297,6 +339,7 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
   return {
     choices: top.choices,
     defaultChoice: top.defaultChoice,
+    ...(top.firstRunChoices ? { firstRunChoices: top.firstRunChoices, firstRunDefault: top.firstRunDefault } : {}),
     notices,
     ...(Object.keys(badges).length ? { badges } : {}),
     registerUrls: top.registerUrls,
