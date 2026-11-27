@@ -110,7 +110,7 @@
       var pw = Math.min(880, Math.round(cw + 56));
       var ph = Math.round(csz * 1.85);
       svg += '<g transform="translate(540,1455) scale(' + psc.toFixed(3) + ')" filter="url(#sh)">'
-        + '<rect x="' + (-pw / 2) + '" y="' + (-ph / 2) + '" width="' + pw + '" height="' + ph + '" rx="' + Math.round(ph / 2) + '" fill="#FFFFFF" fill-opacity="0.22" stroke="#FFFFFF" stroke-opacity="0.48" stroke-width="2"/>'
+        + '<rect x="' + (-pw / 2) + '" y="' + (-ph / 2) + '" width="' + pw + '" height="' + ph + '" rx="' + Math.round(ph / 2) + '" fill="#111318" fill-opacity="0.68" stroke="#FFFFFF" stroke-opacity="0.32" stroke-width="2"/>'
         + '<text x="0" y="' + Math.round(csz * 0.34) + '" text-anchor="middle" font-family="' + SANS + '" font-size="' + csz + '" font-weight="600" fill="#FFFFFF">' + esc(raw) + '</text></g>';
       capD = raw + '@' + Math.round(psc * 40);
     }
