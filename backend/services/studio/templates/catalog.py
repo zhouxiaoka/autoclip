@@ -41,8 +41,11 @@ from backend.services.studio.templates.spec import LocalizedText, NameSpec, is_v
 logger = logging.getLogger(__name__)
 
 DEFAULT_CATALOG_URL = 'https://github.com/zhouxiaoka/autoclip/releases/download/templates-catalog/catalog.json'
+DEFAULT_CATALOG_MIRRORS = (
+    'https://autoclip-config-1311545920.cos.ap-shanghai.myqcloud.com/templates-catalog/catalog.json',
+)
 CATALOG_CACHE_TTL_SEC = 3600
-CATALOG_TIMEOUT_SEC = 5.0
+CATALOG_TIMEOUT_SEC = 12.0
 ARCHIVE_TIMEOUT_SEC = 30.0
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 15 * 1024 * 1024
@@ -126,7 +129,7 @@ def catalog_urls() -> list[str]:
     """Return ordered list of catalog.json URLs (primary + mirrors). Empty when disabled."""
     raw = os.getenv('AUTOCLIP_TEMPLATE_CATALOG_URL')
     if raw is None:
-        primary = [DEFAULT_CATALOG_URL]
+        primary = [DEFAULT_CATALOG_URL, *DEFAULT_CATALOG_MIRRORS]
     else:
         cleaned = raw.strip()
         if not cleaned or cleaned.lower() in {'off', 'none', 'disabled', '0', 'false'}:
@@ -188,12 +191,23 @@ def _write_cached_catalog(manifest: CatalogManifest, *, etag: str = '', user_roo
             raise
 
 
+def _open_with_proxy_fallback(req: urllib.request.Request, *, timeout: float):
+    try:
+        return urllib.request.urlopen(req, timeout=timeout)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        has_proxy = any(os.environ.get(k) for k in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'))
+        if not has_proxy:
+            raise
+        direct_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        return direct_opener.open(req, timeout=timeout)
+
+
 def _http_get(url: str, *, headers: dict[str, str] | None = None, timeout: float = CATALOG_TIMEOUT_SEC, max_bytes: int = MAX_CATALOG_BYTES) -> tuple[int, bytes, dict[str, str]]:
     if not _allowed_url(url):
         raise TemplateCatalogError('模板目录地址不安全，仅支持 HTTPS')
     req = urllib.request.Request(url, headers={'User-Agent': 'AutoClip-TemplateCatalog/1.0', **(headers or {})})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _open_with_proxy_fallback(req, timeout=timeout) as resp:
             chunks: list[bytes] = []
             total = 0
             while True:
