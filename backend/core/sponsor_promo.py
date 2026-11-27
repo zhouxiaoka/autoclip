@@ -35,7 +35,7 @@ PAYLOAD_KEYS = frozenset({
 PAYLOAD_KEYS_V2 = PAYLOAD_KEYS | frozenset({"providers"})
 SPONSOR_KEYS = frozenset({
     "id", "order", "new_user_default", "status", "notices",
-    "register_url", "register_urls", "locales",
+    "register_url", "register_urls", "locales", "badge",
 })
 DYNAMIC_PROVIDER_KEYS = frozenset({
     "id", "name", "base_url", "register_url", "docs_url",
@@ -501,6 +501,17 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
                     return None
                 if locale in LOCALES:
                     localized_urls[locale] = url
+        raw_badge = row.get("badge")
+        badge: Optional[Any] = None
+        if "badge" in row and raw_badge is not None:
+            if raw_badge == "":
+                badge = ""
+            else:
+                parsed_badge = _localized_text(raw_badge, max_len=48, require_en=False)
+                if parsed_badge is None:
+                    return None
+                if parsed_badge:
+                    badge = parsed_badge
         if row.get("new_user_default") is True:
             if sponsor_id not in hosts:
                 return None
@@ -532,6 +543,8 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
             item["register_urls"] = localized_urls
         if locales is not None:
             item["locales"] = locales
+        if badge is not None:
+            item["badge"] = badge
         cleaned.append(item)
     if len(orders) != len(cleaned):
         return None
@@ -603,6 +616,9 @@ def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, lo
     }
     if dynamic_providers:
         view["providers"] = dynamic_providers
+    badges = {row["id"]: row["badge"] for row in rows if "badge" in row}
+    if badges:
+        view["badges"] = badges
     if any(row.get("locales") is not None or row.get("register_urls") for row in rows):
         view["by_locale"] = {
             loc: _locale_slice(visible, loc)

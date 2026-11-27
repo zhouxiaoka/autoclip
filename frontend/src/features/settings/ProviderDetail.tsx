@@ -20,7 +20,7 @@ import {
 import { providerIcon } from './providerIcons'
 import ProviderQualityMarks from './providerQualityMarks'
 import { enabledModelIds } from './modelVisibility'
-import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionRegisterUrl } from './sponsorPromoState'
+import { NEUTRAL_PROVIDER_COPY, promotionAllowsUpsell, promotionBadge, promotionRegisterUrl } from './sponsorPromoState'
 import { rechargeTarget } from '../studio/failureAction'
 
 const CAP_KEY: Record<string, string> = {
@@ -91,6 +91,7 @@ export default function ProviderDetail({
   const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
   const packagedRegister = preset.sponsor?.register_url || ''
   const showPromo = promotionAllowsUpsell(preset.id) && (!!preset.sponsor || !!promotionRegisterUrl(preset.id, packagedRegister))
+  const customBadge = promotionBadge(preset.id)
 
   // Visibility only: no revalidation, no list reset. Only enabled IDs reach the default-model pickers.
   const enabledSet = persisted && list ? enabledModelIds(settings, persisted, list.models) : new Set<string>()
@@ -145,14 +146,18 @@ export default function ProviderDetail({
             </span>
           )}
           {name}
-          {showPromo && (!preset.dynamic || Boolean(preset.sponsor?.offer)) && (
-            <span className="ac-badge" data-promo="sponsor">
-              {preset.dynamic
-                ? preset.sponsor!.offer
-                : (preset.sponsor?.offer
-                  ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor.offer) })
-                  : t('settings.providers.badge.sponsor'))}
-            </span>
+          {showPromo && (
+            customBadge !== undefined
+              ? (customBadge ? <span className="ac-badge" data-promo="sponsor">{customBadge}</span> : null)
+              : ((!preset.dynamic || Boolean(preset.sponsor?.offer)) && (
+                <span className="ac-badge" data-promo="sponsor">
+                  {preset.dynamic
+                    ? preset.sponsor!.offer
+                    : (preset.sponsor?.offer
+                      ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor.offer) })
+                      : t('settings.providers.badge.sponsor'))}
+                </span>
+              ))
           )}
           {connected && <StatusDot tone="ok" label={preset.auth === 'none' ? t('settings.providers.available') : t('settings.providers.connected')} />}
           {!connected && isCatalogConfigured(settings, preset, persisted) && <span className="ac-badge">{t('已配置')}</span>}

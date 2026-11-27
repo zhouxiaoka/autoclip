@@ -832,6 +832,61 @@ test('dynamic providers omit the generic sponsor badge and show only clean offer
     })
     assert.doesNotMatch(textOf(aimlDetail), /settings\.providers\.badge\.sponsor/)
     assert.match(textOf(aimlDetail), /300\+ models with one key/)
+
+    // Cloud-configurable badges override default badges on both built-in and dynamic providers
+    promoState.writePromoSnapshot({
+      source: 'cache',
+      choices: ['apimart', 'cometapi', 'shengsuanyun', 'aimlapi', 'other'],
+      defaultChoice: 'apimart',
+      statuses: { apimart: 'healthy', cometapi: 'healthy', shengsuanyun: 'healthy', aimlapi: 'healthy' },
+      notices: {},
+      badges: {
+        apimart: '',
+        cometapi: { en: 'Sponsor', zh: '赞助' },
+        shengsuanyun: { en: 'Free ¥5 credit', zh: '注册送 5 元额度' },
+        aimlapi: { en: 'Partner', zh: '合作通道' },
+      },
+      registerUrls: {
+        apimart: 'https://go.apimart.ai/tw-autoclip',
+        cometapi: 'https://www.cometapi.com/?ref=kris',
+        shengsuanyun: 'https://www.shengsuanyun.com/?from=AutoClip',
+        aimlapi: 'https://aimlapi.com/?ref=kris',
+      },
+      providers: [
+        {
+          id: 'shengsuanyun',
+          name: { en: 'SSY Cloud', zh: '胜算云' },
+          baseUrl: 'https://router.shengsuanyun.com/api/v1',
+          registerUrl: 'https://www.shengsuanyun.com/?from=AutoClip',
+          docsUrl: 'https://console.shengsuanyun.com/user/overview',
+          placeholder: 'sk-…',
+          capabilities: ['language', 'image'],
+          group: 'recommended',
+        },
+        {
+          id: 'aimlapi',
+          name: { en: 'AI/ML API', zh: 'AI/ML API' },
+          baseUrl: 'https://api.aimlapi.com/v1',
+          registerUrl: 'https://aimlapi.com/?ref=kris',
+          docsUrl: 'https://docs.aimlapi.com/',
+          placeholder: 'API key',
+          capabilities: ['language', 'image'],
+          group: 'recommended',
+        },
+      ],
+    })
+    const overrideNodes = flatten(Catalog({
+      settings, query: '', filter: 'all', moreOpen: false, selectedId: null,
+      onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+    }))
+    const apimartHidden = overrideNodes.find(node => node.props?.['data-provider-id'] === 'apimart')
+    const cometSponsor = overrideNodes.find(node => node.props?.['data-provider-id'] === 'cometapi')
+    const ssyCustom = overrideNodes.find(node => node.props?.['data-provider-id'] === 'shengsuanyun')
+    const aimlCustom = overrideNodes.find(node => node.props?.['data-provider-id'] === 'aimlapi')
+    assert.doesNotMatch(textOf(apimartHidden), /推荐/)
+    assert.match(textOf(cometSponsor), /Sponsor/)
+    assert.match(textOf(ssyCustom), /Free ¥5 credit/)
+    assert.match(textOf(aimlCustom), /Partner/)
   } finally {
     promoState.setPromoLocale(null)
     promoState.writePromoSnapshot(null)

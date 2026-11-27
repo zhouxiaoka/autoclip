@@ -921,6 +921,63 @@ def test_forward_compatible_future_iso_locales_and_dynamic_provider_locales(tmp_
         assert bad_client.refresh_sync() == "providers"
 
 
+def test_sponsor_cloud_configurable_badges_and_security_validation(tmp_path, profiles):
+    private, public = _keys()
+    payload = _payload(
+        sequence=25,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider(id="cloudgw")],
+        sponsors=[
+            {
+                "id": "apimart",
+                "order": 1,
+                "status": "healthy",
+                "new_user_default": True,
+                "badge": "",
+            },
+            {
+                "id": "cometapi",
+                "order": 2,
+                "status": "healthy",
+                "badge": {"zh": "赞助", "en": "Sponsor", "sv": "Sponsor SV"},
+            },
+            {
+                "id": "cloudgw",
+                "order": 3,
+                "status": "healthy",
+                "badge": "¥5 free credit",
+            },
+        ],
+    )
+    client = _client(
+        tmp_path / "badges",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, payload),
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert client.refresh_sync() == "ok"
+    view = client.view(locale="en")
+    assert view["badges"] == {
+        "apimart": "",
+        "cometapi": {"zh": "赞助", "en": "Sponsor"},
+        "cloudgw": {"en": "¥5 free credit"},
+    }
+
+    for bad_badge in ("<script>x</script>", "https://evil.example", {}, {"../zh": "x"}, "x" * 60):
+        bad_payload = _payload(
+            sequence=26,
+            sponsors=[{"id": "apimart", "order": 1, "status": "healthy", "badge": bad_badge}],
+        )
+        bad_client = _client(
+            tmp_path / f"bad-badge-{abs(hash(str(bad_badge)))}",
+            private,
+            public,
+            lambda url, timeout, max_bytes, p=bad_payload: _envelope(private, p),
+        )
+        assert bad_client.refresh_sync() == "sponsors"
+
+
 def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_path, profiles):
     assert sponsor_promo.builtin_sponsor_hosts()["cometapi"] == "www.cometapi.com"
     private, public = _keys()

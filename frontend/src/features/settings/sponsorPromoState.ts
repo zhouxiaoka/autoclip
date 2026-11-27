@@ -30,6 +30,7 @@ export interface PromoSnapshot {
   statuses: Record<string, string>
   registerUrls: Record<string, string>
   notices: Record<string, Record<string, string>>
+  badges?: Record<string, string | Record<string, string>>
   byLocale?: Record<string, LocalePromoSlice>
   providers?: DynamicProviderSpec[]
   sequence?: number
@@ -177,6 +178,21 @@ export function promotionRecommends(id: string, locale?: string | null): boolean
   const slice = resolvePromoSlice(current, locale)
   if (!slice) return id === 'apimart'
   return id === slice.defaultChoice
+}
+
+/**
+ * Cloud-configured badge override for a promoted provider.
+ * - undefined: no override (use default client badge behavior)
+ * - null: explicitly hidden via cloud badge=""
+ * - non-empty string: localized badge text from cloud config
+ */
+export function promotionBadge(id: string, locale?: string | null): string | null | undefined {
+  if (!promotionCurrentlyPromoted(id, locale)) return undefined
+  const raw = current?.badges?.[id]
+  if (raw === undefined) return undefined
+  if (raw === '') return null
+  const text = localizedDynamicText(raw, locale)
+  return text || undefined
 }
 
 /**

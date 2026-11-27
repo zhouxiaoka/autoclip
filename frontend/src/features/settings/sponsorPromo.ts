@@ -29,6 +29,7 @@ export interface AppliedSponsorPromo {
   choices: string[]
   defaultChoice: string
   notices: Record<string, Record<string, string>>
+  badges?: Record<string, string | Record<string, string>>
   registerUrls: Record<string, string>
   statuses: Record<string, string>
   byLocale?: Record<string, LocalePromoSlice>
@@ -279,10 +280,25 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     }
     if (Object.keys(texts).length) notices[id] = texts
   }
+  const badges: Record<string, string | Record<string, string>> = {}
+  if (record.badges !== undefined) {
+    if (!record.badges || typeof record.badges !== 'object' || Array.isArray(record.badges)) return null
+    for (const [id, rawBadge] of Object.entries(record.badges as Record<string, unknown>)) {
+      if (!allowedIds.includes(id)) continue
+      if (rawBadge === '') {
+        badges[id] = ''
+        continue
+      }
+      const parsed = parseLocalizedMap(rawBadge, 48, false)
+      if (parsed === null) return null
+      if (Object.keys(parsed).length) badges[id] = parsed
+    }
+  }
   return {
     choices: top.choices,
     defaultChoice: top.defaultChoice,
     notices,
+    ...(Object.keys(badges).length ? { badges } : {}),
     registerUrls: top.registerUrls,
     statuses,
     ...(byLocale ? { byLocale } : {}),

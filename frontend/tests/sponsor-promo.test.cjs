@@ -382,3 +382,31 @@ test('v2 dynamic providers hot-update through sponsorPromoWatch (create, update,
   assert.equal(catalogView.isUnmatchedCompatible(saved.connection), true)
   unsub()
 })
+
+test('cloud-configurable sponsor badges parse cleanly and reject unsafe strings', () => {
+  const applied = promo.applySponsorPromo({
+    choices: ['apimart', 'cometapi', 'other'],
+    default: 'apimart',
+    statuses: { apimart: 'healthy', cometapi: 'healthy' },
+    badges: {
+      apimart: '',
+      cometapi: { zh: '赞助', en: 'Sponsor', sv: 'Sponsor SV' },
+    },
+  })
+  assert.ok(applied)
+  assert.equal(applied.badges.apimart, '')
+  assert.equal(applied.badges.cometapi.zh, '赞助')
+  assert.equal(applied.badges.cometapi.en, 'Sponsor')
+  assert.equal(applied.badges.cometapi.sv, undefined)
+
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    badges: { apimart: '<script>bad</script>' },
+  }), null)
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    badges: { apimart: 'https://evil.example' },
+  }), null)
+})
