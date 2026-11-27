@@ -1,7 +1,7 @@
 @font-face {
-  font-family: 'ACSpace';
-  src: url('./fonts/SpaceGrotesk.ttf') format('truetype');
-  font-weight: 400 700;
+  font-family: 'ACBarlowLight';
+  src: url('./fonts/BarlowCondensed-Light.ttf') format('truetype');
+  font-weight: 300;
   font-style: normal;
   font-display: block;
 }

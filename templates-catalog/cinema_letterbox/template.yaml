@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "对标 63 万播放 Chase Your Dreams：纯黑影院上下遮幅 + 极简浅灰无衬线柔焦逐词浮现，绝不遮脸", en: "Faithful to 631K-view Chase Your Dreams: pure black cinema letterbox with ultra-clean silver-white fade-in text"}
+  desc: {zh: "对标 63 万播放 Chase Your Dreams：纯黑影院上下遮幅 + 细长无衬线轻字重逐词诗意浮现，绝不遮脸", en: "Faithful to 631K-view Chase Your Dreams: pure black cinema letterbox with ultra-light condensed word-by-word reveal"}
   tags: [cinema, minimal, letterbox, aesthetic, animated]
   category: general
   order: 61
-  package_version: "1.0.0"
+  package_version: "1.1.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

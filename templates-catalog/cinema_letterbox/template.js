@@ -79,56 +79,56 @@
   }
   window.setData = function (fill) { state = fill || {}; };
 
+  var CINEMA = "'ACBarlowLight', 'Helvetica Neue', Arial, sans-serif";
   window.renderFrame = function (tSeconds) {
     var t = Number(tSeconds) || 0;
     var lang = state.audience_language || 'en';
     var moment = window.ACTemplate ? window.ACTemplate.momentAt(state, t) : null;
     var raw = cueText(moment, lang);
-    var kicker = (state.kicker || '').trim();
 
     var mStart = (moment && moment.start) || 0;
+    var mEnd = (moment && moment.end) || (mStart + 2.0);
+    var mDur = Math.max(0.4, mEnd - mStart);
     var mAge = Math.max(0, t - mStart);
-    var p = easeOutQuint(mAge / 0.34);
-    var blurVal = Math.max(0, (1 - p) * 6.5);
-
-    var svg = '<defs>'
-      + '<filter id="bl" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceGraphic" stdDeviation="' + blurVal.toFixed(2) + '"/></filter>'
-      + '</defs>';
 
     // Pure black cinema letterbox bars (top 0..420, bottom 1500..1920) — zero face occlusion ever!
-    svg += '<rect x="0" y="0" width="1080" height="420" fill="#050507"/>'
-      + '<rect x="0" y="1500" width="1080" height="420" fill="#050507"/>';
-
-    if (kicker) {
-      svg += '<text x="86" y="372" font-family="' + SANS + '" font-size="22" font-weight="500" letter-spacing="4" fill="#71717A">' + esc(kicker.toUpperCase()) + '</text>';
-    }
+    var svg = '<rect x="0" y="0" width="1080" height="420" fill="#040406"/>'
+      + '<rect x="0" y="1500" width="1080" height="420" fill="#040406"/>';
 
     var capD = '';
     if (raw) {
       var words = raw.split(/\s+/).filter(Boolean);
-      var focalIdx = pickFocalIndex(words);
-      var lines = wrapLines(raw, 880, 48, 500, SANS, 2);
-      var y0 = 1625;
-      svg += '<g transform="translate(0,' + ((1 - p) * 16).toFixed(1) + ')" opacity="' + (0.94 * p).toFixed(2) + '" filter="url(#bl)">';
+      var fsz = 76;
+      // Tight poetic editorial stack (2-3 words per line, matching #15 "Doubt / is loud.")
+      var lines = wrapLines(raw, 640, fsz, 300, CINEMA, 2);
+      var y0 = lines.length === 1 ? 1652 : 1612;
+      // Progressive word-by-word reveal timed across 72% of cue duration
+      var step = Math.min(0.26, (mDur * 0.72) / Math.max(1, words.length));
+      var wIdx = 0;
+      var visSig = [];
       for (var i = 0; i < lines.length; i++) {
         var lnWords = lines[i].split(/\s+/);
-        var xCur = 86;
-        var yLine = y0 + i * 68;
+        var xCur = 92;
+        var yLine = y0 + i * 82;
         for (var j = 0; j < lnWords.length; j++) {
           var w = lnWords[j];
-          var isFocal = w.toLowerCase() === (words[focalIdx] || '').toLowerCase();
-          var fill = isFocal ? '#FFFFFF' : '#A1A1AA';
-          var wt = isFocal ? 700 : 400;
-          svg += '<text x="' + xCur + '" y="' + yLine + '" font-family="' + SANS + '" font-size="48" font-weight="' + wt + '" fill="' + fill + '">' + esc(w) + '</text>';
-          xCur += Math.round(measureW(w + ' ', 48, wt, SANS));
+          var wAge = mAge - wIdx * step;
+          if (wAge > 0) {
+            var wp = easeOutQuint(wAge / 0.24);
+            var dy = (1 - wp) * 7;
+            var op = (0.96 * wp).toFixed(2);
+            svg += '<text x="' + xCur + '" y="' + (yLine + dy).toFixed(1) + '" font-family="' + CINEMA + '" font-size="' + fsz + '" font-weight="300" letter-spacing="0.5" fill="#F4F4F5" opacity="' + op + '">' + esc(w) + '</text>';
+            visSig.push(wIdx + ':' + Math.round(wp * 10));
+          }
+          xCur += Math.round(measureW(w + ' ', fsz, 300, CINEMA));
+          wIdx++;
         }
       }
-      svg += '</g>';
-      capD = raw + '@' + Math.round(p * 20);
+      capD = raw + '@' + visSig.join(',');
     }
 
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
     return capD || 'IDLE';
   };
-  window.occupiedRects = function () { return [{ slot: 'caption', x: 86, y: 1550, w: 900, h: 160 }]; };
+  window.occupiedRects = function () { return [{ slot: 'caption', x: 92, y: 1545, w: 720, h: 190 }]; };
 })();
