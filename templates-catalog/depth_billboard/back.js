@@ -57,30 +57,45 @@
 
   window.renderFrame = function (tSeconds) {
     var t = Number(tSeconds) || 0;
-    var lines = (state.title_lines || []).filter(Boolean);
-    var hero = (lines[0] || 'FOCUS').toUpperCase();
-    var sub = (lines[1] || '').toUpperCase();
-    var p = spring(t, 0.42);
-    var sc = 0.88 + 0.12 * p;
-    var dy = (1 - easeOutQuint(t / 0.40)) * 45;
+    var lang = state.audience_language || 'en';
+    var moment = window.ACTemplate ? window.ACTemplate.momentAt(state, t) : null;
+    var raw = cueText(moment, lang);
+    if (!raw) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'BACK_IDLE';
+    }
+    var mStart = (moment && (moment.t0 != null ? moment.t0 : moment.start)) || 0;
+    var mEnd = (moment && (moment.t1 != null ? moment.t1 : moment.end)) || (mStart + 2.4);
+    var mAge = Math.max(0, t - mStart);
+    var mRem = Math.max(0, mEnd - t);
+
+    // Dynamic appear -> hold -> disappear rhythm! (never stays frozen on screen)
+    var inP = spring(mAge, 0.30);
+    var outP = mRem < 0.26 ? easeOutCubic(mRem / 0.26) : 1.0;
+    var visOp = Math.min(easeOutCubic(mAge / 0.16), outP);
+    if (visOp <= 0.02) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'BACK_GAP';
+    }
+
+    var words = raw.split(/\s+/).filter(Boolean);
+    var fIdx = pickFocalIndex(words);
+    var hero = (words[fIdx] || words[0] || 'FOCUS').replace(/[^A-Za-z0-9\-']/g, '').toUpperCase() || 'FOCUS';
+    var mIdx = momentIndex(t);
+    // Alternate crisp white & vivid crimson accent across beats, single monumental word behind crown!
+    var fill = (mIdx % 2 === 0) ? '#F8FAFC' : '#EF4444';
+    var sc = (0.86 + 0.14 * inP) * (0.94 + 0.06 * outP);
+    var dy = (1 - easeOutQuint(mAge / 0.30)) * 55 + (1 - outP) * 32;
 
     var sz = 250;
     var w = measureW(hero, sz, 400, POSTER);
-    if (w > 980) sz = Math.max(140, Math.floor((sz * 980) / w));
+    if (w > 980) sz = Math.max(128, Math.floor((sz * 980) / w));
 
     var svg = '<defs><filter id="bsh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.45"/></filter></defs>';
-    // Crown-level depth band (y=520): top 75% of hero stays crystal-clear above head while hair cuts the baseline!
-    svg += '<g transform="translate(540,' + (520 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + easeOutCubic(t / 0.25).toFixed(2) + '" filter="url(#bsh)">'
-      + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + sz + '" letter-spacing="4" fill="#F8FAFC" fill-opacity="0.96">' + esc(hero) + '</text>';
-    if (sub) {
-      var ssz = 165;
-      var sw = measureW(sub, ssz, 400, POSTER);
-      if (sw > 980) ssz = Math.max(100, Math.floor((ssz * 980) / sw));
-      svg += '<text x="0" y="' + Math.round(sz * 0.72) + '" text-anchor="middle" font-family="' + POSTER + '" font-size="' + ssz + '" letter-spacing="4" fill="#EF4444" fill-opacity="0.96">' + esc(sub) + '</text>';
-    }
-    svg += '</g>';
+    svg += '<g transform="translate(540,' + (515 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + (0.96 * visOp).toFixed(2) + '" filter="url(#bsh)">'
+      + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + sz + '" letter-spacing="4" fill="' + fill + '">' + esc(hero) + '</text></g>';
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
-    return 'BACK:' + hero + ':' + Math.round(sc * 40);
+    return 'BACK:' + mIdx + ':' + hero + ':' + Math.round(visOp * 30) + ':' + Math.round(dy);
   };
-  window.occupiedRects = function () { return [{ slot: 'hook', x: 30, y: 320, w: 1020, h: 480 }]; };
+  window.occupiedRects = function () { return [{ slot: 'hook', x: 30, y: 310, w: 1020, h: 280 }]; };
 })();

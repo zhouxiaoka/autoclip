@@ -57,17 +57,36 @@
 
   window.renderFrame = function (tSeconds) {
     var t = Number(tSeconds) || 0;
-    var lines = (state.title_lines || []).filter(Boolean);
-    var lead = (lines[0] || 'PATIENCE').toUpperCase();
-    var p = easeOutQuint(t / 0.48);
+    var lang = state.audience_language || 'en';
+    var moment = window.ACTemplate ? window.ACTemplate.momentAt(state, t) : null;
+    var raw = cueText(moment, lang);
+    if (!raw) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'ZEN_B_IDLE';
+    }
+    var mStart = (moment && (moment.t0 != null ? moment.t0 : moment.start)) || 0;
+    var mEnd = (moment && (moment.t1 != null ? moment.t1 : moment.end)) || (mStart + 2.4);
+    var mAge = Math.max(0, t - mStart);
+    var mRem = Math.max(0, mEnd - t);
+    var inP = easeOutQuint(mAge / 0.36);
+    var outP = mRem < 0.28 ? easeOutCubic(mRem / 0.28) : 1.0;
+    var op = Math.min(inP, outP);
+    if (op <= 0.02) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'ZEN_B_GAP';
+    }
+
+    var words = raw.split(/\s+/).filter(Boolean);
+    var fIdx = pickFocalIndex(words);
+    var hero = (words[fIdx] || words[0] || 'PATIENCE').replace(/[^A-Za-z0-9\-']/g, '').toUpperCase();
     var sz = 195;
-    var w = measureW(lead, sz, 400, SERIF);
-    if (w > 960) sz = Math.max(115, Math.floor((sz * 960) / w));
-    // Crown-level depth band (y=525) so top 80% of PATIENCE stays crisp while hair/head overlaps the lower 20%!
-    var svg = '<g transform="translate(540,' + (525 + (1 - p) * 24).toFixed(1) + ')" opacity="' + (0.94 * p).toFixed(2) + '">'
-      + '<text x="0" y="0" text-anchor="middle" font-family="' + SERIF + '" font-size="' + sz + '" font-weight="400" letter-spacing="2" fill="#F5F0E6">' + esc(lead) + '</text></g>';
+    var w = measureW(hero, sz, 400, SERIF);
+    if (w > 960) sz = Math.max(110, Math.floor((sz * 960) / w));
+    var dy = (1 - inP) * 28 - (1 - outP) * 18;
+    var svg = '<g transform="translate(540,' + (520 + dy).toFixed(1) + ')" opacity="' + (0.94 * op).toFixed(2) + '">'
+      + '<text x="0" y="0" text-anchor="middle" font-family="' + SERIF + '" font-size="' + sz + '" font-weight="400" letter-spacing="2" fill="#F5F0E6">' + esc(hero) + '</text></g>';
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
-    return 'ZEN_B:' + lead + ':' + Math.round(p * 25);
+    return 'ZEN_B:' + hero + ':' + Math.round(op * 25) + ':' + Math.round(dy);
   };
   window.occupiedRects = function () { return [{ slot: 'hook', x: 50, y: 340, w: 980, h: 240 }]; };
 })();
