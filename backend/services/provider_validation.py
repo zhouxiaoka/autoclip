@@ -810,21 +810,25 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
     native = gemini_transport.is_official_gemini(provider, base)
     if native:
         url, headers, payload = gemini_transport.request(base, api_key, payload)
+    from backend.core.provider_model_fetch import _should_retry_direct_without_proxy
     started = time.monotonic()
-    try:
-        with httpx.Client(timeout=TRIAL_TIMEOUT, trust_env=not is_local_url(base)) as client:
-            response = client.post(url, json=payload, headers=headers)
-            if response.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(response.text or ''):
+    use_env_proxy = not is_local_url(base)
+
+    def _run_trial_http(trust_env: bool):
+        nonlocal payload
+        with httpx.Client(timeout=TRIAL_TIMEOUT, trust_env=trust_env) as client:
+            resp = client.post(url, json=payload, headers=headers)
+            if resp.status_code == 400 and 'max_tokens' in payload and asks_for_max_completion_tokens(resp.text or ''):
                 payload = to_max_completion_tokens(payload)
-                response = client.post(url, json=payload, headers=headers)
-            if response.status_code == 400 and 'response_format' in payload and _response_format_400(response.text or ''):
+                resp = client.post(url, json=payload, headers=headers)
+            if resp.status_code == 400 and 'response_format' in payload and _response_format_400(resp.text or ''):
                 payload.pop('response_format', None)
-                response = client.post(url, json=payload, headers=headers)
+                resp = client.post(url, json=payload, headers=headers)
             # Thinking/reasoning models (e.g. Qwen 3.5, Gemma 4, Kimi K3) can spend TRIAL_MAX_TOKENS
             # inside reasoning_content before emitting JSON; retry once with a larger token cap.
-            if response.status_code == 200 and not native:
+            if resp.status_code == 200 and not native:
                 try:
-                    first_parsed = response.json()
+                    first_parsed = resp.json()
                 except Exception:  # noqa: BLE001
                     first_parsed = None
                 if (
@@ -836,7 +840,20 @@ def _trial_once(base: str, api_key: str, model: str, full_input: str, provider: 
                     if int(payload.get(token_key) or 0) < TRIAL_REASONING_MAX_TOKENS:
                         retry_payload = dict(payload)
                         retry_payload[token_key] = TRIAL_REASONING_MAX_TOKENS
-                        response = client.post(url, json=retry_payload, headers=headers)
+                        resp = client.post(url, json=retry_payload, headers=headers)
+            return resp
+
+    try:
+        try:
+            response = _run_trial_http(use_env_proxy)
+        except httpx.RequestError as first_exc:
+            if _should_retry_direct_without_proxy(first_exc, use_env_proxy):
+                try:
+                    response = _run_trial_http(False)
+                except httpx.RequestError:
+                    raise first_exc
+            else:
+                raise
     except httpx.TimeoutException:
         return {'ms': int((time.monotonic() - started) * 1000), 'ok_http': False,
                 'rate_limited': False, 'context_error': False, 'json_ok': False,
