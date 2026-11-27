@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "stage": "internal",
+  "version": "1.6.2",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "build_run_id": 45786549439,
+  "assets": {
+    "AutoClip Desktop_1.6.2_aarch64.dmg": "4251c55e787a81e69a2c195c1845ec3f868974784ecb0a7277065e815b9cf81b",
+    "AutoClip Desktop_1.6.2_x64-setup.exe": "9b0dac22c7d5e38e62c5f778d25b0ae1e1a43ac972d083b13f23ef2b29a257b3",
+    "AutoClip Desktop_1.6.2_x64-setup.exe.sig": "8d765c5c191b03c72b98b36d7293d5b49d2a2f4a2467d450fe5f2961fd0d2164",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz": "53258dedc5a768ca93fbb7906800c7e73c25a802d379cb2b9c7da2288d9dff7e",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz.sig": "20e7008c0c355a1e7ac99f303163312aebb1178359f7e6d010fba2900121db2e"
+  }
+}

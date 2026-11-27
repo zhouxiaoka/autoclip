@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "build_run_id": 45786549439,
+  "assets": {
+    "AutoClip Desktop_1.6.2_aarch64.dmg": "4251c55e787a81e69a2c195c1845ec3f868974784ecb0a7277065e815b9cf81b",
+    "AutoClip Desktop_1.6.2_x64-setup.exe": "9b0dac22c7d5e38e62c5f778d25b0ae1e1a43ac972d083b13f23ef2b29a257b3",
+    "AutoClip Desktop_1.6.2_x64-setup.exe.sig": "8d765c5c191b03c72b98b36d7293d5b49d2a2f4a2467d450fe5f2961fd0d2164",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz": "53258dedc5a768ca93fbb7906800c7e73c25a802d379cb2b9c7da2288d9dff7e",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz.sig": "20e7008c0c355a1e7ac99f303163312aebb1178359f7e6d010fba2900121db2e"
+  },
+  "platforms": [
+    "windows-x64",
+    "macos-arm64"
+  ],
+  "label": "regression v162-long-video-window-and-multimodal-visual-pipeline",
+  "completed_at": "2026-11-26T13:20:23Z",
+  "assertions": [
+    "regression-v162-long-video-window-and-multimodal-visual-pipeline:passed"
+  ],
+  "build": {
+    "path": "evidence/origin-build-45786549439.json",
+    "sha256": "b68ae746c36f3ff285b17ffe148d7192f2e422e03ef572a2bafc0bee856dbd85"
+  },
+  "provenance": {
+    "path": "evidence/origin-provenance-45786549439.json",
+    "sha256": "61c4902af88059e2f4dfae26aca5ecf0acb779b692cdd61685b519be4f60c7ed"
+  },
+  "evidence": {
+    "path": "evidence/regressions-1.6.2.json",
+    "sha256": "5aaaecf8e937377d0c886d76bb21c4651256ef8b7b9ae3e3d09b3a185e3fafdc"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "from_commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "to_commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "summary": "Tag v1.6.2 was created directly on verified candidate commit a966f9e8b26669399c91fd6bc7815364a40582b2 with zero source diff from Internal Acceptance run 45830910140 (Desktop Build run 45786549439)."
+}

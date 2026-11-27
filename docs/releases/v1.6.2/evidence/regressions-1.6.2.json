@@ -1,0 +1,43 @@
+{
+  "version": "1.6.2",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "build_run_id": 45786549439,
+  "regressions": {
+    "v162-china-cos-promo-fallback-and-v2-signed-config": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-26T11:35:00Z",
+        "summary": "Verified signed v2 dynamic provider live sequence=1 hot-add -> sequence=2 hot-withdrawal, min_app version isolation (1.6.1 unaffected), and automatic fallback to China-accessible Shanghai COS mirror when workers.dev is blocked."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-26T11:40:00Z",
+        "summary": "Verified live on China-mainland Windows VM without proxy: primary workers.dev timed out -> sponsor_promo_client fell back to Shanghai COS mirror in 0.098s (HTTP 200) -> Ed25519 signature verified -> source=cache, sequence=2."
+      }
+    },
+    "v162-p0-p2-sentry-posthog-and-recovery-fixes": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-26T12:15:00Z",
+        "summary": "Verified bounded 4-attempt HTTP 500 failure recovery exiting running state with source preserved, AI cover opt-out isolation (allow_model=False attempts=0), silent video source_no_audio guard when vision disabled, and 0 Sentry issues on autoclip-frontend@1.6.2."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-26T12:25:00Z",
+        "summary": "Verified bounded 4-attempt HTTP 500 failure recovery, HomePage B1 service_restarted recovery cards and retry CTA, Settings/App UI without ModelSettingsLeaveGuard crash, AI cover opt-out isolation (attempts=0), and #627 keep-awake pill lifecycle."
+      }
+    },
+    "v162-long-video-window-and-multimodal-visual-pipeline": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-26T13:07:40Z",
+        "summary": "Verified real 1-hour Bilibili URL with 60s source window (69s total, 32.49s MP4, 0 decode errors) and real multimodal visual_generation on silent 45s video using qwen4-max (83s total, 12.23s 1080x1920 MP4, 0 decode errors, frame visually verified)."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-26T13:20:23Z",
+        "summary": "Verified real multimodal visual_generation on silent 45s video using qwen4-max on installed Windows 1.6.2 bundle (142.6s total, 10.30s 1080x1920 H.264 MP4, 0 decode errors, frame visually verified) alongside full spoken MP4 ASR/render and live desktop playback."
+      }
+    }
+  }
+}

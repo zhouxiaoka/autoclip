@@ -1,0 +1,84 @@
+{
+  "version": "1.6.2",
+  "platform": "windows-x64",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "build_run_id": 45786549439,
+  "package": {
+    "name": "AutoClip Desktop_1.6.2_x64-setup.exe",
+    "sha256": "9b0dac22c7d5e38e62c5f778d25b0ae1e1a43ac972d083b13f23ef2b29a257b3",
+    "bytes": 208499946
+  },
+  "installed_binary_sha256": "3c3750dc114f18e67e823484c5e8a6f7503cb6315f3812fa5b1f0803c2c0e324",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:30:00Z",
+      "summary": "Verified installer EXE SHA-256 match (208,499,946 bytes) and executed silent NSIS install in interactive Session 2 (INSTALL_TASK_RESULT=0, BINARY_CHANGED=True, bundled portable Python 3.13.13 + FFmpeg/FFprobe 9.0.2)."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:32:00Z",
+      "summary": "Backed up existing AppData before in-place upgrade; confirmed existing projects, DashScope qwen4-max + ASR configuration, and allow_send_frame=false survived upgrade cleanly."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:40:00Z",
+      "summary": "Real China-mainland network without proxy: primary workers.dev timed out -> sponsor_promo_client automatically fell back to Shanghai COS mirror (0.098s HTTP 200) -> Ed25519 signature verified -> source=cache, sequence=2. Live Session-2 UIA verified Settings and App version v1.6.2 windows/x86_64 with zero error boundary."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:55:00Z",
+      "summary": "Real local MP4 + SRT completed via installed 1.6.2 Windows desktop app; rendered 36.19s MP4 (8,936,022 bytes, sha256=1cfcd9a8..., full decode 0 errors)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-26T12:05:00Z",
+      "summary": "Real 45s spoken MP4 without SRT completed in 79s via installed 1.6.2 Windows desktop app; rendered 46.89s MP4 (11,687,403 bytes, sha256=aaa1fc41..., full decode 0 errors); start/mid/end frames visually verified; AI cover opt-out confirmed attempts=0; Publish Kit ZIP 11.3 MB exported."
+    },
+    "link_import": {
+      "status": "waived",
+      "waiver_reason": "Cloud VM datacenter IP triggered Bilibili HTTP 412 anti-bot; installed 1.6.2 exited cleanly in 3s with error_code=source_blocked and Cookie guidance (0 crash). Real 1-hour Bilibili URL + 60s window passed on macOS arm64 1.6.2 DMG and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-26T12:20:00Z",
+      "summary": "Isolated installed 1.6.2 Windows backend against loopback HTTP 500 mock completed with bounded 4 POST attempts, exited running state cleanly, and preserved source MP4; live Session-2 HomePage UI verified B1 service_restarted recovery cards and retry CTA."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-26T12:25:00Z",
+      "summary": "Live Session-2 desktop UI verified continuous playback progression (0:01 -> 0:18 with Pause active and visible scene change), Redo dialog retaining original media, #627 keep-awake pill lifecycle (visible during run, dismissed post-run), Publish Kit ZIP, and 0-error full decode.",
+      "outputs": [
+        {
+          "case": "local_without_subtitles",
+          "bytes": 11687403,
+          "duration_sec": 46.89,
+          "decode_errors": 0
+        },
+        {
+          "case": "local_with_subtitles",
+          "bytes": 8936022,
+          "duration_sec": 36.19,
+          "decode_errors": 0
+        },
+        {
+          "case": "visual_generation",
+          "bytes": 2162556,
+          "duration_sec": 10.30,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        }
+      ]
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-26T13:04:00Z",
+      "summary": "Isolated installed 1.6.2 Windows backend verified: (1) crash_reports=false and analytics=false produced 0 outbound requests; (2) AUTOCLIP_BUILD_ENVIRONMENT=validation with analytics=true emitted studio_generation_finished with app_version=1.6.2, analytics_environment=validation, os=windows, arch=x86_64, runtime=desktop, outcome=success, and zero leaked secrets or personal paths."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-26T13:20:23Z",
+      "summary": "Isolated temp data dir with DashScope qwen4-max (capability=multimodal, analysis_mode=visual, allow_visual_screening=true, AUTOCLIP_PIP_INDEX=mirror) processed silent 45s video (no_audio.mp4) end-to-end (screening -> production -> rendering -> completed in 142.6s); rendered 10.30s 1080x1920 H.264 MP4 (2,162,556 bytes, sha256=fac4d4bf..., full decode 0 errors), visual frame verified; main QA profile allow_send_frame=false remained untouched."
+    }
+  }
+}

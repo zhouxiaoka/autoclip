@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "evidence_contract": "impact-inheritance/v1",
+  "tag": "v1.6.2",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "release_type": "routine",
+  "build_run_id": 45831145461,
+  "assets": {
+    "AutoClip.Desktop_1.6.2_aarch64.dmg": "6a1929cb0b6f571ea085e235662c86178f77f16a062ece7487d388d58527871d",
+    "AutoClip.Desktop_1.6.2_x64-setup.exe": "09428444c35db48a042ad79b097013a40865971f0ea3d9254e29fad521e0e814",
+    "AutoClip.Desktop_1.6.2_x64-setup.exe.sig": "8c53c37d4f44ab42a10d40e53f187a9205ca2a3acddea78bd7639da14977bd5f",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz": "2edb76cdb24312258c4f44c0eb67f5c560af12395c6da0291293c50a6ae06338",
+    "AutoClip.Desktop_1.6.2_aarch64.app.tar.gz.sig": "664fb011e9cc75e607fd0b9872d70344e934b119bace58cb7c10a9d1ccd85c2f",
+    "autoclip-1.6.2-cli-mcp.zip": "1b252d1d09eed1731d9e33840c8069c84a847a24d93579977b60853108cb8e9e",
+    "autoclip_mcp-1.6.2-py3-none-any.whl": "a25a1021c45b83e38aef54a5cebb70536cd1dc82d41805e09d1bf15e824ae419",
+    "latest.json": "6fecf55ec8d1780656f0759f46a8249749270060052dfed98c142d45f1161787",
+    "python-release-sha256.txt": "231c6516200deaabc454e378a935138797d11eb50021e87598c1b5c24cfb8b31",
+    "build-provenance.json": "a417299aa7ab26cbc5fc547a07e0272fbd6f3f61e64bb3c0ce85a23620ab3592"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server 2025 Datacenter x64",
+      "machine": "Cloud x64 VM in China mainland (Session 2 interactive desktop); not a physical Windows 11 desktop",
+      "runtime": "Packaged portable Python 3.13.13 + bundled FFmpeg/FFprobe 9.0.2 + bundled Playwright Node (yt-dlp EJS)",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:30:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-clean_install.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:32:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-upgrade_legacy.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:40:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-model_settings.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:55:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-local_with_subtitles.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T12:05:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-local_without_subtitles.json"
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Windows QA cloud VM datacenter IP encounters Bilibili HTTP 412 anti-bot (verified clean 3s exit with error_code=source_blocked and Cookie guidance, 0 crash); real 1-hour Bilibili URL + 60s window link_import passed on macOS arm64 1.6.2 DMG (a966f9e8) and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+        },
+        "visual_generation": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T13:20:23Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-visual_generation.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T12:20:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-failure_recovery.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T12:25:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-output_delivery.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T13:04:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-windows-x64-privacy_telemetry.json"
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS 26.6.2 arm64 (Apple Silicon)",
+      "machine": "Apple Silicon Mac; native arm64 DMG bundle; isolated QA app copy and isolated data dirs",
+      "runtime": "Packaged portable Python 3.13.13 + bundled static FFmpeg/FFprobe 9.0.2 + bundled Playwright",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:20:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-clean_install.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:25:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-upgrade_legacy.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:35:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-model_settings.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:50:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-local_with_subtitles.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T11:45:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-local_without_subtitles.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T12:00:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-link_import.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T13:07:40Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-visual_generation.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T12:15:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-failure_recovery.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T12:10:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-output_delivery.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-11-26T13:03:00Z",
+          "reviewed_at": "2026-11-27T04:32:36Z",
+          "evidence": "evidence/review-macos-arm64-privacy_telemetry.json"
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-11-26T11:40:00Z",
+      "reviewed_at": "2026-11-27T04:32:36Z",
+      "evidence": "evidence/review-reg-v162-china-cos-promo-fallback-and-v2-signed-config.json",
+      "id": "v162-china-cos-promo-fallback-and-v2-signed-config",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ]
+    },
+    {
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-11-26T12:25:00Z",
+      "reviewed_at": "2026-11-27T04:32:36Z",
+      "evidence": "evidence/review-reg-v162-p0-p2-sentry-posthog-and-recovery-fixes.json",
+      "id": "v162-p0-p2-sentry-posthog-and-recovery-fixes",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ]
+    },
+    {
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-11-26T13:20:23Z",
+      "reviewed_at": "2026-11-27T04:32:36Z",
+      "evidence": "evidence/review-reg-v162-long-video-window-and-multimodal-visual-pipeline.json",
+      "id": "v162-long-video-window-and-multimodal-visual-pipeline",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ]
+    }
+  ],
+  "observation": {
+    "status": "waived",
+    "waiver_reason": "Owner explicitly authorized promoting v1.6.2 after ~14.5h of live Pre-release telemetry (18 distinct users: 13 Windows + 5 macOS, 601 events, 19/19 provider saves, 8/14 generations succeeded, 13 outputs played, 0 unhandled/internal errors or Sentry crashes on 1.6.2); waiving the remainder of the 24h window so all users receive v1.6.2 fixes and China COS config fallback immediately."
+  },
+  "blockers": [],
+  "owner_waiver": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-27T04:32:36Z",
+    "reason": "Owner decision on 2026-11-27: waive the remaining ~9.5h of the 24h Pre-release observation window (18 real users / 601 events / 0 crashes observed) and Windows cloud-VM datacenter link_import so v1.6.2 promotes to Latest immediately; post-promotion monitoring via Sentry and PostHog with Promote/Halt rollback readiness."
+  },
+  "approval": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-27T04:32:36Z"
+  }
+}

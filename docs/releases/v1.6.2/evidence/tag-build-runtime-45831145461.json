@@ -1,0 +1,44 @@
+{
+  "tag": "v1.6.2",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "build_run_id": 45831145461,
+  "internal_acceptance_run_id": 45830910140,
+  "jobs_passed": [
+    "build-macos-arm64",
+    "build-windows-x64",
+    "candidate-gate",
+    "ci-guards",
+    "provider-e2e / live-e2e",
+    "provider-e2e / mock-e2e",
+    "provider-e2e / provider-e2e",
+    "release",
+    "sensevoice-runtime / real-transcription (macos-15)",
+    "sensevoice-runtime / real-transcription (ubuntu-latest)",
+    "sensevoice-runtime / real-transcription (windows-latest)",
+    "smoke-windows-x64",
+    "source-quality / Backend tests",
+    "source-quality / Diagnostics SQL and recovery contracts",
+    "source-quality / Docker compose smoke",
+    "source-quality / Docker development compose smoke",
+    "source-quality / Frontend checks",
+    "source-quality / Release contract checks",
+    "source-quality / windows-runtime / Windows Proactor cleanup",
+    "source-quality / windows-runtime / Windows cancel_job process tree",
+    "source-quality / windows-runtime / Windows media runtime regressions",
+    "whisper-runtime / windows-recovery"
+  ],
+  "posthog_prerelease_24h": {
+    "distinct_users": 18,
+    "os_split": {
+      "windows": 13,
+      "macos": 5
+    },
+    "total_events": 601,
+    "provider_save_success": "19/19",
+    "generation_finished": 14,
+    "generation_succeeded": 8,
+    "outputs_played": 13,
+    "unhandled_or_internal_errors": 0
+  },
+  "note": "Exact same commit a966f9e8 rebuilt by Desktop Build tag workflow 45831145461; all required CI/build/smoke/release jobs succeeded."
+}

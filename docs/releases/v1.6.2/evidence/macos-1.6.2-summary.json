@@ -1,0 +1,92 @@
+{
+  "version": "1.6.2",
+  "platform": "macos-arm64",
+  "commit": "a966f9e8b26669399c91fd6bc7815364a40582b2",
+  "build_run_id": 45786549439,
+  "package": {
+    "name": "AutoClip Desktop_1.6.2_aarch64.dmg",
+    "sha256": "4251c55e787a81e69a2c195c1845ec3f868974784ecb0a7277065e815b9cf81b",
+    "bytes": 343787101
+  },
+  "installed_binary_sha256": "1f2b74cd60d950e6ef33f90b30a4134bb07c1528b5de3a71a76a75f050b98e29",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:20:00Z",
+      "summary": "Verified DMG SHA-256 match (343,787,101 bytes), extracted isolated .app bundle via ditto, confirmed codesign valid, bundled portable Python 3.13.13 + FFmpeg/FFprobe 9.0.2, and launched native macOS GUI."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:25:00Z",
+      "summary": "Backed up existing desktop data directory before launch; verified 11 existing projects, DashScope provider settings (qwen4-max + qwen-audio-3.1-asr-flash), and allow_send_frame=false preserved cleanly under 1.6.2."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:35:00Z",
+      "summary": "Verified live signed cloud dynamic provider hot-add (sequence=1) and hot-withdrawal (sequence=2), min_app version isolation against 1.6.1, and automatic fallback to China-accessible Shanghai COS mirror when workers.dev is blocked."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:45:00Z",
+      "summary": "Real 45s spoken MP4 without SRT completed via DashScope qwen-audio-3.1-asr-flash (2.85s) + qwen4-max in 51s; rendered 46.89s 1080x1920 MP4 (7,770,218 bytes, sha256=8d1a969a..., 0 decode errors); start/mid/end frames visually verified; AI cover opt-out confirmed allow_model=False attempts=0; Publish Kit ZIP 7.6 MB exported."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-26T11:50:00Z",
+      "summary": "Real 45s spoken MP4 + SRT completed via installed 1.6.2 bundle; rendered 46.89s MP4 (7,809,312 bytes, sha256=f7581a9c..., full decode 0 errors)."
+    },
+    "link_import": {
+      "status": "passed",
+      "completed_at": "2026-11-26T12:00:00Z",
+      "summary": "Real 1-hour public Bilibili URL with 60s source window (0-60s) downloaded, transcribed, and rendered in 69s; output 32.49s MP4 (6,275,429 bytes, sha256=06899f92..., full decode 0 errors)."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-26T12:10:00Z",
+      "summary": "Verified rendered MP4 metadata via bundled ffprobe 9.0.2, full-stream ffmpeg null decode with 0 errors, visual start/mid/end frame inspection, Publish Kit ZIP exact byte match, and AI cover opt-out isolation.",
+      "outputs": [
+        {
+          "case": "local_without_subtitles",
+          "bytes": 7770218,
+          "duration_sec": 46.89,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        },
+        {
+          "case": "local_with_subtitles",
+          "bytes": 7809312,
+          "duration_sec": 46.89,
+          "decode_errors": 0
+        },
+        {
+          "case": "link_import",
+          "bytes": 6275429,
+          "duration_sec": 32.49,
+          "decode_errors": 0
+        },
+        {
+          "case": "visual_generation",
+          "bytes": 2043766,
+          "duration_sec": 12.23,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        }
+      ]
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-26T12:15:00Z",
+      "summary": "Isolated installed 1.6.2 backend against loopback HTTP 500 mock completed with bounded 4 POST attempts, exited running state cleanly (status=failed), and preserved the original source MP4."
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-26T13:03:00Z",
+      "summary": "Isolated installed 1.6.2 backend verified: (1) crash_reports=false and analytics=false produced 0 outbound requests; (2) AUTOCLIP_BUILD_ENVIRONMENT=validation with analytics=true emitted studio_generation_finished with app_version=1.6.2, analytics_environment=validation, os=macos, arch=aarch64, runtime=desktop, outcome=success, and zero leaked secrets or personal paths."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-26T13:07:40Z",
+      "summary": "Isolated temp data dir with DashScope qwen4-max (capability=multimodal, analysis_mode=visual, allow_visual_screening=true) processed silent 45s video (no_audio.mp4) end-to-end (screening -> production -> rendering -> completed in 83s); rendered 12.23s 1080x1920 MP4 (2,043,766 bytes, sha256=2b963a76..., full decode 0 errors), visual frame verified; main QA profile allow_send_frame=false remained untouched."
+    }
+  }
+}
