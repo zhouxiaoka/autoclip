@@ -806,11 +806,22 @@ def test_locale_routing_disjoint_defaults_and_localized_register_urls(monkeypatc
         {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh", "en"]},
         {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["en"]},
     ],
+    [
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["sv"]},
+        {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["sv"]},
+    ],
+    [
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True},
+        {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["sv"]},
+    ],
     [{"id": "apimart", "order": 1, "status": "healthy", "locales": []}],
     [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["zh", "zh"]}],
-    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["sv"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["../zh"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["EN"]}],
     [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {"en": "https://evil.example/steal"}}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {"sv": "https://evil.example/steal"}}],
     [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {}}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "notices": {"sv": "<script>bad</script>"}}],
 ])
 def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tmp_path, profiles, bad_sponsors):
     private, public = _keys()
@@ -822,6 +833,92 @@ def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tm
     )
     assert client.refresh_sync() == "sponsors"
     assert client.view()["source"] == "bundled"
+
+
+def test_forward_compatible_future_iso_locales_and_dynamic_provider_locales(tmp_path, profiles):
+    private, public = _keys()
+    payload = _payload(
+        sequence=21,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[
+            _dynamic_provider(
+                id="cloudgw",
+                name={"en": "CloudGW", "zh": "云网关", "sv": "MolnGW"},
+                hint={"en": "Global gateway", "sv": "Svensk text"},
+                offer={"sv": "50 kr"},
+                locales=["en", "it", "sv"],
+            ),
+            _dynamic_provider(
+                id="nordicgw",
+                name={"en": "NordicGW", "no": "NordiskGW"},
+                base_url="https://router.nordicgw.example/v1",
+                register_url="https://www.nordicgw.example/?ref=1",
+                docs_url="https://docs.nordicgw.example/",
+                locales=["no"],
+            ),
+        ],
+        sponsors=[
+            {
+                "id": "cloudgw",
+                "order": 1,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["en", "it", "sv"],
+                "notices": {"en": "Degraded", "sv": "Tillfälligt långsam"},
+                "register_urls": {
+                    "en": "https://www.cloudgw.example/?ref=en",
+                    "sv": "https://www.cloudgw.example/?ref=sv",
+                },
+            },
+            {
+                "id": "nordicgw",
+                "order": 2,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["no"],
+            },
+        ],
+    )
+    client = _client(
+        tmp_path / "fwd",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, payload),
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert client.refresh_sync() == "ok"
+    en_view = client.view(locale="en")
+    it_view = client.view(locale="it")
+    zh_view = client.view(locale="zh")
+    no_locale_view = client.view()
+
+    assert en_view["choices"] == ["cloudgw", "other"]
+    assert it_view["choices"] == ["cloudgw", "other"]
+    assert zh_view["choices"] == ["other"]
+    assert "nordicgw" not in no_locale_view["choices"]
+    assert en_view["notices"]["cloudgw"] == {"en": "Degraded"}
+    by_id = {p["id"]: p for p in en_view["providers"]}
+    assert by_id["cloudgw"]["locales"] == ["en", "it"]
+    assert by_id["cloudgw"]["name"] == {"en": "CloudGW", "zh": "云网关"}
+    assert "offer" not in by_id["cloudgw"]
+    assert by_id["nordicgw"]["locales"] == []
+
+    # Invalid dynamic provider locales must still be rejected
+    for bad_locales in ([], ["zh", "zh"], ["../zh"], ["123"]):
+        bad_payload = _payload(
+            sequence=22,
+            schema=sponsor_promo.SCHEMA_V2,
+            providers=[_dynamic_provider(locales=bad_locales)],
+            sponsors=[{"id": "apimart", "order": 1, "status": "healthy"}],
+        )
+        bad_client = _client(
+            tmp_path / f"bad-{abs(hash(str(bad_locales)))}",
+            private,
+            public,
+            lambda url, timeout, max_bytes, p=bad_payload: _envelope(private, p),
+            v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+        )
+        assert bad_client.refresh_sync() == "providers"
 
 
 def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_path, profiles):

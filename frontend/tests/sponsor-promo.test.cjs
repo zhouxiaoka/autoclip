@@ -154,11 +154,36 @@ test('by_locale slices are validated against trusted hosts and out_of_service ru
     },
   }), null)
 
-  assert.equal(promo.applySponsorPromo({
+  // 19-locale expansion (nl, it, ar, etc.) is supported; unknown valid ISO codes (sv) are ignored gracefully;
+  // malformed locale keys are still rejected.
+  const expanded = promo.applySponsorPromo({
     choices: ['other'],
     default: 'other',
     by_locale: {
       nl: { choices: ['other'], default: 'other', register_urls: {} },
+      ar: { choices: ['apimart', 'other'], default: 'apimart', register_urls: {} },
+      sv: { choices: ['other'], default: 'other', register_urls: {} },
+    },
+  })
+  assert.ok(expanded)
+  assert.equal(JSON.stringify(expanded.byLocale.nl.choices), JSON.stringify(['other']))
+  assert.equal(JSON.stringify(expanded.byLocale.ar.choices), JSON.stringify(['apimart', 'other']))
+  assert.equal(expanded.byLocale.sv, undefined)
+
+  assert.equal(promo.applySponsorPromo({
+    choices: ['other'],
+    default: 'other',
+    by_locale: {
+      '../zh': { choices: ['other'], default: 'other', register_urls: {} },
+    },
+  }), null)
+
+  // Invalid host inside a future ISO locale slice is still rejected
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    by_locale: {
+      sv: { choices: ['apimart', 'other'], default: 'apimart', register_urls: { apimart: 'https://evil.example/steal' } },
     },
   }), null)
 })

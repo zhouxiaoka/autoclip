@@ -13,7 +13,11 @@ import {
 } from './sponsorPromoState'
 
 const STATUSES = new Set(['healthy', 'fault', 'out_of_service'])
-const SUPPORTED_LOCALES = new Set(['zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru', 'id', 'tr', 'vi', 'de'])
+const SUPPORTED_LOCALES = new Set([
+  'zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru', 'id', 'tr', 'vi', 'de',
+  'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar',
+])
+const LOCALE_CODE_RE = /^[a-z]{2,3}$/
 const DYNAMIC_ID_RE = /^[a-z][a-z0-9_-]{1,31}$/
 const DYNAMIC_CAPABILITIES = new Set(['language', 'vision', 'image', 'video', 'asr'])
 const DYNAMIC_CANDIDATE_ROLES = new Set(['analysis', 'vision', 'asr', 'image'])
@@ -90,16 +94,30 @@ function parseLocalizedMap(raw: unknown, maxLen: number, requireEn = false): Rec
     return cleaned ? { en: cleaned } : null
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const entries = Object.entries(raw as Record<string, unknown>)
+  if (!entries.length) return null
   const out: Record<string, string> = {}
-  for (const [loc, val] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [loc, val] of entries) {
     const key = loc.toLowerCase().split('-')[0]
-    if (!SUPPORTED_LOCALES.has(key)) return null
+    if (!LOCALE_CODE_RE.test(key)) return null
     const cleaned = cleanText(val, maxLen)
     if (!cleaned) return null
-    out[key] = cleaned
+    if (SUPPORTED_LOCALES.has(key)) out[key] = cleaned
   }
-  if (!Object.keys(out).length || (requireEn && !out.en)) return null
+  if (requireEn && !out.en) return null
   return out
+}
+
+function parseLocaleList(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null
+  const seen = new Set<string>()
+  const known: string[] = []
+  for (const item of raw) {
+    if (typeof item !== 'string' || !LOCALE_CODE_RE.test(item) || seen.has(item)) return null
+    seen.add(item)
+    if (SUPPORTED_LOCALES.has(item)) known.push(item)
+  }
+  return known
 }
 
 function parseDynamicProviders(raw: unknown): DynamicProviderSpec[] | null {
@@ -148,6 +166,12 @@ function parseDynamicProviders(raw: unknown): DynamicProviderSpec[] | null {
         candidates[role as keyof NonNullable<DynamicProviderSpec['candidates']>] = models
       }
     }
+    let locales: string[] | undefined
+    if (row.locales !== undefined) {
+      const parsedLocales = parseLocaleList(row.locales)
+      if (parsedLocales === null) return null
+      locales = parsedLocales
+    }
     seen.add(id)
     out.push({
       id,
@@ -158,10 +182,11 @@ function parseDynamicProviders(raw: unknown): DynamicProviderSpec[] | null {
       placeholder,
       capabilities,
       group,
-      ...(hint ? { hint } : {}),
-      ...(offer ? { offer } : {}),
+      ...(hint && Object.keys(hint).length ? { hint } : {}),
+      ...(offer && Object.keys(offer).length ? { offer } : {}),
       ...(iconUrl ? { iconUrl } : {}),
       ...(candidates ? { candidates } : {}),
+      ...(locales !== undefined ? { locales } : {}),
     })
   }
   return out
@@ -235,11 +260,11 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     if (!record.by_locale || typeof record.by_locale !== 'object' || Array.isArray(record.by_locale)) return null
     byLocale = {}
     for (const [loc, rawSlice] of Object.entries(record.by_locale as Record<string, unknown>)) {
-      if (!SUPPORTED_LOCALES.has(loc) || !rawSlice || typeof rawSlice !== 'object' || Array.isArray(rawSlice)) return null
+      if (!LOCALE_CODE_RE.test(loc) || !rawSlice || typeof rawSlice !== 'object' || Array.isArray(rawSlice)) return null
       const entry = rawSlice as Record<string, unknown>
       const parsed = parseSlice(entry.choices, entry.default, entry.register_urls, statuses, promoChoices, dynamicHosts)
       if (!parsed) return null
-      byLocale[loc] = parsed
+      if (SUPPORTED_LOCALES.has(loc)) byLocale[loc] = parsed
     }
   }
   const notices: Record<string, Record<string, string>> = {}

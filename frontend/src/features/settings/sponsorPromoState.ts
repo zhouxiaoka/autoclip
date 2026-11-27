@@ -21,6 +21,7 @@ export interface DynamicProviderSpec {
   offer?: Record<string, string>
   iconUrl?: string
   candidates?: Partial<Record<'analysis' | 'vision' | 'asr' | 'image', string[]>>
+  locales?: string[]
 }
 
 export interface PromoSnapshot {
@@ -64,6 +65,14 @@ export function readDynamicProviders(): DynamicProviderSpec[] {
 export function findDynamicProvider(id?: string | null): DynamicProviderSpec | undefined {
   if (!id || !current?.providers?.length) return undefined
   return current.providers.find(item => item.id === id)
+}
+
+export function dynamicProviderVisibleForLocale(id?: string | null, locale?: string | null): boolean {
+  const dynamic = findDynamicProvider(id)
+  if (!dynamic || dynamic.locales === undefined) return true
+  const loc = normalizePromoLocale(locale ?? activeLocale)
+  if (!loc) return dynamic.locales.length > 0
+  return dynamic.locales.includes(loc)
 }
 
 export function localizedDynamicText(

@@ -3,7 +3,7 @@
  * Driven by backend/presets/provider_presets.json. No React, no telemetry payloads.
  */
 import { PROVIDERS, type ProviderKey } from './providers'
-import { promotionCurrentlyPromoted, promotionDelisted, promotionEligible, promotionRank } from './sponsorPromoState'
+import { dynamicProviderVisibleForLocale, promotionCurrentlyPromoted, promotionDelisted, promotionEligible, promotionRank } from './sponsorPromoState'
 import { compareRecommended, displayCatalogGroup, qualityFor } from './providerQuality'
 import { getProvider, listAllProviders, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
 import { cleanBinding, newConnection, presetKey, endpointProviderReady } from './modelSettingsLogic'
@@ -72,7 +72,7 @@ export function matchesCapability(preset: ProviderPreset, filter: CapabilityFilt
 
 export function filterCatalog(query: string, filter: CapabilityFilter, settings?: ModelSettings): ProviderPreset[] {
   return catalogProviders().filter(preset => {
-    if (promotionDelisted(preset.id)) {
+    if (promotionDelisted(preset.id) || !dynamicProviderVisibleForLocale(preset.id)) {
       const kept = settings ? Boolean(findCatalogConnection(settings, preset)) : false
       if (!kept) return false
     }
