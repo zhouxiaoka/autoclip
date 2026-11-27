@@ -9,6 +9,38 @@
 
 _（本周尚无改动）_
 
+## [1.6.3] - 2026-11-27
+
+### 要点
+
+#### 中文
+- 模板库扩充至 34 套（内置 5 套 + 29 套热更新旗舰模板），新增本地 ONNX 3 层 3D 景深引擎与 `template-cloner` Skill
+- 界面语言与文档由 13 语扩展至 20 语（新增意大利语、波兰语、泰语、荷兰语、乌克兰语、印地语、阿拉伯语及 RTL 支持）
+- 支持多视频批量导入独立队列（#701）、持久化默认导出目录（#700）、首页一键开关品牌片尾，以及成片卡片 `👎` 轻量反馈标签
+- 修复阿里云百炼默认候选模型 403/额度不足自动兜底（#602）、0 片段保护、坏系统代理直连兜底与多处 Windows 稳定性问题
+- 新增中英双语 2 分钟桌面版图文动图快速上手指南，并升级 `Pillow` / `tar` 安全依赖
+
+#### English
+- Expanded to 34 templates (5 built-in + 29 hot-updatable flagship templates) with a local ONNX 3-layer 3D depth engine and `template-cloner` skill
+- Expanded UI and documentation from 13 to 20 languages (+ Italian, Polish, Thai, Dutch, Ukrainian, Hindi, Arabic with RTL support)
+- Added multi-video batch import queue (#701), persistent default export directory (#700), one-click branded outro toggle on import, and light `👎` feedback tags on clip cards
+- Fixed Bailian preset-model 403/quota fallback (#602), 0-clip protection, broken system-proxy direct fallback, and Windows file-lock / timezone / audio-probe resilience
+- Added bilingual 2-minute Quickstart guides with real UI walkthrough GIFs, and patched `Pillow` / `tar` CVEs
+
+### 新增
+
+- **34 套视觉模板 & 本地 ONNX 3D 景深引擎**：新增 29 套热更新旗舰模板（杂志衬线、电影宽幅、红黑钩子、KPI 数据卡、卡拉 OK 胶囊等），其中 5 套支持本地 CPU 运行的 `PP-HumanSeg` ONNX 3 层景深合成，文字自然穿行于人物背后；同步开放 `skills/template-cloner` 复刻技能与模板征集表单。
+- **20 语种界面与文档**：在 13 语基础上新增意大利语（`it`）、波兰语（`pl`）、泰语（`th`）、荷兰语（`nl`）、乌克兰语（`uk`）、印地语（`hi`）与阿拉伯语（`ar`，支持 RTL 布局与窄卡防溢出）。
+- **批处理与创作者效率**：支持一次导入多条视频并进入独立项目队列（含幂等账本，#701）；桌面端支持记住默认导出目录（#700）；首页导入页新增「自动添加品牌片尾」开关；成片卡片新增 `👎` 轻量问题反馈标签（文字遮挡、封面文案、构图裁切、选段不佳、音画同步）。
+- **云端动态服务商与新手引导**：支持停服内置服务商从目录隐藏（#715）、云端配置服务商角标/多语言/首启弹窗解耦；新增中英双语 2 分钟图文动图快速上手教程（`docs/QUICKSTART.md` / `docs/QUICKSTART.en.md`）及 `Show and tell` 防误投下载提示。
+
+### 修复与改进
+
+- **模型校验与连接稳定性**：修复阿里云百炼默认候选模型返回 403/额度不足时未顺延尝试 `qwen-plus` 的问题（#602）；坏系统代理时快速测试与试跑探测均自动回退直连（#704）；细分磁盘满、网络断连与 `httpx` 超时错误归类（#694 / #709）；加快 PyPI 不可达时切国内镜像速度（#711）。
+- **0 片段保护与成片质量**：`clip_finder` 放宽孤立短高光的最小时长兜底，`youtube_long` 在无容器时长探测时按草稿跨度推导；`autoclip doctor` 增加 FFmpeg `libass` 检测；竖屏 `TagPill` 与双行字幕分离防遮挡；自动封面标题清洗 ASR 口吃与填充词。
+- **Windows 与 Sentry 稳定性**：提升 `file_lock` 并发超时并增加 Windows 瞬时 `PermissionError` 重试；`sample()` 帧提取增加精准 seek 回退；容错 `game_highlights` 非规范模型响应；`_convert_utc_to_local` 改用标准库固定 `UTC+8` 避免 `pytz` 报 `UnknownTimeZoneError`；可选音频静音探测遇到 `OSError` 时安全降级继续出片；修复模板预览播放 `AbortError` 与动态预览缺失报错。
+- **安全与合规**：升级 `Pillow 13.0.0`（CVE-2026-112393）与 `tar 7.5.19`（CVE-2026-59873），新增 SignPath Foundation `CODE_SIGNING_POLICY.md`。
+
 ## [1.6.2] - 2026-11-26
 
 ### 要点
@@ -785,7 +817,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.2...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.3...HEAD
+- [1.6.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.2...v1.6.3
 - [1.6.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.1...v1.6.2
 - [1.6.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.0...v1.6.1
 - [1.6.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.9...v1.6.0
