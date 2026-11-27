@@ -1,6 +1,6 @@
 id: meme_setup
 version: 2
-name: {zh: 情景反转黄牌, en: Meme Setup Banner}
+name: { zh: "反转梗图", en: "Plot Twist" }
 fit:
   formats: {gaming_stream: 1.0, live_replay: 1.0, vlog: 0.9}
   needs_face: false

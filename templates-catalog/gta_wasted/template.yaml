@@ -1,6 +1,6 @@
 id: gta_wasted
 version: 2
-name: {zh: "高能翻车分屏", en: "Wasted Impact Split"}
+name: { zh: "名场面翻车", en: "Wasted Cut" }
 fit:
   formats: {gaming_stream: 1.0, live_replay: 1.0, vlog: 0.5}
   needs_face: false

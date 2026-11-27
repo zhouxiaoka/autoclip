@@ -1,6 +1,6 @@
 id: highlight_note
 version: 2
-name: {zh: 荧光便利贴, en: Highlight Note}
+name: { zh: "荧光划重点", en: "Highlighter" }
 fit:
   formats: {vlog: 1.0, keynote_stage: 0.9, podcast_studio: 0.8, sit_down_interview: 0.8}
   needs_face: true

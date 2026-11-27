@@ -1,0 +1,6 @@
+@font-face { font-family: 'ACSpace'; src: url('./fonts/SpaceGrotesk.ttf') format('truetype'); font-weight: 400 800; font-style: normal; font-display: block; }
+html, body {
+  margin: 0; padding: 0; width: 1080px; height: 1920px; overflow: hidden; background: transparent;
+}
+#stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
+svg { display: block; width: 1080px; height: 1920px; }

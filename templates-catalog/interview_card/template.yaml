@@ -1,6 +1,6 @@
 id: interview_card
 version: 2
-name: {zh: 访谈卡片, en: Interview Card}
+name: { zh: "人物切片", en: "Guest Card" }
 fit:
   formats: {sit_down_interview: 1.0, podcast_studio: 0.9, keynote_stage: 0.6, street_interview: 0.2}
   needs_face: true
