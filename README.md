@@ -31,6 +31,8 @@ Open-source, local-first AI clipping for **podcasts, interviews, and gaming stre
 <p>
   <a href="https://zhouxiaoka.github.io/autoclip_intro/"><strong>Website</strong></a>
   &nbsp;&middot;&nbsp;
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/templates/"><strong>Template Gallery (34)</strong></a>
+  &nbsp;&middot;&nbsp;
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><strong>Download</strong></a>
   &nbsp;&middot;&nbsp;
   <a href="https://zhouxiaoka.github.io/autoclip_intro/features/game-streams/"><strong>Live Replays (v1.6)</strong></a>
@@ -78,6 +80,7 @@ Drop in a link, local video, or **live stream replay** — AutoClip finds the be
 | **OBS Auto-Capture** | Connect OBS WebSocket (`4455`), trim losslessly (`-c copy`), and auto-queue clips right after you end stream. |
 | **Game Highlights** | Generalized highlight detection supporting **8s+** standalone plays with tighter vision/OCR budgets. |
 | **One-Click Repurpose** | Unified playable clip cards — switch target platforms in one click without losing previous exports. |
+| **34-Template Studio & 3D Depth** | 5 built-in + **29 hot-updatable viral templates** (editorial serif, cinema letterbox, magenta beat cut, red list hook, KPI stats, karaoke pill, and **5 local ONNX 3-layer 3D depth templates** where giant typography passes cleanly behind the speaker at 119 FPS on CPU). Browse the live **[Template Gallery](https://zhouxiaoka.github.io/autoclip_intro/templates/)** or clone any reference video via `skills/template-cloner`. |
 | **13 Languages** | Full desktop UI, tray menus, and docs in 13 languages (`+ zh-TW, de, id, tr, vi`) plus Arabic RTL captions. |
 
 <details>
