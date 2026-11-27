@@ -60,10 +60,11 @@
     var lines = (state.title_lines || []).filter(Boolean);
     var lead = (lines[0] || 'PATIENCE').toUpperCase();
     var p = easeOutQuint(t / 0.48);
-    var sz = 210;
+    var sz = 195;
     var w = measureW(lead, sz, 400, SERIF);
-    if (w > 980) sz = Math.max(120, Math.floor((sz * 980) / w));
-    var svg = '<g transform="translate(540,' + (540 + (1 - p) * 24).toFixed(1) + ')" opacity="' + (0.92 * p).toFixed(2) + '">'
+    if (w > 960) sz = Math.max(115, Math.floor((sz * 960) / w));
+    // Crown-level depth band (y=410) so letters remain completely legible while intersecting hair/shoulders!
+    var svg = '<g transform="translate(540,' + (410 + (1 - p) * 24).toFixed(1) + ')" opacity="' + (0.94 * p).toFixed(2) + '">'
       + '<text x="0" y="0" text-anchor="middle" font-family="' + SERIF + '" font-size="' + sz + '" font-weight="400" letter-spacing="2" fill="#F5F0E6">' + esc(lead) + '</text></g>';
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
     return 'ZEN_B:' + lead + ':' + Math.round(p * 25);

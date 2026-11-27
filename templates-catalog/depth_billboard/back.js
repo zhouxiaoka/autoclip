@@ -64,18 +64,19 @@
     var sc = 0.88 + 0.12 * p;
     var dy = (1 - easeOutQuint(t / 0.40)) * 45;
 
-    var sz = 290;
+    var sz = 250;
     var w = measureW(hero, sz, 400, POSTER);
-    if (w > 1020) sz = Math.max(150, Math.floor((sz * 1020) / w));
+    if (w > 980) sz = Math.max(140, Math.floor((sz * 980) / w));
 
     var svg = '<defs><filter id="bsh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.45"/></filter></defs>';
-    svg += '<g transform="translate(540,' + (580 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + easeOutCubic(t / 0.25).toFixed(2) + '" filter="url(#bsh)">'
+    // Crown-level depth band (y=340): top 80% of letters stay crisp & readable while hair/head overlaps the lower edge!
+    svg += '<g transform="translate(540,' + (340 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + easeOutCubic(t / 0.25).toFixed(2) + '" filter="url(#bsh)">'
       + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + sz + '" letter-spacing="4" fill="#F8FAFC" fill-opacity="0.96">' + esc(hero) + '</text>';
     if (sub) {
-      var ssz = 190;
+      var ssz = 165;
       var sw = measureW(sub, ssz, 400, POSTER);
-      if (sw > 1000) ssz = Math.max(110, Math.floor((ssz * 1000) / sw));
-      svg += '<text x="0" y="' + Math.round(sz * 0.86) + '" text-anchor="middle" font-family="' + POSTER + '" font-size="' + ssz + '" letter-spacing="4" fill="#EF4444" fill-opacity="0.96">' + esc(sub) + '</text>';
+      if (sw > 980) ssz = Math.max(100, Math.floor((ssz * 980) / sw));
+      svg += '<text x="0" y="' + Math.round(sz * 0.72) + '" text-anchor="middle" font-family="' + POSTER + '" font-size="' + ssz + '" letter-spacing="4" fill="#EF4444" fill-opacity="0.96">' + esc(sub) + '</text>';
     }
     svg += '</g>';
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
