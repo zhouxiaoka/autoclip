@@ -22,6 +22,7 @@ def build(wheel: Path, out: Path):
     with zipfile.ZipFile(wheel) as archive:
         for name in ('backend/assets/models/face_detection_yunet_2023mar.onnx',
                      'backend/assets/models/face_detection_yunet-LICENSE.txt',
+                     'backend/assets/models/human_segmentation_pphumanseg_2023mar.onnx',
                      'backend/presets/provider_presets.json',
                      'backend/presets/provider_quality.json'):
             if name not in archive.namelist():
