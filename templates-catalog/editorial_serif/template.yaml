@@ -1,25 +1,25 @@
 id: editorial_serif
 version: 2
-name: {zh: "极简杂志衬线", en: "Editorial Serif"}
+name: {zh: "极简杂志衬线", en: "Editorial Serif Mix"}
 fit:
-  formats: {vlog: 1.0, sit_down_interview: 0.92, podcast_studio: 0.88, keynote_stage: 0.88}
+  formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.9}
   needs_face: false
 canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
 base:
   framing: full_face
-  face_y: 0.38
-  head_zone: [240, 1200]
+  face_y: 0.36
+  head_zone: [240, 1140]
   zoom:
     mode: creep
-    creep: 0.028
+    creep: 0.024
   transitions: {broll: none, max: 0}
   grade: "eq=contrast=1.02:saturation=0.92:brightness=0.01"
   picture_layout: crop
 overlay:
   entry: index.html
   slots:
-    hook: {top: 180, alt_top: 180}
-    subtitle: {top: 1210, max_rows: 2}
+    hook: {top: 170, alt_top: 170}
+    subtitle: {top: 1320, max_rows: 2}
   safe_area: tiktok
   limits: {emphasis_gap_s: 2.5}
 fields:
@@ -38,11 +38,11 @@ caption_layout:
   burn_cover_title: true
   keep_punctuation: true
 meta:
-  desc: {zh: "Instrument Serif 正斜体混排 + Higgsfield 招牌模糊渐清晰浮现动效，高级电影感生活口播", en: "Instrument Serif editorial typography with signature blur-to-sharp focus reveal animation"}
-  tags: [editorial, serif, minimal, blur-reveal, aesthetic]
+  desc: {zh: "对标 An Unforgettable Party：丝滑逐词柔焦浮现 + 句内大小字体/正斜体混排（重点词自动放大斜体衬线），避脸高级感", en: "Silky word-by-word focus reveal with mixed-size regular/italic Instrument Serif emphasis words in face-safe zone"}
+  tags: [editorial, serif, mixed-type, silky, face-safe]
   category: general
   order: 64
-  package_version: "1.1.0"
+  package_version: "2.0.0"
   author: AutoClip
   preview_layout: crop
 qa: {}

@@ -12,11 +12,13 @@
   font-style: italic;
   font-display: block;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, #stage {
-  width: 1080px;
-  height: 1920px;
-  overflow: hidden;
-  background: transparent;
+@font-face {
+  font-family: 'ACSpace';
+  src: url('./fonts/SpaceGrotesk.ttf') format('truetype');
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: block;
 }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #stage { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
 svg { display: block; width: 1080px; height: 1920px; }
