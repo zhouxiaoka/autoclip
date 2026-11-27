@@ -149,7 +149,7 @@ export default function ProviderCatalog({
   onOpen: (id: string) => void
   onAdd?: () => void
 }) {
-  const visible = filterCatalog(query, filter)
+  const visible = filterCatalog(query, filter, settings)
   const groups = groupCatalog(visible)
   const customs = unmatchedCompatibleConnections(settings).filter(connection => matchesCustom(connection, query, filter))
   const expandMore = moreOpen || shouldExpandMore(query, filter, groups.more.length)
