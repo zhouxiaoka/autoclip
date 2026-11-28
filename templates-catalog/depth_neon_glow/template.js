@@ -76,7 +76,10 @@
     var moment = window.ACTemplate ? window.ACTemplate.momentAt(state, t) : null;
     var raw = cueText(moment, lang);
     var mIdx = momentIndex(t);
-    var col = (mIdx % 2 === 0) ? '#22D3EE' : '#F43F5E';
+    var vars = state.vars || {};
+    var userAccent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '';
+    var col = userAccent || ((mIdx % 2 === 0) ? '#22D3EE' : '#F43F5E');
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
 
     var svg = '<defs><linearGradient id="bs" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.68"/></linearGradient>'
       + '<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.78"/></filter></defs>'
@@ -87,7 +90,7 @@
       var p = easeOutQuint(mAge / 0.22);
       var words = raw.split(/\s+/).filter(Boolean);
       var fIdx = pickFocalIndex(words);
-      var fsz = 54;
+      var fsz = Math.round(54 * fScale);
       var totalW = 0;
       for (var i = 0; i < words.length; i++) totalW += measureW(words[i] + ' ', fsz, i === fIdx ? 700 : 500, SANS);
       if (totalW > 900) fsz = Math.max(36, Math.floor((fsz * 900) / totalW));

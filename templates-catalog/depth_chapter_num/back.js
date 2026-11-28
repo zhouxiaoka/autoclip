@@ -88,6 +88,13 @@
       root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
       return 'CH_B_GAP';
     }
+    var vars = state.vars || {};
+    if (vars.depth_enabled === false) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'CH_B_OFF';
+    }
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#FFFFFF';
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.12 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
     var mIdx = momentIndex(t);
     var numMatch = raw.match(/^\s*#?(\d+)[\.\)\:\-]\s*/);
     var n = numMatch ? parseInt(numMatch[1], 10) : (mIdx + 1);
@@ -97,7 +104,7 @@
     var sc = 0.88 + 0.12 * inP;
     var svg = '<defs><filter id="bsh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.42"/></filter></defs>'
       + '<g transform="translate(540,' + (535 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + (0.88 * vis).toFixed(2) + '" filter="url(#bsh)">'
-      + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="380" letter-spacing="10" fill="#FFFFFF" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="3">' + label + '</text>'
+      + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + Math.round(380 * fScale) + '" letter-spacing="10" fill="' + accent + '" fill-opacity="0.88" stroke="' + accent + '" stroke-width="3">' + label + '</text>'
       + '</g>';
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
     return 'CHB:' + label + ':' + Math.round(vis * 30) + ':' + Math.round(dy);

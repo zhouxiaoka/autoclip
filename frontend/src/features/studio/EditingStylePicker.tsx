@@ -11,7 +11,7 @@ import {
   type BuiltinTemplateChoice, type EditingStyle, type HtmlTemplateChoice,
 } from './editingStyle'
 import {
-  exportTemplateUrl, installRemoteTemplate, resolveLocalizedCopy, syncTemplateCatalog, uninstallUserTemplate, updateTemplateVars, useTemplateCatalog,
+  exportTemplateUrl, importLocalTemplateArchive, installRemoteTemplate, resolveLocalizedCopy, syncTemplateCatalog, uninstallUserTemplate, updateTemplateVars, useTemplateCatalog,
   type TemplateCatalogItem,
 } from './templateCatalogClient'
 import TemplateCloneModal from './TemplateCloneModal'
@@ -89,6 +89,8 @@ export default function EditingStylePicker({
   const [activeCategory, setActiveCategory] = useState<string>('all')
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [cloneOpen, setCloneOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
   const [canPrev, setCanPrev] = useState(false)
   const [canNext, setCanNext] = useState(false)
   const rowRef = useRef<HTMLDivElement | null>(null)
@@ -451,6 +453,21 @@ export default function EditingStylePicker({
     }
   }
 
+  const onImportZip = async (file: File | null | undefined) => {
+    if (!file || importing || disabled) return
+    setImporting(true)
+    setCatalogError(null)
+    try {
+      const res = await importLocalTemplateArchive(file)
+      if (res.installed) choose(res.installed, 'mouse')
+    } catch {
+      setCatalogError(t('editing_style.install_failed'))
+    } finally {
+      setImporting(false)
+      if (importInputRef.current) importInputRef.current.value = ''
+    }
+  }
+
   const onCardKey = (id: EditingStyle, event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -499,6 +516,21 @@ export default function EditingStylePicker({
           onClick={() => setCloneOpen(true)}
         >
           {t('editing_style.clone.btn')}
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          style={{ display: 'none' }}
+          onChange={e => void onImportZip(e.target.files?.[0])}
+        />
+        <button
+          type="button"
+          className="studio-style-all-btn"
+          disabled={disabled || importing}
+          onClick={() => importInputRef.current?.click()}
+        >
+          {importing ? t('editing_style.importing') : t('editing_style.import_zip')}
         </button>
         {totalCount > 5 ? (
           <button
@@ -773,42 +805,46 @@ export default function EditingStylePicker({
     {(() => {
       const selItem = itemById.get(selected)
       const vars = selItem?.variables || []
-      if (!selItem || !vars.length) return null
+      if (!selItem || (!vars.length && selItem.source !== 'installed')) return null
       const cur = selItem.user_vars || {}
       const accent = String(cur.accent_color || vars.find(v => v.key === 'accent_color')?.default || '#FFE548').toUpperCase()
       const fontScale = String(cur.font_scale || vars.find(v => v.key === 'font_scale')?.default || 'M')
       const depthVal = Boolean(cur.depth_enabled ?? vars.find(v => v.key === 'depth_enabled')?.default ?? false)
       return (
         <div className="ac-clone-var-cell" style={{ marginTop: 10, padding: '8px 14px', flexWrap: 'wrap', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{t('editing_style.clone.accent')}</span>
-            <div className="ac-clone-swatches">
-              {(['#FFE548', '#34D399', '#2D6BFF', '#FF4D4F'] as const).map(hex => (
-                <button
-                  key={hex}
-                  type="button"
-                  className={`ac-clone-sw${accent === hex ? ' is-on' : ''}`}
-                  style={{ background: hex }}
-                  onClick={() => void updateTemplateVars(selItem.id, { ...cur, accent_color: hex })}
-                />
-              ))}
+          {vars.some(v => v.key === 'accent_color') ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{t('editing_style.clone.accent')}</span>
+              <div className="ac-clone-swatches">
+                {(['#FFE548', '#34D399', '#2D6BFF', '#FF4D4F'] as const).map(hex => (
+                  <button
+                    key={hex}
+                    type="button"
+                    className={`ac-clone-sw${accent === hex ? ' is-on' : ''}`}
+                    style={{ background: hex }}
+                    onClick={() => void updateTemplateVars(selItem.id, { ...cur, accent_color: hex })}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{t('editing_style.clone.font_size')}</span>
-            <div className="ac-clone-seg">
-              {(['S', 'M', 'L'] as const).map(sz => (
-                <button
-                  key={sz}
-                  type="button"
-                  className={fontScale === sz ? 'is-on' : ''}
-                  onClick={() => void updateTemplateVars(selItem.id, { ...cur, font_scale: sz })}
-                >
-                  {sz}
-                </button>
-              ))}
+          ) : null}
+          {vars.some(v => v.key === 'font_scale') ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{t('editing_style.clone.font_size')}</span>
+              <div className="ac-clone-seg">
+                {(['S', 'M', 'L'] as const).map(sz => (
+                  <button
+                    key={sz}
+                    type="button"
+                    className={fontScale === sz ? 'is-on' : ''}
+                    onClick={() => void updateTemplateVars(selItem.id, { ...cur, font_scale: sz })}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
           {vars.some(v => v.key === 'depth_enabled') ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{t('editing_style.clone.depth')}</span>
@@ -820,9 +856,21 @@ export default function EditingStylePicker({
             </div>
           ) : null}
           {selItem.source === 'installed' ? (
-            <a className="ac-clone-pill" style={{ height: 26, fontSize: 11.5, textDecoration: 'none' }} href={exportTemplateUrl(selItem.id)} download>
-              {t('editing_style.export')}
-            </a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+              <a className="ac-clone-pill" style={{ height: 26, fontSize: 11.5, textDecoration: 'none' }} href={exportTemplateUrl(selItem.id)} download>
+                {t('editing_style.export')}
+              </a>
+              {selItem.removable ? (
+                <button
+                  type="button"
+                  className="ac-clone-pill"
+                  style={{ height: 26, fontSize: 11.5 }}
+                  onClick={() => void onUninstall(selItem.id)}
+                >
+                  {t('editing_style.uninstall')}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       )

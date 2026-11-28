@@ -45,4 +45,14 @@ meta:
   package_version: "2.0.0"
   author: AutoClip
   preview_layout: crop
+variables:
+  - key: accent_color
+    kind: color
+    default: "#FFFBEB"
+    label: {zh: "主色", en: "Accent"}
+  - key: font_scale
+    kind: select
+    default: "M"
+    options: ["S", "M", "L"]
+    label: {zh: "字号", en: "Size"}
 qa: {}

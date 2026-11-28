@@ -86,13 +86,17 @@
       var numMatch = raw.match(/^\s*#?(\d+)[\.\)\:\-]\s*/);
       var n = numMatch ? parseInt(numMatch[1], 10) : (mIdx + 1);
       var clean = numMatch ? raw.replace(/^\s*#?(\d+)[\.\)\:\-]\s*/, '') : raw;
+      var vars = state.vars || {};
+      var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#38BDF8';
+      var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+      var fsz = Math.round(52 * fScale);
       var tag = 'STEP ' + (n < 10 ? '0' : '') + n;
-      var lines = wrapLines(clean, 860, 52, 700, SANS, 2);
+      var lines = wrapLines(clean, 860, fsz, 700, SANS, 2);
       svg += '<g transform="translate(540,' + (1345 + (1 - p) * 14).toFixed(1) + ')" opacity="' + p.toFixed(2) + '" filter="url(#sh)">'
-        + '<rect x="-86" y="-26" width="172" height="42" rx="21" fill="#38BDF8"/>'
+        + '<rect x="-86" y="-26" width="172" height="42" rx="21" fill="' + accent + '"/>'
         + '<text x="0" y="3" text-anchor="middle" font-family="' + SANS + '" font-size="22" font-weight="700" letter-spacing="2" fill="#09090B">' + tag + '</text>';
       for (var i = 0; i < lines.length; i++) {
-        svg += '<text x="0" y="' + (76 + i * 64) + '" text-anchor="middle" font-family="' + SANS + '" font-size="52" font-weight="700" fill="#FFFFFF">' + esc(lines[i]) + '</text>';
+        svg += '<text x="0" y="' + (76 + i * Math.round(64 * fScale)) + '" text-anchor="middle" font-family="' + SANS + '" font-size="' + fsz + '" font-weight="700" fill="#FFFFFF">' + esc(lines[i]) + '</text>';
       }
       svg += '</g>';
       capD = 'CHF:' + tag + ':' + clean + '@' + Math.round(p * 20);

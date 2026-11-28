@@ -80,13 +80,16 @@
       + '<rect x="0" y="1240" width="1080" height="680" fill="url(#bs)"/>';
     var capD = 'CPF_IDLE';
     if (raw) {
+      var vars = state.vars || {};
+      var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+      var fsz = Math.round(56 * fScale);
       var mAge = Math.max(0, t - momentStart(moment));
       var p = easeOutQuint(mAge / 0.22);
-      var lines = wrapLines(raw, 880, 56, 700, SANS, 2);
+      var lines = wrapLines(raw, 880, fsz, 700, SANS, 2);
       var y0 = lines.length === 1 ? 1435 : 1395;
       svg += '<g transform="translate(0,' + ((1 - p) * 14).toFixed(1) + ')" opacity="' + p.toFixed(2) + '" filter="url(#sh)">';
       for (var i = 0; i < lines.length; i++) {
-        svg += '<text x="540" y="' + (y0 + i * 68) + '" text-anchor="middle" font-family="' + SANS + '" font-size="56" font-weight="700" fill="#FFFFFF" stroke="#09090B" stroke-width="8" paint-order="stroke" stroke-linejoin="round">' + esc(lines[i]) + '</text>';
+        svg += '<text x="540" y="' + (y0 + i * Math.round(68 * fScale)) + '" text-anchor="middle" font-family="' + SANS + '" font-size="' + fsz + '" font-weight="700" fill="#FFFFFF" stroke="#09090B" stroke-width="8" paint-order="stroke" stroke-linejoin="round">' + esc(lines[i]) + '</text>';
       }
       svg += '</g>';
       capD = 'CPF:' + raw + '@' + Math.round(p * 20);

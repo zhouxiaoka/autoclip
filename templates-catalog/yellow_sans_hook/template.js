@@ -92,9 +92,13 @@
       + '<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="10" flood-color="#000" flood-opacity="0.78"/></filter></defs>';
     svg += '<rect x="0" y="1180" width="1080" height="740" fill="url(#bs)"/>';
 
+    var vars = state.vars || {};
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#FACC15';
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+
     if (kicker) {
       svg += '<g transform="translate(86,210)" filter="url(#sh)">'
-        + '<rect x="0" y="-28" width="' + Math.round(measureW(kicker.toUpperCase(), 26, 700, SANS) + 34) + '" height="48" rx="8" fill="#FACC15"/>'
+        + '<rect x="0" y="-28" width="' + Math.round(measureW(kicker.toUpperCase(), 26, 700, SANS) + 34) + '" height="48" rx="8" fill="' + accent + '"/>'
         + '<text x="17" y="5" font-family="' + SANS + '" font-size="26" font-weight="700" letter-spacing="1.5" fill="#09090B">' + esc(kicker.toUpperCase()) + '</text></g>';
     }
 
@@ -102,12 +106,12 @@
     if (raw) {
       var mAge = Math.max(0, t - momentStart(moment));
       var p = easeOutQuint(mAge / 0.24);
-      var lines = wrapLines(raw, 880, 68, 700, SANS, 2);
+      var csz = Math.round(68 * fScale);
+      var lines = wrapLines(raw, 880, csz, 700, SANS, 2);
       var y0 = lines.length === 1 ? 1405 : 1365;
       svg += '<g transform="translate(' + ((1 - p) * -28).toFixed(1) + ',0)" opacity="' + p.toFixed(2) + '" filter="url(#sh)">';
       for (var i = 0; i < lines.length; i++) {
-        // Pure bold SANS-SERIF vivid yellow (#FACC15) with crisp dark outline!
-        svg += '<text x="86" y="' + (y0 + i * 82) + '" font-family="' + SANS + '" font-size="68" font-weight="700" letter-spacing="-1.2" fill="#FACC15" stroke="#09090B" stroke-width="8" paint-order="stroke" stroke-linejoin="round">' + esc(lines[i]) + '</text>';
+        svg += '<text x="86" y="' + (y0 + i * Math.round(82 * fScale)) + '" font-family="' + SANS + '" font-size="' + csz + '" font-weight="700" letter-spacing="-1.2" fill="' + accent + '" stroke="#09090B" stroke-width="8" paint-order="stroke" stroke-linejoin="round">' + esc(lines[i]) + '</text>';
       }
       svg += '</g>';
       capD = 'Y:' + raw + '@' + Math.round(p * 25);

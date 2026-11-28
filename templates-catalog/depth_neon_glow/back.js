@@ -75,8 +75,15 @@
     var lang = state.audience_language || 'en';
     var moment = window.ACTemplate ? window.ACTemplate.momentAt(state, t) : null;
     var raw = cueText(moment, lang);
+    var vars = state.vars || {};
+    if (vars.depth_enabled === false) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'NG_OFF';
+    }
     var mIdx = momentIndex(t);
-    var col = (mIdx % 2 === 0) ? '#22D3EE' : '#F43F5E';
+    var userAccent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '';
+    var col = userAccent || ((mIdx % 2 === 0) ? '#22D3EE' : '#F43F5E');
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.14 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
 
     // Subtle cyber grid + radial neon halo behind speaker (always breathes gently behind person!)
     var pulse = 0.86 + 0.14 * Math.sin(t * 3.5);
@@ -105,7 +112,7 @@
         var words = raw.split(/\s+/).filter(Boolean);
         var fIdx = pickFocalIndex(words);
         var word = (words[fIdx] || words[0]).replace(/[^A-Za-z0-9\-]/g, '').toUpperCase() || 'FUTURE';
-        var sz = 240;
+        var sz = Math.round(240 * fScale);
         var ww = measureW(word, sz, 400, POSTER);
         if (ww > 960) sz = Math.max(125, Math.floor((sz * 960) / ww));
         var sc = (0.86 + 0.14 * inP) * (0.94 + 0.06 * outP);

@@ -60,10 +60,14 @@
     svg += '<rect x="0" y="0" width="1080" height="360" fill="url(#topV)"/>';
     svg += '<rect x="0" y="1140" width="1080" height="780" fill="url(#botV)"/>';
 
-    // Yellow highlighter tape headline (stays crisp at top safe zone)
+    var vars = state.vars || {};
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#FFE852';
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+
+    // Highlighter tape headline (stays crisp at top safe zone)
     var headerDigest = '';
     if (titleText) {
-      var hSize = 48;
+      var hSize = Math.round(48 * fScale);
       var hText = isEnglish(titleText) ? titleText.toLowerCase() : titleText;
       var hw = measureW(hText, hSize);
       if (hw > 760) {
@@ -75,7 +79,7 @@
       var bx = Math.round(540 - boxW / 2);
       var by = 188;
       svg += '<g transform="rotate(-1.4 540 ' + (by + boxH / 2) + ')" filter="url(#cardSh)">'
-        + '<rect x="' + bx + '" y="' + by + '" width="' + boxW + '" height="' + boxH + '" rx="10" fill="#FFE852"/>'
+        + '<rect x="' + bx + '" y="' + by + '" width="' + boxW + '" height="' + boxH + '" rx="10" fill="' + accent + '"/>'
         + '<text x="540" y="' + (by + Math.round(boxH / 2 + hSize * 0.34)) + '" text-anchor="middle" font-size="' + hSize + '" font-weight="800" fill="#141418" letter-spacing="0.5">' + esc(hText) + '</text>'
         + '</g>';
       if (kicker) {
@@ -118,7 +122,7 @@
           capDigest = clean + '@' + actZh;
         }
 
-        var sz = useEn ? 50 : 48;
+        var sz = Math.round((useEn ? 50 : 48) * fScale);
         var padX = 18;
         var gapX = 10;
         var lines = wrapTokens(tokens, sz, 880, padX, gapX);
@@ -134,7 +138,7 @@
           var ry = startY + li * (lineH + gapY);
           for (var ti = 0; ti < row.items.length; ti++) {
             var it = row.items[ti];
-            var bg = it.active ? '#FFE852' : '#FFFFFF';
+            var bg = it.active ? accent : '#FFFFFF';
             capSvg += '<rect x="' + rx + '" y="' + ry + '" width="' + Math.round(it.w) + '" height="' + lineH + '" rx="12" fill="' + bg + '"/>';
             capSvg += '<text x="' + Math.round(rx + it.w / 2) + '" y="' + (ry + Math.round(lineH / 2 + sz * 0.34)) + '" text-anchor="middle" font-size="' + sz + '" font-weight="800" fill="#141418">' + esc(it.text) + '</text>';
             rx += Math.round(it.w) + gapX;

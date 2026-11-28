@@ -100,6 +100,10 @@
       svg += '<text x="540" y="196" text-anchor="middle" font-family="' + SANS + '" font-size="22" font-weight="500" letter-spacing="5" fill="#FFFFFF" fill-opacity="' + (0.78 * kp).toFixed(2) + '" filter="url(#soft)">' + esc(kicker.toUpperCase()) + '</text>';
     }
 
+    var vars = state.vars || {};
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#FFFBEB';
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+
     // Silky word-by-word mixed typography in face-safe chest/lower-third (y=1330..1420)
     var capD = '';
     if (raw) {
@@ -119,7 +123,7 @@
         for (var k = 0; k < rowW.length; k++) {
           var isFoc = (wCounter === focalIdx);
           // Normal words: clean smaller sans/serif; focal word: 1.55x larger Instrument Serif Italic!
-          var fsz = isFoc ? 84 : 46;
+          var fsz = Math.round((isFoc ? 84 : 46) * fScale);
           var fam = isFoc ? SERIF : SANS;
           var wt = isFoc ? 400 : 400;
           var tw = measureW(rowW[k], fsz, wt, fam, isFoc);
@@ -128,7 +132,7 @@
           wCounter++;
         }
         var xCur = Math.round(540 - totalW / 2);
-        var yLine = y0 + r * 86;
+        var yLine = y0 + r * Math.round(86 * fScale);
         for (var m = 0; m < specs.length; m++) {
           var sp = specs[m];
           var wage = Math.max(0, mAge - sp.idx * 0.065);
@@ -137,7 +141,7 @@
           var sc = sp.isFoc ? (0.90 + 0.10 * spring(wage, 0.32)) : (0.96 + 0.04 * wp);
           var cx = xCur + sp.tw / 2;
           svg += '<g transform="translate(' + cx.toFixed(1) + ',' + (yLine + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + wp.toFixed(2) + '">'
-            + '<text x="0" y="0" text-anchor="middle" font-family="' + sp.fam + '" font-style="' + (sp.isFoc ? 'italic' : 'normal') + '" font-size="' + sp.fsz + '" font-weight="' + sp.wt + '" letter-spacing="' + (sp.isFoc ? '0.8' : '0.2') + '" fill="' + (sp.isFoc ? '#FFFBEB' : '#FFFFFF') + '" fill-opacity="' + (sp.isFoc ? '1' : '0.92') + '" filter="url(#soft)">' + esc(sp.txt) + '</text></g>';
+            + '<text x="0" y="0" text-anchor="middle" font-family="' + sp.fam + '" font-style="' + (sp.isFoc ? 'italic' : 'normal') + '" font-size="' + sp.fsz + '" font-weight="' + sp.wt + '" letter-spacing="' + (sp.isFoc ? '0.8' : '0.2') + '" fill="' + (sp.isFoc ? accent : '#FFFFFF') + '" fill-opacity="' + (sp.isFoc ? '1' : '0.92') + '" filter="url(#soft)">' + esc(sp.txt) + '</text></g>';
           xCur += sp.tw + 16;
           steps.push(Math.round(wp * 20));
         }

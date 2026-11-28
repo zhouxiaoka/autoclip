@@ -48,6 +48,10 @@ python scripts/template_cloner.py extract-ref /path/to/shot1.png /path/to/shot2.
    - 在 `template.yaml` 中声明 `base.subject_layer: true`、`overlay.back_entry: back.html`、`meta.min_app_version: "1.6.3"`；
    - `back.html` + `back.js` 渲染在人物头肩**背后**（建议放在发际线景深带 `y=505..535`，保证上部 75%~80% 清晰可读、底部被发丝自然遮挡），且必须**随每句口播动态进场 → 停留 → 淡出**，不要常驻死字；
    - `index.html` + `template.js` 渲染在人物**前景**安全区字幕与标签。
+9. **包装引擎 v2：品牌变量 & `ACMotion` 原子动效库（`1.6.4+` 推荐）**：
+   - 在 `template.yaml` 顶层声明 `variables:`（支持 `kind: color | number | boolean | select`，如 `accent_color`、`font_scale` (`S/M/L`)、`depth_enabled`），用户选中模板后即可在单行工具条实时改色/调字号/开关景深，渲染前引擎自动注入 `fill.vars`；
+   - 共享 SDK `./ac-template-sdk.js` 内置 `window.ACMotion` 原子动效套件（`springPop` / `blurIn` / `clipWipe` / `kineticSlam` / `staggerIndex` / `chunkCaption` / `safeBands` / `renderVignette` / `renderGrain` / `getVar`），以及面向 GSAP 模板的 `ACMotion.bindTimeline(tl)` 确定性暂停时间轴桥接（`motion_runtime: gsap`）。
+   - 支持 `.zip` 模板包标准互传：用户可在 AutoClip 桌面端模板栏直接点击「导入模板包」导入 `.zip`，或在已安装模板下点击「导出」分享给他人。
 
 ### 第 3 步：生成骨架并编写模板
 

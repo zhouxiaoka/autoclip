@@ -72,6 +72,12 @@
 
   window.renderFrame = function (tSeconds) {
     var t = Number(tSeconds) || 0;
+    var vars = state.vars || {};
+    if (vars.depth_enabled === false) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'CARD_B_OFF';
+    }
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#10B981';
     var lines = (state.title_lines || []).filter(Boolean);
     var metric = lines[0] || '+240% ARR';
     var sub = lines[1] || '90-Day Organic Growth';
@@ -93,13 +99,13 @@
     // Positioned at y=360 (top 75% crystal clear above head, lower 25% naturally tucked behind hair/shoulders!)
     var svg = '<defs><filter id="csh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#000" flood-opacity="0.58"/></filter></defs>'
       + '<g transform="translate(540,' + (365 + dy).toFixed(1) + ') scale(' + sc.toFixed(3) + ')" opacity="' + vis.toFixed(2) + '" filter="url(#csh)">'
-      + '<rect x="-430" y="-130" width="860" height="260" rx="28" fill="#0B0F19" fill-opacity="0.92" stroke="rgba(52,211,153,0.45)" stroke-width="2.5"/>'
-      + '<circle cx="-376" cy="-76" r="8" fill="#10B981"/>'
-      + '<text x="-356" y="-68" font-family="' + SANS + '" font-size="24" font-weight="700" letter-spacing="2.5" fill="#6EE7B7">' + esc(kicker) + '</text>'
+      + '<rect x="-430" y="-130" width="860" height="260" rx="28" fill="#0B0F19" fill-opacity="0.92" stroke="' + accent + '" stroke-opacity="0.55" stroke-width="2.5"/>'
+      + '<circle cx="-376" cy="-76" r="8" fill="' + accent + '"/>'
+      + '<text x="-356" y="-68" font-family="' + SANS + '" font-size="24" font-weight="700" letter-spacing="2.5" fill="' + accent + '">' + esc(kicker) + '</text>'
       + '<text x="-382" y="2" font-family="' + SANS + '" font-size="68" font-weight="700" letter-spacing="-1.5" fill="#FFFFFF">' + esc(metric) + '</text>'
       + '<text x="-382" y="48" font-family="' + SANS + '" font-size="26" font-weight="500" fill="#94A3B8">' + esc(sub) + '</text>'
-      + '<polyline points="90,56 155,34 215,44 285,-12 375,-68" fill="none" stroke="#10B981" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="320" stroke-dashoffset="' + dashOff + '"/>'
-      + '<circle cx="375" cy="-68" r="9" fill="#34D399" opacity="' + (lineP > 0.9 ? '1' : '0') + '"/>'
+      + '<polyline points="90,56 155,34 215,44 285,-12 375,-68" fill="none" stroke="' + accent + '" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="320" stroke-dashoffset="' + dashOff + '"/>'
+      + '<circle cx="375" cy="-68" r="9" fill="' + accent + '" opacity="' + (lineP > 0.9 ? '1' : '0') + '"/>'
       + '</g>';
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
     return 'CPB:' + Math.round(vis * 25) + ':' + Math.round(lineP * 25) + ':' + Math.round(dy);

@@ -76,15 +76,22 @@
       return 'ZEN_B_GAP';
     }
 
+    var vars = state.vars || {};
+    if (vars.depth_enabled === false) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'ZEN_B_OFF';
+    }
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#F5F0E6';
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.14 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
     var words = raw.split(/\s+/).filter(Boolean);
     var fIdx = pickFocalIndex(words);
     var hero = (words[fIdx] || words[0] || 'PATIENCE').replace(/[^A-Za-z0-9\-']/g, '').toUpperCase();
-    var sz = 195;
+    var sz = Math.round(195 * fScale);
     var w = measureW(hero, sz, 400, SERIF);
     if (w > 960) sz = Math.max(110, Math.floor((sz * 960) / w));
     var dy = (1 - inP) * 28 - (1 - outP) * 18;
     var svg = '<g transform="translate(540,' + (520 + dy).toFixed(1) + ')" opacity="' + (0.94 * op).toFixed(2) + '">'
-      + '<text x="0" y="0" text-anchor="middle" font-family="' + SERIF + '" font-size="' + sz + '" font-weight="400" letter-spacing="2" fill="#F5F0E6">' + esc(hero) + '</text></g>';
+      + '<text x="0" y="0" text-anchor="middle" font-family="' + SERIF + '" font-size="' + sz + '" font-weight="400" letter-spacing="2" fill="' + accent + '">' + esc(hero) + '</text></g>';
     root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">' + svg + '</svg>';
     return 'ZEN_B:' + hero + ':' + Math.round(op * 25) + ':' + Math.round(dy);
   };

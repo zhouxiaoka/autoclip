@@ -102,30 +102,33 @@
     // Subtle animated trend sparkline progress
     var dashOff = Math.round(160 * (1 - countP));
 
+    var vars = state.vars || {};
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#22C55E';
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+
     svg += '<g transform="translate(540,256) scale(' + cardSc.toFixed(3) + ')" opacity="' + easeOutCubic(t / 0.2).toFixed(2) + '" filter="url(#sh)">'
       + '<rect x="-410" y="-88" width="820" height="176" rx="28" fill="#101218" fill-opacity="0.82" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>'
-      // Red heart + green pulse dot
-      + '<circle cx="-364" cy="-42" r="7" fill="#22C55E"/>'
+      + '<circle cx="-364" cy="-42" r="7" fill="' + accent + '"/>'
       + '<text x="-346" y="-35" font-family="' + SANS + '" font-size="22" font-weight="600" letter-spacing="2.2" fill="#A1A1AA">' + esc(kicker.toUpperCase()) + '</text>'
       + '<text x="-368" y="24" font-family="' + SANS + '" font-size="52" font-weight="700" letter-spacing="-1" fill="#FFFFFF">' + esc(headline) + '</text>'
       + '<text x="-368" y="62" font-family="' + SANS + '" font-size="24" font-weight="500" fill="#9CA3AF">' + esc(subline) + '</text>'
-      // Animated green sparkline on right
-      + '<polyline points="190,42 232,26 274,34 316,2 368,-34" fill="none" stroke="#22C55E" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="160" stroke-dashoffset="' + dashOff + '"/>'
-      + '<circle cx="368" cy="-34" r="7" fill="#22C55E" opacity="' + (countP > 0.9 ? '1' : '0') + '"/>'
+      + '<polyline points="190,42 232,26 274,34 316,2 368,-34" fill="none" stroke="' + accent + '" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="160" stroke-dashoffset="' + dashOff + '"/>'
+      + '<circle cx="368" cy="-34" r="7" fill="' + accent + '" opacity="' + (countP > 0.9 ? '1' : '0') + '"/>'
       + '</g>';
 
-    // Lower face-safe CRISP WHITE WITH BLACK OUTLINE subtitles (User Feedback #4!)
+    // Lower face-safe CRISP WHITE WITH BLACK OUTLINE subtitles
     var capD = 'CARD:' + Math.round(countP * 30);
     if (raw) {
       var mStart = (moment && (moment.t0 != null ? moment.t0 : moment.start)) || 0;
       var mAge = Math.max(0, t - mStart);
       var sp = 0.88 + 0.12 * spring(mAge, 0.22);
-      var lines = wrapLines(raw, 880, 62, 700, SANS, 2);
+      var csz = Math.round(62 * fScale);
+      var lines = wrapLines(raw, 880, csz, 700, SANS, 2);
       var y0 = lines.length === 1 ? 1420 : 1385;
       svg += '<g transform="translate(540,' + y0 + ') scale(' + sp.toFixed(3) + ')">';
       for (var i = 0; i < lines.length; i++) {
-        var dy = i * 76;
-        svg += '<text x="0" y="' + dy + '" text-anchor="middle" font-family="' + SANS + '" font-size="62" font-weight="700" letter-spacing="-0.8" fill="#FFFFFF" stroke="#000000" stroke-width="11" paint-order="stroke" stroke-linejoin="round">' + esc(lines[i]) + '</text>';
+        var dy = i * Math.round(76 * fScale);
+        svg += '<text x="0" y="' + dy + '" text-anchor="middle" font-family="' + SANS + '" font-size="' + csz + '" font-weight="700" letter-spacing="-0.8" fill="#FFFFFF" stroke="#000000" stroke-width="11" paint-order="stroke" stroke-linejoin="round">' + esc(lines[i]) + '</text>';
       }
       svg += '</g>';
       capD += '|' + raw + '@' + Math.round(sp * 30);

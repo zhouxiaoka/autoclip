@@ -53,7 +53,11 @@
       headDigest = titleText + '@' + hookStep;
     }
 
-    // Minimal crisp white pill caption in lower-third safe zone (never covers face/hands)
+    var vars = state.vars || {};
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#FFFFFF';
+    var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+
+    // Minimal crisp pill caption in lower-third safe zone (never covers face/hands)
     var capDigest = '';
     if (moment && moment.zh && moment.zh.length) {
       var parts = [];
@@ -62,7 +66,7 @@
       }
       var raw = parts.join(lang === 'en' ? ' ' : '').trim();
       if (raw) {
-        var csz = 42;
+        var csz = Math.round(42 * fScale);
         var cw = measureW(raw, csz, 700);
         if (cw > 820) {
           csz = Math.max(28, Math.floor((csz * 820) / cw));
@@ -73,7 +77,7 @@
         var bx = Math.round(540 - boxW / 2);
         var by = 1420;
         svg += '<g filter="url(#pillSh)">'
-          + '<rect x="' + bx + '" y="' + by + '" width="' + boxW + '" height="' + boxH + '" rx="14" fill="#FFFFFF" fill-opacity="0.96"/>'
+          + '<rect x="' + bx + '" y="' + by + '" width="' + boxW + '" height="' + boxH + '" rx="14" fill="' + accent + '" fill-opacity="0.96"/>'
           + '<text x="540" y="' + (by + Math.round(boxH / 2 + csz * 0.34)) + '" text-anchor="middle" font-size="' + csz + '" font-weight="700" fill="#141418">' + esc(raw) + '</text>'
           + '</g>';
         capDigest = raw;

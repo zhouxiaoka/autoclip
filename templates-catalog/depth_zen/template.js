@@ -73,17 +73,20 @@
       var post = words.slice(fIdx + 1).join(' ');
       var p1 = easeOutQuint(mAge / 0.28);
       var p2 = easeOutQuint(Math.max(0, mAge - 0.10) / 0.30);
+      var vars = state.vars || {};
+      var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#F5F0E6';
+      var fScale = ({ S: 0.86, M: 1.0, L: 1.15 })[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
 
       if (pre) {
-        svg += '<text x="540" y="1325" text-anchor="middle" font-family="' + SANS + '" font-size="44" font-weight="600" fill="#FFFFFF" opacity="' + p1.toFixed(2) + '" filter="url(#sh)">' + esc(pre) + '</text>';
+        svg += '<text x="540" y="1325" text-anchor="middle" font-family="' + SANS + '" font-size="' + Math.round(44 * fScale) + '" font-weight="600" fill="#FFFFFF" opacity="' + p1.toFixed(2) + '" filter="url(#sh)">' + esc(pre) + '</text>';
       }
-      var fsz = 132;
+      var fsz = Math.round(132 * fScale);
       var fw = measureW(focal, fsz, 400, SERIF_I, true);
       if (fw > 880) fsz = Math.max(82, Math.floor((fsz * 880) / fw));
       svg += '<g transform="translate(540,' + (1438 + (1 - p2) * 16).toFixed(1) + ')" opacity="' + p2.toFixed(2) + '" filter="url(#sh)">'
-        + '<text x="0" y="0" text-anchor="middle" font-family="' + SERIF_I + '" font-size="' + fsz + '" font-style="italic" font-weight="400" fill="#FFFFFF">' + esc(focal) + '</text></g>';
+        + '<text x="0" y="0" text-anchor="middle" font-family="' + SERIF_I + '" font-size="' + fsz + '" font-style="italic" font-weight="400" fill="' + accent + '">' + esc(focal) + '</text></g>';
       if (post) {
-        svg += '<text x="540" y="1508" text-anchor="middle" font-family="' + SANS + '" font-size="38" font-weight="500" fill="#F4F4F5" opacity="' + p2.toFixed(2) + '" filter="url(#sh)">' + esc(post) + '</text>';
+        svg += '<text x="540" y="1508" text-anchor="middle" font-family="' + SANS + '" font-size="' + Math.round(38 * fScale) + '" font-weight="500" fill="#F4F4F5" opacity="' + p2.toFixed(2) + '" filter="url(#sh)">' + esc(post) + '</text>';
       }
       capD = 'ZF:' + raw + '@' + Math.round(p2 * 20);
     }
