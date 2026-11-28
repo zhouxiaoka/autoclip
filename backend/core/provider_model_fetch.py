@@ -369,10 +369,36 @@ def _is_models_page(payload: Any, protocol: str) -> bool:
     return isinstance(payload.get("models"), list)
 
 
+def _should_retry_direct_without_proxy(exc: BaseException, trust_env: bool) -> bool:
+    """When a stale/broken system proxy blocks a reachable host (e.g. api.deepseek.com on Windows),
+    retry once with trust_env=False before reporting a connection failure."""
+    if not trust_env:
+        return False
+    import httpx
+    if isinstance(exc, httpx.ProxyError):
+        return True
+    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+        try:
+            import urllib.request
+            return bool(urllib.request.getproxies())
+        except Exception:  # noqa: BLE001
+            return False
+    return False
+
+
 def _default_http_get(url: str, *, headers: Mapping[str, str], timeout: float, trust_env: bool) -> Any:
     import httpx
-    with httpx.Client(timeout=timeout, trust_env=trust_env, follow_redirects=False) as client:
-        return client.get(url, headers=dict(headers))
+    try:
+        with httpx.Client(timeout=timeout, trust_env=trust_env, follow_redirects=False) as client:
+            return client.get(url, headers=dict(headers))
+    except httpx.RequestError as first_exc:
+        if _should_retry_direct_without_proxy(first_exc, trust_env):
+            try:
+                with httpx.Client(timeout=timeout, trust_env=False, follow_redirects=False) as client:
+                    return client.get(url, headers=dict(headers))
+            except httpx.RequestError:
+                raise first_exc
+        raise
 
 
 def _response_text(response: Any) -> str:

@@ -15,7 +15,7 @@ from backend.core.failure_codes import sentence
 LOCK_TIMEOUT_CODE = 'store_lock_timeout'
 # what the user sees. A local busy store, never phrased as a provider/model timeout.
 LOCK_TIMEOUT_MESSAGE = sentence('store_lock_timeout')
-DEFAULT_TIMEOUT = 10.0
+DEFAULT_TIMEOUT = 25.0
 _POLL = 0.05
 logger = logging.getLogger(__name__)
 
@@ -63,13 +63,21 @@ def _unlock(handle) -> None:
 def acquire(path: Path, timeout: float = DEFAULT_TIMEOUT):
     """Open ``path`` and lock its first byte; returns the handle (pass it to ``release``)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(path, 'a+b')
+    deadline = time.monotonic() + max(0.0, timeout)
+    handle = None
+    while handle is None:
+        try:
+            handle = open(path, 'a+b')
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                logger.warning('Exclusive lock open denied in time (%s)', LOCK_TIMEOUT_CODE)
+                raise LockTimeout() from None
+            time.sleep(_POLL)
     try:
         handle.seek(0, os.SEEK_END)
         if handle.tell() == 0:
             handle.write(b'\0')
             handle.flush()
-        deadline = time.monotonic() + max(0.0, timeout)
         while not _try_lock(handle):
             if time.monotonic() >= deadline:
                 logger.warning('Exclusive lock not acquired in time (%s)', LOCK_TIMEOUT_CODE)

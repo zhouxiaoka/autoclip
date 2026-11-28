@@ -24,7 +24,10 @@ SCHEMA = "autoclip.sponsor-promo/v1"
 SCHEMA_V2 = "autoclip.sponsor-promo/v2"
 SCHEMAS = frozenset({SCHEMA, SCHEMA_V2})
 STATUSES = frozenset({"healthy", "fault", "out_of_service"})
-LOCALES = frozenset({"zh", "en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"})
+LOCALES = frozenset({
+    "zh", "en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de",
+    "it", "pl", "th", "nl", "uk", "hi", "ar",
+})
 PAYLOAD_KEYS = frozenset({
     "schema", "sequence", "issued_at", "expires_at", "min_app", "max_app",
     "rollback_of", "sponsors",
@@ -32,17 +35,18 @@ PAYLOAD_KEYS = frozenset({
 PAYLOAD_KEYS_V2 = PAYLOAD_KEYS | frozenset({"providers"})
 SPONSOR_KEYS = frozenset({
     "id", "order", "new_user_default", "status", "notices",
-    "register_url", "register_urls", "locales",
+    "register_url", "register_urls", "locales", "badge", "first_run",
 })
 DYNAMIC_PROVIDER_KEYS = frozenset({
     "id", "name", "base_url", "register_url", "docs_url",
-    "placeholder", "capabilities", "hint", "offer", "candidates", "icon_url", "group",
+    "placeholder", "capabilities", "hint", "offer", "candidates", "icon_url", "group", "locales",
 })
 DYNAMIC_CAPABILITIES = frozenset({"language", "vision", "image", "video", "asr"})
 DYNAMIC_CANDIDATE_ROLES = frozenset({"analysis", "vision", "asr", "image"})
 DYNAMIC_GROUPS = frozenset({"popular", "recommended"})
 MAX_DYNAMIC_PROVIDERS = 16
 _DYNAMIC_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
+_LOCALE_CODE_RE = re.compile(r"^[a-z]{2,3}$")
 _RESERVED_DYNAMIC_IDS = frozenset({"other", "compatible", "custom", "local", "default", "system"})
 BUNDLED_CHOICES = ("apimart", "other")
 BUNDLED_DEFAULT = "apimart"
@@ -223,18 +227,42 @@ def _clean_text(value: Any, *, max_len: int) -> Optional[str]:
     return text
 
 
+def _valid_locale_code(value: Any) -> bool:
+    return isinstance(value, str) and bool(_LOCALE_CODE_RE.match(value))
+
+
+def _parse_locale_list(raw: Any) -> Optional[tuple[list[str], list[str]]]:
+    """Validate a non-empty list of unique ISO locale codes; return (all_valid, known_subset)."""
+    if not isinstance(raw, list) or not raw:
+        return None
+    seen_locales: set[str] = set()
+    all_valid: list[str] = []
+    known: list[str] = []
+    for entry in raw:
+        if not _valid_locale_code(entry) or entry in seen_locales:
+            return None
+        seen_locales.add(entry)
+        all_valid.append(entry)
+        if entry in LOCALES:
+            known.append(entry)
+    return all_valid, known
+
+
 def _localized_text(raw: Any, *, max_len: int, require_en: bool = False) -> Optional[dict[str, str]]:
     if isinstance(raw, str):
         cleaned = _clean_text(raw, max_len=max_len)
         return {"en": cleaned} if cleaned is not None else None
-    if not isinstance(raw, dict) or not raw or set(raw) - LOCALES:
+    if not isinstance(raw, dict) or not raw:
         return None
     out: dict[str, str] = {}
     for locale, text in raw.items():
+        if not _valid_locale_code(locale):
+            return None
         cleaned = _clean_text(text, max_len=max_len)
         if cleaned is None:
             return None
-        out[locale] = cleaned
+        if locale in LOCALES:
+            out[locale] = cleaned
     if require_en and "en" not in out:
         return None
     return out
@@ -314,6 +342,12 @@ def _providers(rows: Any) -> Optional[list[dict[str, Any]]]:
                         return None
                     clean_models.append(clean_model)
                 candidates[role] = clean_models
+        provider_locales: Optional[list[str]] = None
+        if "locales" in row and row["locales"] is not None:
+            parsed_locales = _parse_locale_list(row["locales"])
+            if parsed_locales is None:
+                return None
+            provider_locales = parsed_locales[1]
         seen.add(pid)
         item: dict[str, Any] = {
             "id": pid,
@@ -333,6 +367,8 @@ def _providers(rows: Any) -> Optional[list[dict[str, Any]]]:
             item["icon_url"] = icon_url
         if candidates:
             item["candidates"] = candidates
+        if provider_locales is not None:
+            item["locales"] = provider_locales
         cleaned.append(item)
     return cleaned
 
@@ -432,47 +468,68 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
             return None
         if row.get("new_user_default") not in (None, True, False):
             return None
+        if row.get("first_run") not in (None, True, False):
+            return None
         raw_locales = row.get("locales")
         locales: Optional[list[str]] = None
+        all_target_locales: Optional[list[str]] = None
         if raw_locales is not None:
-            if not isinstance(raw_locales, list) or not raw_locales:
+            parsed_locales = _parse_locale_list(raw_locales)
+            if parsed_locales is None:
                 return None
-            seen_locales: set[str] = set()
-            locales = []
-            for entry in raw_locales:
-                if not isinstance(entry, str) or entry not in LOCALES or entry in seen_locales:
-                    return None
-                seen_locales.add(entry)
-                locales.append(entry)
+            all_target_locales, locales = parsed_locales
         notices = row.get("notices", {})
-        if not isinstance(notices, dict) or set(notices) - LOCALES:
+        if not isinstance(notices, dict):
             return None
         text = {}
         for locale, notice in notices.items():
+            if not _valid_locale_code(locale):
+                return None
             cleaned_notice = _notice(notice)
             if cleaned_notice is None:
                 return None
-            text[locale] = cleaned_notice
+            if locale in LOCALES:
+                text[locale] = cleaned_notice
         register_url = row.get("register_url")
         if register_url is not None and (not isinstance(register_url, str) or not _register_url(sponsor_id, register_url, hosts)):
             return None
         raw_register_urls = row.get("register_urls")
         localized_urls: dict[str, str] = {}
         if raw_register_urls is not None:
-            if not isinstance(raw_register_urls, dict) or not raw_register_urls or set(raw_register_urls) - LOCALES:
+            if not isinstance(raw_register_urls, dict) or not raw_register_urls:
                 return None
             for locale, url in raw_register_urls.items():
-                if not isinstance(url, str) or not _register_url(sponsor_id, url, hosts):
+                if not _valid_locale_code(locale) or not isinstance(url, str) or not _register_url(sponsor_id, url, hosts):
                     return None
-                localized_urls[locale] = url
+                if locale in LOCALES:
+                    localized_urls[locale] = url
+        raw_badge = row.get("badge")
+        badge: Optional[Any] = None
+        if "badge" in row and raw_badge is not None:
+            if raw_badge == "":
+                badge = ""
+            else:
+                parsed_badge = _localized_text(raw_badge, max_len=48, require_en=False)
+                if parsed_badge is None:
+                    return None
+                if parsed_badge:
+                    badge = parsed_badge
         if row.get("new_user_default") is True:
             if sponsor_id not in hosts:
                 return None
-            target_locales = locales if locales is not None else LOCALES
-            for locale in target_locales:
-                defaults_by_locale[locale] = defaults_by_locale.get(locale, 0) + 1
-                if defaults_by_locale[locale] > 1:
+            if all_target_locales is None:
+                if defaults_by_locale:
                     return None
+                defaults_by_locale["*"] = 1
+                for locale in LOCALES:
+                    defaults_by_locale[locale] = 1
+            else:
+                if defaults_by_locale.get("*"):
+                    return None
+                for locale in all_target_locales:
+                    defaults_by_locale[locale] = defaults_by_locale.get(locale, 0) + 1
+                    if defaults_by_locale[locale] > 1:
+                        return None
         seen.add(sponsor_id)
         orders.add(order)
         item: dict[str, Any] = {
@@ -488,6 +545,10 @@ def _sponsors(rows: list, hosts: Mapping[str, str], allowed: set[str]) -> Option
             item["register_urls"] = localized_urls
         if locales is not None:
             item["locales"] = locales
+        if badge is not None:
+            item["badge"] = badge
+        if row.get("first_run") is False:
+            item["first_run"] = False
         cleaned.append(item)
     if len(orders) != len(cleaned):
         return None
@@ -518,7 +579,9 @@ def _resolve_register_url(row: Mapping[str, Any], locale_key: Optional[str]) -> 
 def _locale_slice(visible: list[dict[str, Any]], locale_key: Optional[str]) -> dict[str, Any]:
     matched = [
         row for row in visible
-        if not row.get("locales") or locale_key is None or locale_key in row["locales"]
+        if row.get("locales") is None
+        or (locale_key is None and bool(row["locales"]))
+        or (locale_key is not None and locale_key in row["locales"])
     ]
     choices = [row["id"] for row in matched] + ["other"]
     marked = next((row["id"] for row in matched if row.get("new_user_default")), None)
@@ -530,11 +593,21 @@ def _locale_slice(visible: list[dict[str, Any]], locale_key: Optional[str]) -> d
         resolved = _resolve_register_url(row, locale_key)
         if resolved:
             register_urls[row["id"]] = resolved
-    return {
+    out: dict[str, Any] = {
         "choices": choices,
         "default": default,
         "register_urls": register_urls,
     }
+    if any(row.get("first_run") is False for row in visible):
+        fr_matched = [row for row in matched if row.get("first_run") is not False]
+        fr_choices = [row["id"] for row in fr_matched] + ["other"]
+        fr_marked = next((row["id"] for row in fr_matched if row.get("new_user_default")), None)
+        fr_default = fr_marked or (fr_choices[0] if fr_choices else "other")
+        if fr_default not in fr_choices:
+            fr_default = "other"
+        out["first_run_choices"] = fr_choices
+        out["first_run_default"] = fr_default
+    return out
 
 
 def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, locale: Optional[str] = None) -> dict:
@@ -555,9 +628,15 @@ def promotion_view(payload: Mapping[str, Any], *, enabled: bool, source: str, lo
         "register_urls": active["register_urls"],
         "sequence": payload.get("sequence"),
     }
+    if "first_run_choices" in active:
+        view["first_run_choices"] = active["first_run_choices"]
+        view["first_run_default"] = active["first_run_default"]
     if dynamic_providers:
         view["providers"] = dynamic_providers
-    if any(row.get("locales") or row.get("register_urls") for row in rows):
+    badges = {row["id"]: row["badge"] for row in rows if "badge" in row}
+    if badges:
+        view["badges"] = badges
+    if any(row.get("locales") is not None or row.get("register_urls") for row in rows):
         view["by_locale"] = {
             loc: _locale_slice(visible, loc)
             for loc in sorted(LOCALES)

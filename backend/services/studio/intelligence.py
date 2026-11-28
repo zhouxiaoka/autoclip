@@ -488,18 +488,26 @@ def sample(video, times, folder, width=640):
             raise UserFacingError('画面采样时间必须在原素材范围内')
         timestamp = min(timestamp, last_seek)
         frame = folder / f'{index}.jpg'
-        # VFR or rounded metadata may still put a tail seek past the final frame.
-        # Retry that one frame once earlier; never send a partial/stale frame set.
-        seeks = [timestamp]
+        # VFR, OBS recordings, or sparse keyframes can make fast input seek (-ss before -i)
+        # output an empty frame. Keep recovery bounded to 2 attempts: fast seek first, then
+        # accurate seek (-ss after -i) — stepping back once when near EOF.
         if timestamp >= last_seek - retry_step and timestamp > 0:
-            seeks.append(max(0, timestamp - retry_step))
-        for seek in seeks:
+            attempts: list[tuple[float, bool]] = [(timestamp, True), (max(0, timestamp - retry_step), False)]
+        else:
+            attempts = [(timestamp, True), (timestamp, False)]
+        for seek, fast_seek in attempts:
             try:
                 frame.unlink(missing_ok=True)
-                subprocess.run([get_ffmpeg_path(), '-v', 'error', '-threads', '1', '-ss', str(seek),
-                    '-i', str(video), '-frames:v', '1', '-vf', f'scale={width}:-2',
-                    '-threads', '1', '-filter_threads', '1', '-y', str(frame)],
-                    check=True, capture_output=True, timeout=30)
+                cmd = (
+                    [get_ffmpeg_path(), '-v', 'error', '-threads', '1', '-ss', str(seek),
+                     '-i', str(video), '-frames:v', '1', '-vf', f'scale={width}:-2',
+                     '-threads', '1', '-filter_threads', '1', '-y', str(frame)]
+                    if fast_seek else
+                    [get_ffmpeg_path(), '-v', 'error', '-threads', '1', '-i', str(video),
+                     '-ss', str(seek), '-frames:v', '1', '-vf', f'scale={width}:-2',
+                     '-threads', '1', '-filter_threads', '1', '-y', str(frame)]
+                )
+                subprocess.run(cmd, check=True, capture_output=True, timeout=30)
                 image = frame.read_bytes()
                 if not image:
                     raise FileNotFoundError('Empty sampled frame')

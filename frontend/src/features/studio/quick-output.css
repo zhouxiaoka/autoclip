@@ -113,6 +113,158 @@
   gap: 2px;
 }
 
+.studio-card-dislike-btn {
+  color: var(--ac-muted);
+  flex: 0 0 32px;
+  min-width: 32px;
+  padding: 0;
+}
+
+.studio-card-dislike-btn:hover,
+.studio-card-dislike-btn.is-active {
+  background: color-mix(in srgb, var(--ac-danger, #dc2626) 10%, transparent);
+  color: var(--ac-danger, #dc2626);
+}
+
+.studio-card-dislike-btn.is-sent {
+  color: var(--ac-sub);
+}
+
+.studio-output-feedback-panel {
+  background: var(--ac-bg);
+  border: 1px solid var(--ac-line);
+  border-radius: 10px;
+  box-sizing: border-box;
+  margin-top: 12px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 12px 13px;
+}
+
+.studio-output-feedback-panel *,
+.studio-output-feedback-done,
+.studio-output-feedback-done * {
+  box-sizing: border-box;
+}
+
+.studio-output-feedback-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.studio-output-feedback-title {
+  color: var(--ac-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.studio-output-feedback-close {
+  background: transparent;
+  border: 0;
+  color: var(--ac-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.studio-output-feedback-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.studio-output-feedback-pill {
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  border-radius: 14px;
+  color: var(--ac-sub);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.35;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 4px 10px;
+  text-align: start;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  white-space: normal;
+}
+
+.studio-output-feedback-pill.is-on {
+  background: var(--ac-ink);
+  border-color: var(--ac-ink);
+  color: var(--ac-card);
+}
+
+.studio-output-feedback-input {
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  border-radius: 7px;
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: 12px;
+  height: 32px;
+  margin-bottom: 9px;
+  min-width: 0;
+  padding: 0 10px;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.studio-output-feedback-foot {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  justify-content: space-between;
+}
+
+.studio-output-feedback-foot .ac-btn {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.studio-output-feedback-privacy {
+  color: var(--ac-muted);
+  flex: 1 1 120px;
+  font-size: 11px;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.studio-output-feedback-done {
+  align-items: flex-start;
+  background: color-mix(in srgb, #16a34a 9%, var(--ac-card));
+  border: 1px solid color-mix(in srgb, #16a34a 24%, var(--ac-line));
+  border-radius: 10px;
+  color: var(--ac-ink);
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1.4;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.studio-output-feedback-done > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .studio-post {
   border-top: 1px solid var(--ac-line);
   margin-top: 12px;
@@ -252,7 +404,7 @@
 }
 
 .studio-output-card .ac-card-actions--with-edit {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px 32px;
 }
 
 .studio-output-card .ac-card-actions > * {
@@ -260,20 +412,31 @@
   border-radius: 8px;
   font-size: 12px;
   height: auto;
-  line-height: 1.4;
+  line-height: 1.35;
   min-height: 34px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 7px 6px;
   text-align: center;
+  word-break: break-word;
+}
+
+.studio-output-card .ac-card-actions > .studio-card-edit-btn,
+.studio-output-card .ac-card-actions > .studio-card-dislike-btn {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 32px;
+  padding: 0;
+  width: 32px;
 }
 
 .studio-output-card .ac-card-actions > .studio-card-edit-btn {
-  align-items: center;
   color: var(--ac-sub);
-  display: inline-flex;
-  justify-content: center;
-  min-width: 34px;
-  padding: 0;
-  width: 34px;
+}
+
+.studio-output-card .ac-card-actions > .studio-card-dislike-btn {
+  border-color: transparent;
 }
 
 .studio-output-card .ac-card-actions > .studio-card-edit-btn:hover {

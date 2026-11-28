@@ -40,7 +40,8 @@ function variantAspectLabel(variant: OutputVariant, draft?: Draft, job?: RenderJ
 export default function OutputVariantCard({ projectId, variant, draft, job, onRetry, onProduce, onViewed, recommendation, billable }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void; onProduce: () => void; onViewed?: () => void; recommendation?: { recommended_template?: VariantProperties['recommended_template']; accepted_recommendation?: boolean }; billable?: boolean }) {
   const navigate = useNavigate()
   const post = variant.post
-  const [asking, setAsking] = useState(false)
+  const [feedbackMode, setFeedbackMode] = useState<'post_download' | 'card_dislike' | null>(null)
+  const [feedbackSent, setFeedbackSent] = useState(false)
   const playedRef = useRef(false)
   const packaging = draft?.packaging
   const analytics = outputAnalytics(variant, draft, job, recommendation)
@@ -62,7 +63,10 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
     onViewed?.()
     if (!shouldAskRating(projectId)) return
     markRatingAsked(projectId)
-    setAsking(true)
+    setFeedbackMode('post_download')
+  }
+  const toggleDislike = () => {
+    setFeedbackMode(prev => (prev === 'card_dislike' ? null : 'card_dislike'))
   }
   return <article className="ac-card studio-output-card" aria-label={title}>
     <div className="studio-variant-thumb" title={productionDetails}>{completed && variant.render_job_id ? <video className="studio-variant-video" aria-label={t('播放成片')} onPlay={() => { if (!playedRef.current) { playedRef.current = true; trackOutputPlayed(projectId, analytics) } onViewed?.() }} controls preload="metadata" poster={variant.cover ? studioApi.variantCover(projectId, variant.id) : exportPoster(projectId, job)} src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}{!completed && <span className="ac-tag studio-output-progress" role="status">{failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : variant.status === 'preparing' ? t('正在准备取景与包装') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}</span>}</div>
@@ -79,10 +83,11 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
           ? <Btn size="sm" onClick={() => navigate(studioPublishPreviewPath(projectId, job.draft_id, job.job_id, variant.id))}>{t('发布')}</Btn>
           : draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(variant.id)}`)}>{t('预览与修改')}</Btn>}
         {hasEdit && <Btn size="sm" className="studio-card-edit-btn" title={t('编辑')} aria-label={`${t('编辑')} · ${title}`} onClick={() => navigate(`/project/${projectId}/studio/${draft.id}?variant=${encodeURIComponent(variant.id)}&export=${encodeURIComponent(variant.render_job_id!)}`)}><Icon.Edit size={15} /></Btn>}
+        {completed && variant.render_job_id && <Btn size="sm" variant="text" className={`studio-card-dislike-btn${feedbackMode === 'card_dislike' ? ' is-active' : ''}${feedbackSent ? ' is-sent' : ''}`} title={t('效果不好？点此反馈')} aria-label={`${t('效果不好？点此反馈')} · ${title}`} aria-pressed={feedbackMode === 'card_dislike'} onClick={toggleDislike}><Icon.ThumbsDown size={15} /></Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {onDemand && <Btn variant="text" onClick={onProduce}>{t('生成这条')}</Btn>}
       </div></div>
-      {asking && <OutputFeedback projectId={projectId} variant={analytics} onDone={() => setAsking(false)}/>}
+      {feedbackMode && <OutputFeedback key={feedbackMode} projectId={projectId} variant={analytics} trigger={feedbackMode} onSubmitted={() => setFeedbackSent(true)} onDone={() => setFeedbackMode(null)}/>}
     </div>
   </article>
 }

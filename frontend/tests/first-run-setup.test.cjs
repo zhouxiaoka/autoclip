@@ -398,3 +398,33 @@ test('an unselected withdrawn recommendation leaves the first-run list and can r
     await mounted.close()
   }
 })
+
+test('first_run_choices hides settings-only sponsors from the first-run modal while keeping them promoted in settings', async () => {
+  const mounted = await mountFirstRun()
+  try {
+    await mounted.act(async () => {
+      mounted.state.writePromoSnapshot({
+        choices: ['apimart', 'cometapi', 'novita', 'other'],
+        defaultChoice: 'apimart',
+        firstRunChoices: ['apimart', 'other'],
+        firstRunDefault: 'apimart',
+        statuses: { apimart: 'healthy', cometapi: 'healthy', novita: 'healthy' },
+        registerUrls: {
+          apimart: 'https://go.apimart.ai/tw-autoclip',
+          cometapi: 'https://www.cometapi.com/?ref=kris',
+          novita: 'https://novita.ai/?ref=nzvindf',
+        },
+        source: 'cache',
+      })
+    })
+    const labels = [...mounted.host.querySelectorAll('[role="radio"]')].map(node => node.textContent)
+    assert.equal(labels.some(text => text.includes('APIMart')), true)
+    assert.equal(labels.some(text => text.includes('CometAPI')), false)
+    assert.equal(labels.some(text => text.includes('Novita')), false)
+    assert.equal(labels.some(text => text.includes('其他')), true)
+    assert.equal(mounted.state.promotionCurrentlyPromoted('cometapi'), true)
+    assert.equal(mounted.state.promotionRegisterUrl('cometapi', ''), 'https://www.cometapi.com/?ref=kris')
+  } finally {
+    await mounted.close()
+  }
+})

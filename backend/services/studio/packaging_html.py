@@ -239,8 +239,20 @@ def _editorial_scrim(width: int, height: int) -> str:
     return _scrim_filter(width, height, ScrimSpec(enabled=True))
 
 
-def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str, *, template: str = '', offset: float = 0.0, total: float = 0.0) -> tuple[str, str]:
-    """Grade the base, wash any declarative scrim, place the overlay, then any progress bar.
+def composite_tail(
+    base_label: str,
+    overlay_index: int,
+    width: int,
+    height: int,
+    grade: str,
+    *,
+    template: str = '',
+    offset: float = 0.0,
+    total: float = 0.0,
+    back_overlay_index: int | None = None,
+    matte_index: int | None = None,
+) -> tuple[str, str]:
+    """Grade the base, wash any declarative scrim, place overlays (with optional 3-layer subject matte), then any progress bar.
 
     Every blend is yuv420, the format of the graded picture and of the encode. ``format=auto``
     with a yuva444p layer made ffmpeg convert the looped scrim and the bar on every output frame;
@@ -251,14 +263,43 @@ def composite_tail(base_label: str, overlay_index: int, width: int, height: int,
     scrim_spec = template_registry.get(template).base.scrim if template_registry.is_html_template(template) else None
     scrim = _scrim_filter(width, height, scrim_spec) if scrim_spec else ''
     base = '[based]' if scrim else '[graded]'
-    graph = (
-        f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
-        f"{scrim}"
-        f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
-        # Repeat the last captured frame. shortest=1 would end the scene when the movie is shorter.
-        # A longer movie cannot extend the file: the encode command stops at the scene length.
-        f"{base}[ov]overlay=0:0:format=yuv420:eof_action=repeat[html]"
-    )
+    if matte_index is not None and back_overlay_index is not None:
+        # Full 4-layer depth sandwich: Base -> Back Depth Text -> Foreground Subject Cutout -> Front Captions
+        graph = (
+            f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
+            f"{scrim}"
+            f"{base}split=2[bg_l][fg_l];"
+            f"[{back_overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov_b];"
+            f"[bg_l][ov_b]overlay=0:0:format=yuv420:eof_action=repeat[with_back];"
+            f"[{matte_index}:v]scale={width}:{height}:flags=bilinear,format=gray[m_gray];"
+            f"[fg_l]format=yuva420p[fg_yuva];"
+            f"[fg_yuva][m_gray]alphamerge[fg_cut];"
+            f"[with_back][fg_cut]overlay=0:0:format=yuv420:eof_action=repeat[with_fg];"
+            f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
+            f"[with_fg][ov]overlay=0:0:format=yuv420:eof_action=repeat[html]"
+        )
+    elif matte_index is not None:
+        # 3-layer behind-subject only: Base -> Overlay -> Foreground Subject Cutout
+        graph = (
+            f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
+            f"{scrim}"
+            f"{base}split=2[bg_l][fg_l];"
+            f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
+            f"[bg_l][ov]overlay=0:0:format=yuv420:eof_action=repeat[with_back];"
+            f"[{matte_index}:v]scale={width}:{height}:flags=bilinear,format=gray[m_gray];"
+            f"[fg_l]format=yuva420p[fg_yuva];"
+            f"[fg_yuva][m_gray]alphamerge[fg_cut];"
+            f"[with_back][fg_cut]overlay=0:0:format=yuv420:eof_action=repeat[html]"
+        )
+    else:
+        graph = (
+            f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
+            f"{scrim}"
+            f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva420p[ov];"
+            # Repeat the last captured frame. shortest=1 would end the scene when the movie is shorter.
+            # A longer movie cannot extend the file: the encode command stops at the scene length.
+            f"{base}[ov]overlay=0:0:format=yuv420:eof_action=repeat[html]"
+        )
     bar = _progress_bar(template, offset, total, width, height)
     if not bar:
         return graph, 'html'
@@ -278,7 +319,7 @@ def _template_fingerprint(template: str) -> str:
     except Exception:
         return ''
     h = hashlib.sha256()
-    for name in ('template.yaml', 'index.html', 'style.css', 'template.js'):
+    for name in ('template.yaml', 'index.html', 'back.html', 'style.css', 'template.js', 'back.js'):
         path = folder / name
         if path.is_file():
             h.update(name.encode())
@@ -288,7 +329,7 @@ def _template_fingerprint(template: str) -> str:
     return h.hexdigest()[:12]
 
 
-def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: int) -> Path:
+def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: int, entry: str = 'index.html') -> Path:
     """One file per template revision, painted fill and length. The name is a hash, not the caption.
 
     Length is part of the key. paint_fill drops the cover title, so two captions-off clips of
@@ -299,7 +340,8 @@ def overlay_cache_path(project_id: str, template: str, fill: dict, *, frames: in
     from backend.services.studio.store import directory
     blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     fp = _template_fingerprint(template)
-    digest = hashlib.sha256(f'{template}|{fp}|{int(frames)}|{blob}'.encode()).hexdigest()[:20]
+    entry_key = '' if entry == 'index.html' else f'|{entry}'
+    digest = hashlib.sha256(f'{template}{entry_key}|{fp}|{int(frames)}|{blob}'.encode()).hexdigest()[:20]
     folder = directory(project_id) / 'output' / 'studio' / 'overlays'
     folder.mkdir(parents=True, exist_ok=True)
     return folder / f'{digest}.mkv'
@@ -558,7 +600,7 @@ def _write_holds(frames: list[dict], folder: Path) -> list[tuple[Path, int]]:
 _capture_out_dir: contextvars.ContextVar[Path | None] = contextvars.ContextVar('ac_overlay_out_dir', default=None)
 
 
-async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: int) -> list[dict]:
+async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: int, *, entry: str = 'index.html') -> list[dict]:
     from playwright.async_api import async_playwright
 
     from backend.services.packaging_runtime import launch_kwargs
@@ -566,7 +608,7 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
 
     out_dir = _capture_out_dir.get()
     width, height = get(template).canvas.overlay_px
-    page_url = (resolve_dir(template) / 'index.html').as_uri()
+    page_url = (resolve_dir(template) / entry).as_uri()
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(**launch_kwargs())
         try:
@@ -614,13 +656,13 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
             await browser.close()
 
 
-async def _bounded_capture(template: str, fill: dict, frames: int, fps: int, capture):
+async def _bounded_capture(template: str, fill: dict, frames: int, fps: int, capture, *, entry: str = 'index.html'):
     if capture is not None:
         produced = capture(frames, fps)
         if asyncio.iscoroutine(produced):
             produced = await produced
         return produced
-    return await _playwright_frames(template, fill, frames, fps)
+    return await _playwright_frames(template, fill, frames, fps, entry=entry)
 
 
 def load_project_word_timing(project_id: str):
@@ -646,7 +688,7 @@ def load_project_transcript(project_id: str):
         return None
 
 
-def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None, word_timing=None, creator_pack_overrides: dict | None = None) -> OverlayJob:
+def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None, scenes=None, word_timing=None, creator_pack_overrides: dict | None = None, entry: str = 'index.html') -> OverlayJob:
     """Capture the overlay, or return a classic result. This does not raise.
 
     ``capture(frame_count, fps)`` is the test seam. Without it, Playwright runs
@@ -682,7 +724,11 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
         packaging,
         template,
     )
-    dest = overlay_cache_path(project_id, template, fill, frames=frames)
+    dest = (
+        overlay_cache_path(project_id, template, fill, frames=frames, entry=entry)
+        if entry != 'index.html'
+        else overlay_cache_path(project_id, template, fill, frames=frames)
+    )
     _enforce_overlay_cap(dest.parent)
     if _cached_overlay_fits(dest, frames, fps):
         return finish(OverlayJob(dest, template, False, 'none', 'none', 'completed', requested_template=template))
@@ -703,7 +749,9 @@ def prepare_overlay(project_id: str, template: str, packaging, duration: float, 
             token = _capture_out_dir.set(temp_dir)
             try:
                 produced = asyncio.run(asyncio.wait_for(
-                    _bounded_capture(template, fill, frames, fps, capture),
+                    _bounded_capture(template, fill, frames, fps, capture, entry=entry)
+                    if entry != 'index.html'
+                    else _bounded_capture(template, fill, frames, fps, capture),
                     timeout=remaining(),
                 ))
             finally:

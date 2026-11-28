@@ -249,7 +249,7 @@ test('catalog host helper never returns a full URL', () => {
 })
 
 test('every catalog name and hint used in the UI exists in all eight locales', () => {
-  const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
+  const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']
   const locales = Object.fromEntries(langs.map(lang => [
     lang,
     JSON.parse(fs.readFileSync(path.join(__dirname, '../src/i18n/locales', `${lang}.json`), 'utf8')),
@@ -342,4 +342,125 @@ test('unsavedConnectionIds flags added and modified connections until saved', ()
   }
   assert.deepEqual([...view.unsavedConnectionIds(withAdded, saved)], ['gw-2'])
   assert.equal(view.unsavedConnectionIds(withAdded, withAdded).size, 0)
+})
+
+test('out_of_service hides unconfigured built-in providers from catalog while preserving existing saved connections', () => {
+  const promoState = loadTs('sponsorPromoState.ts')
+  const scopedView = loadTs('providerCatalogView.ts', {
+    '../../i18n': { t: text => text },
+    './sponsorPromoState': promoState,
+  })
+  promoState.writePromoSnapshot({
+    choices: ['apimart', 'other'],
+    defaultChoice: 'apimart',
+    statuses: { apimart: 'healthy', api88: 'out_of_service', infistar: 'out_of_service' },
+    registerUrls: { apimart: 'https://go.apimart.ai/tw-autoclip' },
+    notices: {},
+    source: 'cache',
+  })
+  try {
+    const emptyVisible = scopedView.filterCatalog('', 'all', blank()).map(row => row.id)
+    assert.equal(emptyVisible.includes('api88'), false)
+    assert.equal(emptyVisible.includes('infistar'), false)
+    assert.equal(emptyVisible.includes('apimart'), true)
+    assert.equal(scopedView.filterCatalog('88API', 'all', blank()).length, 0)
+
+    const withSavedApi88 = {
+      ...blank(),
+      saved: true,
+      connections: [{
+        id: 'legacy-api88', name: '88API', provider: 'api88',
+        base_url: 'https://88api.ai/v1', api_key: '', has_key: true,
+        image_api: 'auto', image_base_url: '',
+      }],
+    }
+    const existingVisible = scopedView.filterCatalog('', 'all', withSavedApi88).map(row => row.id)
+    assert.equal(existingVisible.includes('api88'), true)
+    assert.equal(existingVisible.includes('infistar'), false)
+  } finally {
+    promoState.writePromoSnapshot(null)
+  }
+})
+
+test('dynamic provider locales hide region-mismatched dynamic providers unless already saved', () => {
+  const promoState = loadTs('sponsorPromoState.ts')
+  const promoMod = loadTs('sponsorPromo.ts', {
+    './sponsorPromoState': promoState,
+    './providers': { PROVIDERS: { apimart: { sponsor: { registerUrl: 'https://go.apimart.ai/demo' } } } },
+  })
+  const presetsMod = loadTs('providerPresets.ts', { './sponsorPromoState': promoState })
+  const scopedView = loadTs('providerCatalogView.ts', {
+    '../../i18n': { t: text => text },
+    './providerPresets': presetsMod,
+    './sponsorPromoState': promoState,
+  })
+  const applied = promoMod.applySponsorPromo({
+    choices: ['overseasgw', 'apimart', 'other'],
+    default: 'apimart',
+    statuses: { overseasgw: 'healthy', futuregw: 'healthy', apimart: 'healthy' },
+    register_urls: { overseasgw: 'https://overseasgw.example/?ref=1' },
+    providers: [
+      {
+        id: 'overseasgw',
+        name: { en: 'OverseasGW', it: 'OverseasGW IT', sv: 'OverseasGW SV' },
+        base_url: 'https://api.overseasgw.example/v1',
+        register_url: 'https://overseasgw.example/?ref=1',
+        docs_url: 'https://docs.overseasgw.example/',
+        capabilities: ['language'],
+        group: 'popular',
+        locales: ['en', 'it', 'sv'],
+      },
+      {
+        id: 'futuregw',
+        name: { en: 'FutureGW' },
+        base_url: 'https://api.futuregw.example/v1',
+        register_url: 'https://futuregw.example/?ref=1',
+        docs_url: 'https://docs.futuregw.example/',
+        capabilities: ['language'],
+        group: 'popular',
+        locales: ['sv'],
+      },
+    ],
+  })
+  assert.ok(applied)
+  assert.equal(JSON.stringify(applied.providers[0].locales), JSON.stringify(['en', 'it']))
+  assert.equal(JSON.stringify(applied.providers[1].locales), JSON.stringify([]))
+  promoState.writePromoSnapshot({
+    source: 'cache',
+    choices: applied.choices,
+    defaultChoice: applied.defaultChoice,
+    statuses: applied.statuses,
+    notices: applied.notices,
+    registerUrls: applied.registerUrls,
+    providers: applied.providers,
+  })
+  try {
+    promoState.setPromoLocale('zh-CN')
+    const zhIds = scopedView.filterCatalog('', 'all', blank()).map(row => row.id)
+    assert.equal(zhIds.includes('overseasgw'), false)
+    assert.equal(zhIds.includes('futuregw'), false)
+
+    promoState.setPromoLocale('it')
+    const itIds = scopedView.filterCatalog('', 'all', blank()).map(row => row.id)
+    assert.equal(itIds.includes('overseasgw'), true)
+    assert.equal(itIds.includes('futuregw'), false)
+
+    // Saved connection remains visible even under zh
+    promoState.setPromoLocale('zh-CN')
+    const withSaved = {
+      ...blank(),
+      saved: true,
+      connections: [{
+        id: 'conn-ov', name: 'OverseasGW', provider: 'compatible',
+        base_url: 'https://api.overseasgw.example/v1', api_key: '', has_key: true,
+        image_api: 'auto', image_base_url: '',
+      }],
+    }
+    const zhSavedIds = scopedView.filterCatalog('', 'all', withSaved).map(row => row.id)
+    assert.equal(zhSavedIds.includes('overseasgw'), true)
+    assert.equal(zhSavedIds.includes('futuregw'), false)
+  } finally {
+    promoState.setPromoLocale(null)
+    promoState.writePromoSnapshot(null)
+  }
 })

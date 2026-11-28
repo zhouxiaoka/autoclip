@@ -15,7 +15,9 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
+import subprocess
 import sys
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -532,6 +534,22 @@ def list_projects(limit: int = 50) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------- doctor ---
+def _ffmpeg_has_libass(ffmpeg_bin: str) -> bool:
+    """Return True when the ffmpeg binary has libass (subtitles/ass filter) compiled in."""
+    try:
+        proc = subprocess.run(
+            [ffmpeg_bin, "-hide_banner", "-filters"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        return bool(re.search(r"\b(?:subtitles|ass)\b", out))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def environment_report() -> Dict[str, Any]:
     """ffmpeg / whisper 运行时 / LLM 配置 / 数据目录一览，给 `autoclip doctor` 和 MCP 用。"""
     from backend.core.path_utils import get_data_directory
@@ -541,9 +559,26 @@ def environment_report() -> Dict[str, Any]:
     try:
         from backend.utils.ffmpeg_utils import get_ffmpeg_path
         ff = get_ffmpeg_path()
-        report["ffmpeg"] = {"ok": bool(ff and (Path(ff).exists() or shutil.which(ff))), "path": ff}
+        exists = bool(ff and (Path(ff).exists() or shutil.which(ff)))
+        if not exists:
+            report["ffmpeg"] = {"ok": False, "path": ff, "libass": False, "error": "未找到 ffmpeg"}
+        else:
+            has_libass = _ffmpeg_has_libass(ff)
+            if has_libass:
+                report["ffmpeg"] = {"ok": True, "path": ff, "libass": True}
+            else:
+                report["ffmpeg"] = {
+                    "ok": False,
+                    "path": ff,
+                    "libass": False,
+                    "error": (
+                        f"{ff} 缺少 libass（subtitles/ass 滤镜），无法烧录字幕。"
+                        "macOS 建议下载内置静态 FFmpeg 的 AutoClip 桌面版，或运行 "
+                        "brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-libass"
+                    ),
+                }
     except Exception as e:  # noqa: BLE001
-        report["ffmpeg"] = {"ok": False, "error": str(e)}
+        report["ffmpeg"] = {"ok": False, "libass": False, "error": str(e)}
     try:
         st = whisper_runtime.get_status()
         report["whisper"] = {"ok": st.get("status") == "installed", "status": st.get("status"), "models_dir": str(whisper_runtime.get_models_dir())}

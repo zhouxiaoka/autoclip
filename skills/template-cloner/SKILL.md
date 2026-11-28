@@ -43,7 +43,11 @@ python scripts/template_cloner.py extract-ref /path/to/shot1.png /path/to/shot2.
 4. **字幕排版与分页（`caption_layout`）**：字号（`font_px`）、左右留白（`inset_px`）、短屏分句（`grouped_screen`）还是逐句（`phrase` / `sentence`）、中英双语对齐方式（`synced` / `per_cue` / `sentence_screens`）。
 5. **关键词高亮与色彩系统（`style.css` + `template.js`）**：主字幕颜色、强调词高亮色（`seg.hl` / `seg.key`）、描边/阴影/胶囊底色、英文字幕层级。
 6. **辅助包装元素（`overlay.slots` & `fields.optional`）**：顶部 `kicker` 标签、讲者名片（`speakers`）、数字弹卡（`numbers`）、术语注释卡（`gloss`）。注意成片默认不烧入封面大标题（由 `paint_fill` 清空 `title_lines`）。
-7. **平台安全区（`overlay.safe_area`）**：小红书（`xiaohongshu`）、抖音（`douyin`）等，确保字幕和卡片不落入右侧互动按钮区与底部文案区。
+7. **平台安全区与避脸铁律（`overlay.safe_area`）**：小红书（`xiaohongshu`）、抖音（`douyin`）、TikTok（`tiktok`）等，确保口播字幕严格落入**避脸安全区**（`y: 1220..1520` 或头顶 `y: 160..320`），**严禁**在清晰人脸上直接盖大字；只有配合 FFmpeg 时间轴虚化（`base.grade: "gblur=sigma=14:enable='lt(t,1.35)'"`）或全屏纯色节奏插卡时，才允许短暂居中放巨幅标题。
+8. **3 层本地 ONNX 人像景深（`1.6.3+` 可选，「大字穿人像背后」）**：
+   - 在 `template.yaml` 中声明 `base.subject_layer: true`、`overlay.back_entry: back.html`、`meta.min_app_version: "1.6.3"`；
+   - `back.html` + `back.js` 渲染在人物头肩**背后**（建议放在发际线景深带 `y=505..535`，保证上部 75%~80% 清晰可读、底部被发丝自然遮挡），且必须**随每句口播动态进场 → 停留 → 淡出**，不要常驻死字；
+   - `index.html` + `template.js` 渲染在人物**前景**安全区字幕与标签。
 
 ### 第 3 步：生成骨架并编写模板
 
@@ -58,11 +62,14 @@ python scripts/template_factory.py scaffold <slug> \
   --out ./custom_templates
 ```
 
-再按第 2 步的拆解结果编辑生成的 4 个文件（脚手架已自动内嵌共享 SDK `./ac-template-sdk.js`，可直接调用 `ACTemplate.momentAt / zhHtml / enText / activeGloss / occupiedRects / labels`，把 `template.js` 压缩到 30 行以内）：
-- `template.yaml`：声明 `caption_layout`、`base.scrim`、`base.progress_bar`、`base.grade`、`meta`
-- `index.html`：透明背景 `1080×1920` 舞台，仅引用本地 `./style.css` 和 `./template.js`
+再按第 2 步的拆解结果编辑生成的 4 个文件（脚手架已自动内嵌共享 SDK `./ac-template-sdk.js`，可直接调用 `ACTemplate.momentAt / moments / zhHtml / enText / activeGloss / occupiedRects / labels`）：
+- `template.yaml`：声明 `caption_layout`、`base.scrim`、`base.progress_bar`、`base.grade`、`meta`（3D 景深模版加 `base.subject_layer: true` 与 `overlay.back_entry: back.html`）
+- `index.html`：透明背景 `1080×1920` 舞台，仅引用本地 `./style.css` 和 `./template.js`（可捆绑 OFL 开源 `.ttf` 字体到 `./fonts/`）
 - `style.css`：严格确定性样式（**禁止 `@keyframes`、`animation:`、外部 `http(s)://` 字体/图片**）
-- `template.js`：必须暴露 `window.setData(fill)`、`window.renderFrame(seconds)`（返回稳定状态哈希字符串，画面未变时返回相同哈希以跳过重复截屏）和 `window.occupiedRects()`（**禁止 `Date.now`、`performance.now`、`fetch(`、`XMLHttpRequest`、`WebSocket`**）
+- `template.js`（及可选 `back.js`）：必须暴露 `window.setData(fill)`、`window.renderFrame(seconds)` 和 `window.occupiedRects()`（**禁止 `Math.random`、`Date.now`、`performance.now`、`fetch(`、`XMLHttpRequest`、`WebSocket`**）：
+  - **空帧兜底**：`renderFrame(seconds)` 在无字幕的静默帧也必须返回非空字符串（例如 `return capD || 'IDLE'`），否则采集器会判定截屏失败；
+  - **时间轴字段**：`ACTemplate.moments(state)` 返回的每条 cue 起止时间字段是 `t0` / `t1`（兼容 `start` / `end`）；
+  - **SVG 字体引号**：在 SVG 字符串中写 `font-family` 属性时，内部字体名用单引号（如 `var SANS = "'ACSpace', Inter, sans-serif"`），避免嵌套双引号导致 XML 静默回退为默认衬线体。
 
 ### 第 4 步：自动化校验并热安装到本机 AutoClip
 

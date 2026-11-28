@@ -1,6 +1,6 @@
 id: podcast_dark
 version: 2
-name: {zh: 暗黑播客, en: Dark Podcast}
+name: { zh: "午夜电台", en: "Midnight FM" }
 fit:
   formats: {podcast_studio: 1.0, sit_down_interview: 0.9, keynote_stage: 0.75}
   needs_face: true

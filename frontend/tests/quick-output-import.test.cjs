@@ -24,7 +24,7 @@ test('quick import submits platform targets, branding and auto-starts to results
  const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[undefined,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[false,()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}],[null,()=>{}],[null,()=>{}],[false,()=>{}],[false,()=>{}],[{open:false,durationSec:null,trigger:'button'},()=>{}],[{open:false,trigger:'button'},()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
-  react:{useState:()=>states[index++],useEffect:()=>{},useRef:current=>({current})},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
+  react:{useState:()=>states[index++] || [false,()=>{}],useEffect:()=>{},useRef:current=>({current})},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
   '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog',StatusDot:'status'},'./LiveReplayPicker': { default: () => null }, './PlatformPicker':{default:'platform-picker'},
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
@@ -38,8 +38,8 @@ test('quick import submits platform targets, branding and auto-starts to results
   './importPreferencesStore':{readImportPreferences:()=>null},
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
   './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},
-  './importReadiness':loadReadiness(),'./browserCookieRecovery':require('./load-ts.cjs').loadTs(path.join(__dirname,'../src/features/studio/browserCookieRecovery.ts')),'./settingsReturn':{SETTINGS_SAVED_EVENT:'autoclip:model-settings-saved'},'./TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},'./studio.css':{},'./quick-output.css':{},
-  '../settings/OutputCaptionsSetting':{OutputCaptionsSwitch:()=>null},
+  './importReadiness':loadReadiness(),'./browserCookieRecovery':require('./load-ts.cjs').loadTs(path.join(__dirname,'../src/features/studio/browserCookieRecovery.ts')),'./settingsReturn':{SETTINGS_SAVED_EVENT:'autoclip:model-settings-saved'},'./TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},'./BatchVideoImport': { default: () => null, batchSession: { items: [] } }, './studio.css':{},'./quick-output.css':{},
+  '../settings/OutputCaptionsSetting':{OutputCaptionsSwitch:()=>null},'../settings/OutputBrandingSetting':{OutputBrandingSwitch:()=>null},
   './ImportSetupCard':{default:()=>null},
  })
  const tree=nodes(component({onImported:async()=>{}}))
@@ -422,8 +422,8 @@ async function mountImport(window, React, h, calls, options = {}) {
     './TranscriptionGatePrompt': { default: () => null },
     './transcriptionRecovery': { isRecoveryCode: () => false, probeConfig: () => ({}) },
     './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
-    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
-    './studio.css': {}, './quick-output.css': {},
+    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
+    './BatchVideoImport': { default: () => null, batchSession: { items: [] } }, './studio.css': {}, './quick-output.css': {},
   }
   function load(file) {
     const abs = path.join(studioDir, file)

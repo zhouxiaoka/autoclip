@@ -14,6 +14,8 @@ FILES = (
     "docs/i18n/README-ZH.md", "docs/i18n/README-ZH-TW.md", "docs/i18n/README-JA.md", "docs/i18n/README-KO.md",
     "docs/i18n/README-ES.md", "docs/i18n/README-PT.md", "docs/i18n/README-RU.md", "docs/i18n/README-FR.md",
     "docs/i18n/README-ID.md", "docs/i18n/README-TR.md", "docs/i18n/README-VI.md", "docs/i18n/README-DE.md",
+    "docs/i18n/README-IT.md", "docs/i18n/README-PL.md", "docs/i18n/README-TH.md", "docs/i18n/README-NL.md",
+    "docs/i18n/README-UK.md", "docs/i18n/README-HI.md", "docs/i18n/README-AR.md",
 )
 GUIDES = (
     "docs/DOCKER.md", "docs/DOCKER.en.md", "docs/README.md", "docs/i18n.md",

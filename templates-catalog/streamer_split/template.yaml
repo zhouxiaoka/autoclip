@@ -1,6 +1,6 @@
 id: streamer_split
 version: 2
-name: {zh: "主播上下分屏", en: "Streamer Split"}
+name: { zh: "双屏高能", en: "Dual Arena" }
 fit:
   formats: {gaming_stream: 1.0, live_replay: 1.0, vlog: 0.5}
   needs_face: false

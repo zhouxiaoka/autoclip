@@ -49,7 +49,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   }
   // console is passed explicitly so a console.error inside the module reaches the strict setup (#299).
   // URLSearchParams, Event, timers and AbortController stay explicit: setup only fills URL / URLSearchParams (#272).
-  runInSandbox(outputText, { exports, URL, URLSearchParams, Event, console, ...globals, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set, setTimeout, clearTimeout, AbortController })
+  runInSandbox(outputText, { exports, URL, URLSearchParams, Event, console, ...globals, require: requireImpl, crypto: globals.crypto || { randomUUID: () => 'uuid' }, Map, Set, setTimeout, clearTimeout, AbortController })
   return exports
 }
 

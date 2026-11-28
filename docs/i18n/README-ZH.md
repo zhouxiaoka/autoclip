@@ -16,7 +16,7 @@
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square&color=4F46E5" alt="GitHub release" height="20"></a>&nbsp;
   <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square&color=FFD700&logo=github&logoColor=white&label=Stars" alt="GitHub stars" height="20"></a>&nbsp;
   <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square&color=10B981" alt="Downloads" height="20"></a>&nbsp;
-  <img src="https://img.shields.io/badge/Languages-13-0EA5E9?style=flat-square" alt="13 Languages" height="20">&nbsp;
+  <img src="https://img.shields.io/badge/Languages-20-0EA5E9?style=flat-square" alt="20 Languages" height="20">&nbsp;
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT" height="20"></a>
 </p>
 
@@ -48,7 +48,7 @@
 </p>
 
 <p>
-  <a href="../../README.md">English</a> · <strong>简体中文</strong> · <a href="README-ZH-TW.md">繁體中文</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-ES.md">Español</a> · <a href="README-PT.md">Português</a> · <a href="README-RU.md">Русский</a> · <a href="README-FR.md">Français</a> · <a href="README-ID.md">Bahasa Indonesia</a> · <a href="README-TR.md">Türkçe</a> · <a href="README-VI.md">Tiếng Việt</a> · <a href="README-DE.md">Deutsch</a>
+  <a href="../../README.md">English</a> · <strong>简体中文</strong> · <a href="README-ZH-TW.md">繁體中文</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-ES.md">Español</a> · <a href="README-PT.md">Português</a> · <a href="README-RU.md">Русский</a> · <a href="README-FR.md">Français</a> · <a href="README-ID.md">Bahasa Indonesia</a> · <a href="README-TR.md">Türkçe</a> · <a href="README-VI.md">Tiếng Việt</a> · <a href="README-DE.md">Deutsch</a> · <a href="README-IT.md">Italiano</a> · <a href="README-PL.md">Polski</a> · <a href="README-TH.md">ไทย</a> · <a href="README-NL.md">Nederlands</a> · <a href="README-UK.md">Українська</a> · <a href="README-HI.md">हिन्दी</a> · <a href="README-AR.md">العربية</a>
 </p>
 
 <br>
@@ -283,6 +283,8 @@
 2. 打开 **设置**，选择云端模型服务商（或启动 Ollama / LM Studio），测试连接后保存；也可以免 Key 直接点 **先看自带示例** 体验。
 3. 贴入链接、拖入本地文件，或切到 **直播回放** 连接 OBS / 导入录像，选好发布平台点 **生成**。
 
+> **第一次上手？** 直接看 **[2 分钟桌面版图文动图指南 →](../QUICKSTART.md)**（含安装防拦截、复制 Key 自动填入与出片操作动图，无需付费代配置）。
+
 > 安装包均在公开 GitHub Actions（`Desktop Build`）构建，支持通过 `build-provenance.json` 校验 SHA-256；代码签名与公证进展跟踪见 [#119](https://github.com/zhouxiaoka/autoclip/issues/119)。
 
 ### 2. CLI 与 MCP（Claude Code、Codex、OpenCode 与脚本）
@@ -402,7 +404,7 @@ docker compose up -d --build
 
 | 主题 | 指南 |
 | :--- | :--- |
-| 安装与首次出片 | [安装指南](../USER_INSTALLATION_GUIDE.md) |
+| 安装与首次出片 | **[2 分钟动图快速上手](../QUICKSTART.md)** · [安装指南](../USER_INSTALLATION_GUIDE.md) |
 | 自部署与 Agent | [Docker](../DOCKER.md) · [CLI 与 MCP](../CLI_AND_MCP.md) · [Agent Skill](../../skills/autoclip/SKILL.md) · [OpenCode](../OPENCODE.md) |
 | 模型与排错 | [多模型配置](../MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](../FAQ.md) |
 | 版本与隐私 | [更新日志](../../CHANGELOG.md) · [路线图](../ROADMAP.md) · [社区看板](../COMMUNITY_BOARD.md) · [隐私说明](../PRIVACY.md) |

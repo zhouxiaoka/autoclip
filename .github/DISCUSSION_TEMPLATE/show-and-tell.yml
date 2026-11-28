@@ -3,6 +3,12 @@ body:
   - type: markdown
     attributes:
       value: |
+        > [!IMPORTANT]
+        > **这里是成片展示区，不是在线剪辑网页 / This is a Showcase gallery, NOT an online web clipper.**
+        > 请勿直接粘贴 YouTube / B 站链接等待系统出片。AutoClip 是免费开源的桌面软件，请先下载客户端在本地运行：
+        > Do not paste a video URL here expecting automatic clipping. Download the free desktop app first:
+        > 👉 **[Download AutoClip Desktop (macOS / Windows)](https://github.com/zhouxiaoka/autoclip/releases/latest)**
+
         用 AutoClip 做出了好片子？发在这里。维护者会挑选收录到[官网案例库](https://zhouxiaoka.github.io/autoclip_intro/cases/)，并署上你的名字。
         收录标准：AutoClip 生成、没有在其他软件里再剪辑（在 AutoClip 里改标题、换模板可以）；原片是公开视频；你有权发布这些成片。
   - type: input

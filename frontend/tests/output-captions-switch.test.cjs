@@ -11,7 +11,7 @@ const HINT = '关闭后成片不带字幕。标题只在封面上，不会烧进
 const MAIN = '成片显示字幕'
 const SETTINGS = '自动成片压字幕'
 const SAVE_ERROR = '保存失败，请稍后重试'
-const LANGS = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
+const LANGS = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']
 const h = React.createElement
 const { act } = React
 const studioDir = path.resolve(__dirname, '../src/features/studio')
@@ -143,7 +143,7 @@ function studioMocks(templates) {
     './importPreferencesStore': { readImportPreferences: () => null },
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
-    '../settings/OutputCaptionsSetting': captionsModule,
+    '../settings/OutputCaptionsSetting': captionsModule, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
   }
 }
 

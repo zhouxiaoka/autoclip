@@ -219,6 +219,8 @@ class BaseSpec(BaseModel):
     creator_pack: CreatorPackSpec | None = None
     scrim: ScrimSpec | None = None
     progress_bar: ProgressBarSpec | None = None
+    # Enable local ONNX portrait segmentation so back overlay renders behind the subject.
+    subject_layer: bool = False
 
     @model_validator(mode='after')
     def head_band(self):
@@ -240,6 +242,8 @@ class SlotSpec(BaseModel):
 class OverlaySpec(BaseModel):
     model_config = ConfigDict(extra='forbid')
     entry: Literal['index.html'] = 'index.html'
+    # Optional behind-subject HTML layer (used when base.subject_layer is True).
+    back_entry: Literal['back.html'] | None = None
     slots: dict[str, SlotSpec | list[SlotSpec]]
     safe_area: Literal['xiaohongshu', 'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts']
     limits: dict[str, float | int]

@@ -293,11 +293,13 @@ export default function EditingStylePicker({
     let cursor = 0
     const ric = window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline), 80))
     const prime = async (id: EditingStyle) => {
-      const urls = await loadStylePreview(id, itemById.get(id))
+      const urls = await loadStylePreview(id, itemById.get(id)).catch(() => ({ webm: '', mp4: '' }))
       if (cancel) return
       const node = videos.current[id]
       if (!node) return
-      assignPreview(node, previewUrl(node, urls))
+      const src = previewUrl(node, urls)
+      if (!src) return
+      assignPreview(node, src)
       if (node.dataset.primed === '1' || node.dataset.show === '1') return
       try {
         node.muted = true

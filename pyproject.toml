@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autoclip-mcp"
-version = "1.6.2"
+version = "1.6.3"
 description = "AutoClip — AI 长视频自动切片：CLI 与 MCP server 入口"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 # 发行名 autoclip-mcp 让 `uvx autoclip-mcp` 安装本包并运行同名入口。
 # 这些 pin 与 requirements.txt 的运行依赖一致；pytest 只留在 requirements.txt。
@@ -31,7 +31,7 @@ dependencies = [
   "passlib[bcrypt]==1.7.4",
   "cryptography==50.0.1",
   "qrcode[pil]==8.2",
-  "Pillow==11.3.0",
+  "Pillow==13.0.0",
   "yt-dlp[default]==2026.8.19",
   "pysrt==1.1.2",
   "webrtcvad-wheels==2.0.14",

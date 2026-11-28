@@ -171,6 +171,7 @@ const I: React.FC<{ d: string; size?: number; stroke?: number }> = ({ d, size = 
 export const Icon = {
   Back: (p?: { size?: number }) => <I size={p?.size} d="M15 18l-6-6 6-6" />,
   Edit: (p?: { size?: number }) => <I size={p?.size} d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />,
+  ThumbsDown: (p?: { size?: number }) => <I size={p?.size} d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" />,
   Play: (p?: { size?: number }) => <I size={p?.size} d="M7 5v14l11-7z" />,
   Plus: (p?: { size?: number }) => <I size={p?.size} d="M12 5v14M5 12h14" />,
   Down: (p?: { size?: number }) => <I size={p?.size} d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" />,

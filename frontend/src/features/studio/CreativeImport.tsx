@@ -14,6 +14,7 @@ import { telemetryId } from '../../analytics/workflow'
 import { featureSnapshot, flagAssigned, flagEnabled, flagValue, useFlag } from '../../analytics/flags'
 import TemplatePicker, { templateImportFields, type HtmlTemplateChoice } from './TemplatePicker'
 import { OutputCaptionsSwitch } from '../settings/OutputCaptionsSetting'
+import { OutputBrandingSwitch } from '../settings/OutputBrandingSetting'
 import StyleProbeLine from './StyleProbeLine'
 import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, FIRST_WINDOW_END_SEC, ImportOptions } from './types'
@@ -31,6 +32,7 @@ import { browserCookieRecovery, cookieAssistFromLocation, stageBrowserCookieReco
 import { SETTINGS_SAVED_EVENT } from './settingsReturn'
 import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 import UrlPreview, { shouldSuggestFirstWindow, type UrlInspectPreview } from './UrlPreview'
+import BatchVideoImport, { batchSession } from './BatchVideoImport'
 import './studio.css'
 import './quick-output.css'
 
@@ -640,11 +642,22 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     setSubtitle(picked)
   }
   submitRef.current = submit
+  const pickVideos = (files: File[]) => {
+    if (starting.current || !files.length) return
+    if (files.length === 1) {
+      if (isVideoFile(files[0]) && files[0].size > 0) arm('drop', { file: files[0] })
+      else setError(t('batchImport.invalid'))
+      return
+    }
+    setPending(null); clearPreview(); setFile(null); setSubtitle(null); setRemote(undefined)
+    batchSession.add(files, { options, platforms })
+    setBatchActive(true)
+  }
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setDragging(false)
-    const dropped = [...event.dataTransfer.files].find(item => isVideoFile(item))
-    if (dropped) { arm('drop', { file: dropped }); return }
+    const dropped = [...event.dataTransfer.files]
+    if (dropped.length) { pickVideos(dropped); return }
     const text = event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain')
     const extracted = parseImportUrl(text)
     if (extracted) arm('paste', { url: extracted })
@@ -677,6 +690,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
     : t('replays.other')
   const selectedReplayTitle = activeRemote ? activeRemote.title
     : (file && replayFile.current?.file === file ? (replayFile.current.replay?.title || file.name) : '')
+  const [batchActive, setBatchActive] = useState(() => batchSession.items.length > 0)
+  if (batchActive && !blocked) return <BatchVideoImport onImported={onImported} onClose={() => setBatchActive(false)} />
   if (blocked) return <section className="ac-welcome" aria-labelledby="welcome-title">
     <div className="ac-welcome-copy">
       <h1 id="welcome-title">{t('把长视频剪成精彩片段')}</h1>
@@ -714,10 +729,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
           <Btn size="sm" disabled={busy} onClick={() => setRemote(undefined)}>{t('移除')}</Btn>
         </div> : <div className={`ac-dropzone${dragging ? ' is-hot' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
           <p className="ac-dropzone-title">{t('把链接或视频放在这里')}</p>
-          <p className="ac-dropzone-hint">{t('粘贴链接，或拖入一个视频文件。')}</p>
+          <p className="ac-dropzone-hint">{t('batchImport.dropHint')}</p>
           <label className="studio-field ac-dropzone-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={event => { setPending(null); clearPreview(); setUrl(event.target.value); if (event.target.value) { setFile(null); setSource('link') } }} onBlur={event => { const value = event.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} disabled={busy}/></label>
           {file && <p className="ac-dropzone-file"><span>{file.name}</span><button type="button" className="studio-link" disabled={busy} onClick={() => setFile(null)}>{t('移除')}</button></p>}
-          <label className="studio-link ac-dropzone-file-label">{t('选择一个视频文件')}<input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi,.m4v,.flv,.ts,.mts,.m2ts,.mpg,.mpeg,.wmv" disabled={busy} onChange={event => { const picked = event.target.files?.[0] || null; if (picked) arm('drop', { file: picked }) }}/></label>
+          <label className="studio-link ac-dropzone-file-label">{t('batchImport.choose')}<input type="file" multiple aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi,.m4v,.flv,.ts,.mts,.m2ts,.mpg,.mpeg,.wmv" disabled={busy} onChange={event => { const picked = [...(event.target.files || [])]; event.target.value = ''; pickVideos(picked) }}/></label>
         </div>}
         <div style={{ marginTop: 10 }}>{replayPicker}</div>
       </> : <>
@@ -731,12 +746,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
         {source === 'link' ? <label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>{ setPending(null); clearPreview(); setUrl(e.target.value) }} onBlur={e => { const value = e.target.value.trim(); if (importUrlKind(value)) void runInspect(value, 'blur') }} onPaste={event => { const text = event.clipboardData.getData('text'); if (importUrlKind(text) && shouldAutoStart(pasteFlag, 'paste')) { event.preventDefault(); arm('paste', { url: text.trim() }) } }} disabled={busy}/></label>
           : source === 'file' ? (
             <div className="studio-file">
-              <input type="file" hidden ref={videoInput} aria-label={t('视频文件')}
+              <input type="file" multiple hidden ref={videoInput} aria-label={t('视频文件')}
                 accept="video/mp4,video/webm,video/quicktime,.mkv,.avi,.m4v,.flv,.ts,.mts,.m2ts,.mpg,.mpeg,.wmv" disabled={busy}
                 onChange={event => {
-                  const picked = event.currentTarget.files?.[0]
+                  const picked = [...(event.currentTarget.files || [])]
                   event.currentTarget.value = ''
-                  if (picked) arm('drop', { file: picked })
+                  pickVideos(picked)
                 }} />
               {file && <span className="studio-file-name" title={file.name} role="status">{file.name}</span>}
               <Btn size="sm" disabled={busy} aria-describedby="studio-video-formats" onClick={() => videoInput.current?.click()}>
@@ -776,6 +791,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked,
       {!templatesOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <div className="studio-field"><span>{t('竖版版式')}</span><Select aria-label={t('竖版版式')} disabled={busy} value={options.portrait_style || 'auto'} options={[{value:'auto',label:t('按平台默认')},{value:'interview',label:t('访谈式（人物窗口）')},{value:'podcast',label:t('播客式（满屏）')}]} onChange={portrait_style=>setOptions({...options,portrait_style})}/><small>{t('仅调整竖版布局，字幕与发布文案语言仍按平台。')}</small></div>}
       {templatesOn && options.html_template === 'classic' && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <div className="studio-field"><span>{t('竖版版式')}</span><Select aria-label={t('竖版版式')} disabled={busy} value={options.portrait_style || 'auto'} options={[{value:'auto',label:t('按平台默认')},{value:'interview',label:t('访谈式（人物窗口）')},{value:'podcast',label:t('播客式（满屏）')}]} onChange={portrait_style=>setOptions({...options,portrait_style})}/><small>{t('仅调整竖版布局，字幕与发布文案语言仍按平台。')}</small></div>}
       <OutputCaptionsSwitch label={t('成片显示字幕')} hint={t('关闭后成片不带字幕。标题只在封面上，不会烧进视频。')} />
+      <OutputBrandingSwitch label={t('自动添加品牌片尾')} hint={t('默认开启，为自动成片及修改后的导出添加 1.8 秒 AutoClip 动画。关闭后不影响已生成的视频。')} />
       <details className="studio-details"><summary>{t("有特别要求？（选填）")}</summary><label className="studio-field"><span className="studio-sr">{t("制作要求")}</span><input aria-label={t("制作要求")} placeholder={t("例如：保留完整观点或挑战过程")} maxLength={1000} value={options.instruction} disabled={busy} onChange={e=>setOptions({...options,instruction:e.target.value})}/></label></details>
       {issues.length > 0 && <div className="studio-readiness" role="status">
         {issues.map(item => <div className="studio-readiness-row" key={item.key}>

@@ -2,8 +2,9 @@
 
 - 源：沿用 packaging_runtime.pip_index_plan。显式参数 > AUTOCLIP_PIP_INDEX > PIP_INDEX_URL >
   auto（先官方 PyPI，再清华镜像）。
-- 时长：官方源最多 15 分钟（后面还有镜像时），镜像 / 唯一的源最多 30 分钟；任何源 180 秒没有
-  输出就停，换下一个源。
+- 快速切镜：当还有备用镜像时，官方源先做 4 秒轻量可达性探测，不通立刻切清华镜像；即便连上后
+  下载卡住，官方源静默上限也收紧到 40 秒，且 pip 的 `WARNING: Retrying` 不会刷新静默计时器。
+- 时长：官方源最多 15 分钟（后面还有镜像时），镜像 / 唯一的源最多 30 分钟（静默 180 秒停）。
 - 只装 wheel；输出里出现要编译的迹象立刻停，没有可用 wheel 单独报出来。
 - 进度：解析 pip 的 Collecting / Downloading (大小) / Installing 行，给出百分比和一句阶段说明。
 """
@@ -16,6 +17,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -29,7 +32,9 @@ PIP_FLAGS = [
 ]
 PIP_OFFICIAL_TIMEOUT_SECONDS = 15 * 60
 PIP_MIRROR_TIMEOUT_SECONDS = 30 * 60
+PIP_OFFICIAL_STALL_SECONDS = 40
 PIP_STALL_SECONDS = 180
+PIP_PROBE_TIMEOUT_SECONDS = 4.0
 TIMEOUT_EXIT = 124
 SOURCE_BUILD_EXIT = 125
 NO_WHEEL_EXIT = 126
@@ -97,6 +102,36 @@ def command(packages: list[str], target: str, index_url: Optional[str]) -> list[
 
 def budget(label: str, plan_size: int) -> float:
     return PIP_OFFICIAL_TIMEOUT_SECONDS if label == "pypi" and plan_size > 1 else PIP_MIRROR_TIMEOUT_SECONDS
+
+
+def stall_budget(label: str, plan_size: int) -> float:
+    return PIP_OFFICIAL_STALL_SECONDS if label == "pypi" and plan_size > 1 else PIP_STALL_SECONDS
+
+
+def _index_url_from_cmd(cmd: list[str]) -> Optional[str]:
+    for idx, arg in enumerate(cmd):
+        if arg == "--index-url" and idx + 1 < len(cmd):
+            return cmd[idx + 1]
+        if arg.startswith("--index-url="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def probe_index(url: str, timeout: float = PIP_PROBE_TIMEOUT_SECONDS) -> bool:
+    """Fast reachability check for a fallback-eligible pip index (respects proxy env vars)."""
+    text = (url or "").strip()
+    if not text.startswith(("http://", "https://")):
+        return True
+    req = urllib.request.Request(text, method="HEAD", headers={"User-Agent": "AutoClip-pip-probe"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status = getattr(resp, "status", 200)
+            return 200 <= status < 500
+    except urllib.error.HTTPError as err:
+        # 401/403/405 mean the host is reachable; let pip itself handle auth or GET.
+        return 400 <= err.code < 500
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
 
 
 _COLLECT = re.compile(r"^collecting\s+(\S+)", re.I)
@@ -223,6 +258,13 @@ def stream(cmd: list[str], timeout: float, stall_timeout: float,
     from backend.services import child_guard
     logger.info("pip: %s", " ".join(cmd))
     _take_cancel(owner)  # a cancel only applies to the run that was live at the time
+    if stall_timeout <= PIP_OFFICIAL_STALL_SECONDS:
+        index_url = _index_url_from_cmd(cmd)
+        if index_url and not probe_index(index_url):
+            if _take_cancel(owner):
+                return CANCEL_EXIT, []
+            logger.warning("pip 源快速探测不通，跳过本次尝试: %s", index_url)
+            return NETWORK_EXIT, [f"Could not fetch URL {index_url}: preflight probe failed"]
     proc = child_guard.track(subprocess.Popen(cmd, **spawn_kwargs(env)), owner)
     try:
         code, lines = _pump(proc, timeout, stall_timeout, on_line)
@@ -267,13 +309,16 @@ def _pump(proc: subprocess.Popen, timeout: float, stall_timeout: float,
             return TIMEOUT_EXIT, lines
         if item is None:
             break
-        last = time.monotonic()
         line = item.rstrip()
         if not line:
             continue
         lines.append(line)
         lines[:] = lines[-40:]
         low = line.lower()
+        # pip's retry warnings are not forward progress; resetting `last` on them lets a
+        # blackholed official index burn several minutes before stall_timeout triggers fallback.
+        if not low.startswith("warning: retrying"):
+            last = time.monotonic()
         if any(marker in low for marker in SOURCE_BUILD_MARKERS):
             logger.warning("pip 要从源码编译，已停止: %s", line[:200])
             _stop(proc)
@@ -328,7 +373,7 @@ def run_plan(plan: Plan, command_for: Callable[[Optional[str]], list[str]],
             logger.warning("%s 从 %s 安装失败（%s），改用 %s", what, plan[i - 1][0], failures[-1], label)
             if on_switch:
                 on_switch(plan[i - 1][0], label, failures[-1])
-        code = run(command_for(url), budget(label, len(plan)), PIP_STALL_SECONDS, label)
+        code = run(command_for(url), budget(label, len(plan)), stall_budget(label, len(plan)), label)
         if code == 0:
             return 0, failures
         failures.append(f"{label}: {reason(code)}")

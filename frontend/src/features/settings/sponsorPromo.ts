@@ -13,7 +13,11 @@ import {
 } from './sponsorPromoState'
 
 const STATUSES = new Set(['healthy', 'fault', 'out_of_service'])
-const SUPPORTED_LOCALES = new Set(['zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru', 'id', 'tr', 'vi', 'de'])
+const SUPPORTED_LOCALES = new Set([
+  'zh', 'en', 'ja', 'ko', 'es', 'fr', 'pt', 'ru', 'id', 'tr', 'vi', 'de',
+  'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar',
+])
+const LOCALE_CODE_RE = /^[a-z]{2,3}$/
 const DYNAMIC_ID_RE = /^[a-z][a-z0-9_-]{1,31}$/
 const DYNAMIC_CAPABILITIES = new Set(['language', 'vision', 'image', 'video', 'asr'])
 const DYNAMIC_CANDIDATE_ROLES = new Set(['analysis', 'vision', 'asr', 'image'])
@@ -24,7 +28,10 @@ const NOTICE_IDS = Object.keys(TRUSTED_REGISTER_HOSTS)
 export interface AppliedSponsorPromo {
   choices: string[]
   defaultChoice: string
+  firstRunChoices?: string[]
+  firstRunDefault?: string
   notices: Record<string, Record<string, string>>
+  badges?: Record<string, string | Record<string, string>>
   registerUrls: Record<string, string>
   statuses: Record<string, string>
   byLocale?: Record<string, LocalePromoSlice>
@@ -90,16 +97,30 @@ function parseLocalizedMap(raw: unknown, maxLen: number, requireEn = false): Rec
     return cleaned ? { en: cleaned } : null
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const entries = Object.entries(raw as Record<string, unknown>)
+  if (!entries.length) return null
   const out: Record<string, string> = {}
-  for (const [loc, val] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [loc, val] of entries) {
     const key = loc.toLowerCase().split('-')[0]
-    if (!SUPPORTED_LOCALES.has(key)) return null
+    if (!LOCALE_CODE_RE.test(key)) return null
     const cleaned = cleanText(val, maxLen)
     if (!cleaned) return null
-    out[key] = cleaned
+    if (SUPPORTED_LOCALES.has(key)) out[key] = cleaned
   }
-  if (!Object.keys(out).length || (requireEn && !out.en)) return null
+  if (requireEn && !out.en) return null
   return out
+}
+
+function parseLocaleList(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null
+  const seen = new Set<string>()
+  const known: string[] = []
+  for (const item of raw) {
+    if (typeof item !== 'string' || !LOCALE_CODE_RE.test(item) || seen.has(item)) return null
+    seen.add(item)
+    if (SUPPORTED_LOCALES.has(item)) known.push(item)
+  }
+  return known
 }
 
 function parseDynamicProviders(raw: unknown): DynamicProviderSpec[] | null {
@@ -148,6 +169,12 @@ function parseDynamicProviders(raw: unknown): DynamicProviderSpec[] | null {
         candidates[role as keyof NonNullable<DynamicProviderSpec['candidates']>] = models
       }
     }
+    let locales: string[] | undefined
+    if (row.locales !== undefined) {
+      const parsedLocales = parseLocaleList(row.locales)
+      if (parsedLocales === null) return null
+      locales = parsedLocales
+    }
     seen.add(id)
     out.push({
       id,
@@ -158,10 +185,11 @@ function parseDynamicProviders(raw: unknown): DynamicProviderSpec[] | null {
       placeholder,
       capabilities,
       group,
-      ...(hint ? { hint } : {}),
-      ...(offer ? { offer } : {}),
+      ...(hint && Object.keys(hint).length ? { hint } : {}),
+      ...(offer && Object.keys(offer).length ? { offer } : {}),
       ...(iconUrl ? { iconUrl } : {}),
       ...(candidates ? { candidates } : {}),
+      ...(locales !== undefined ? { locales } : {}),
     })
   }
   return out
@@ -189,6 +217,8 @@ function parseSlice(
   statuses: Record<string, string>,
   promoChoices: readonly string[],
   dynamicHosts: Record<string, string>,
+  rawFirstRunChoices?: unknown,
+  rawFirstRunDefault?: unknown,
 ): LocalePromoSlice | null {
   if (!Array.isArray(rawChoices) || typeof rawDefault !== 'string') return null
   const choices: string[] = []
@@ -208,7 +238,27 @@ function parseSlice(
     if (hostOf(url) !== packagedHost(id, dynamicHosts) || !url.startsWith('https://')) return null
     registerUrls[id] = url
   }
-  return { choices, defaultChoice, registerUrls }
+  let firstRunChoices: string[] | undefined
+  let firstRunDefault: string | undefined
+  if (rawFirstRunChoices !== undefined) {
+    if (!Array.isArray(rawFirstRunChoices)) return null
+    const parsedFr: string[] = []
+    for (const id of rawFirstRunChoices) {
+      if (typeof id !== 'string' || !choices.includes(id) || parsedFr.includes(id)) return null
+      parsedFr.push(id)
+    }
+    if (parsedFr[parsedFr.length - 1] !== 'other') return null
+    firstRunChoices = parsedFr
+    firstRunDefault = typeof rawFirstRunDefault === 'string' && parsedFr.includes(rawFirstRunDefault)
+      ? rawFirstRunDefault
+      : parsedFr[0]
+  }
+  return {
+    choices,
+    defaultChoice,
+    registerUrls,
+    ...(firstRunChoices ? { firstRunChoices, firstRunDefault } : {}),
+  }
 }
 
 export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
@@ -228,18 +278,36 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     if (!STATUSES.has(String(status))) return null
     statuses[id] = String(status)
   }
-  const top = parseSlice(record.choices, record.default, record.register_urls, statuses, promoChoices, dynamicHosts)
+  const top = parseSlice(
+    record.choices,
+    record.default,
+    record.register_urls,
+    statuses,
+    promoChoices,
+    dynamicHosts,
+    record.first_run_choices,
+    record.first_run_default,
+  )
   if (!top) return null
   let byLocale: Record<string, LocalePromoSlice> | undefined
   if (record.by_locale !== undefined) {
     if (!record.by_locale || typeof record.by_locale !== 'object' || Array.isArray(record.by_locale)) return null
     byLocale = {}
     for (const [loc, rawSlice] of Object.entries(record.by_locale as Record<string, unknown>)) {
-      if (!SUPPORTED_LOCALES.has(loc) || !rawSlice || typeof rawSlice !== 'object' || Array.isArray(rawSlice)) return null
+      if (!LOCALE_CODE_RE.test(loc) || !rawSlice || typeof rawSlice !== 'object' || Array.isArray(rawSlice)) return null
       const entry = rawSlice as Record<string, unknown>
-      const parsed = parseSlice(entry.choices, entry.default, entry.register_urls, statuses, promoChoices, dynamicHosts)
+      const parsed = parseSlice(
+        entry.choices,
+        entry.default,
+        entry.register_urls,
+        statuses,
+        promoChoices,
+        dynamicHosts,
+        entry.first_run_choices,
+        entry.first_run_default,
+      )
       if (!parsed) return null
-      byLocale[loc] = parsed
+      if (SUPPORTED_LOCALES.has(loc)) byLocale[loc] = parsed
     }
   }
   const notices: Record<string, Record<string, string>> = {}
@@ -254,10 +322,26 @@ export function applySponsorPromo(view: unknown): AppliedSponsorPromo | null {
     }
     if (Object.keys(texts).length) notices[id] = texts
   }
+  const badges: Record<string, string | Record<string, string>> = {}
+  if (record.badges !== undefined) {
+    if (!record.badges || typeof record.badges !== 'object' || Array.isArray(record.badges)) return null
+    for (const [id, rawBadge] of Object.entries(record.badges as Record<string, unknown>)) {
+      if (!allowedIds.includes(id)) continue
+      if (rawBadge === '') {
+        badges[id] = ''
+        continue
+      }
+      const parsed = parseLocalizedMap(rawBadge, 48, false)
+      if (parsed === null) return null
+      if (Object.keys(parsed).length) badges[id] = parsed
+    }
+  }
   return {
     choices: top.choices,
     defaultChoice: top.defaultChoice,
+    ...(top.firstRunChoices ? { firstRunChoices: top.firstRunChoices, firstRunDefault: top.firstRunDefault } : {}),
     notices,
+    ...(Object.keys(badges).length ? { badges } : {}),
     registerUrls: top.registerUrls,
     statuses,
     ...(byLocale ? { byLocale } : {}),

@@ -1,0 +1,65 @@
+name: Template Request / 模版许愿
+description: Request a new AutoClip video template or share a viral reference clip / 许愿新模版或投稿你喜欢的爆款参考视频
+title: "[Template] "
+labels: ["template-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Want a viral short-form editing style added to the **AutoClip Template Catalog**? Drop a reference link below — high-demand styles are built and hot-pushed to the live shelf without waiting for an app update.
+
+        刷到喜欢的爆款短视频排版或 3D 景深特效？贴在下面，高票需求会被制作并热更新到 AutoClip 线上模版货架。
+
+  - type: input
+    id: reference_url
+    attributes:
+      label: Reference Video URL / 参考视频链接
+      description: YouTube Shorts, TikTok, Reels, Bilibili, Douyin, or Xiaohongshu link / 支持任意主流短视频平台链接
+      placeholder: https://youtube.com/shorts/...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Primary Target Platform / 主要发布平台
+      options:
+        - Xiaohongshu / 小红书
+        - Douyin / 抖音
+        - Bilibili / B 站
+        - YouTube Shorts
+        - TikTok / Instagram Reels
+        - Multi-platform / 多平台通用
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Content Niche / 内容赛道
+      options:
+        - Talking Head & Knowledge / 口播干货
+        - Editorial & Cinema / 杂志美学与电影感
+        - Podcast & Interview / 播客与人物访谈
+        - Tech & Finance / 科技测评与财经复盘
+        - Gaming & Livestream / 游戏直播与整活
+        - Vlog & Lifestyle / 日常 Vlog
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: features
+    attributes:
+      label: Visual Highlights / 希望包含的视觉亮点
+      options:
+        - label: 3D Subject Depth (text/graphics behind speaker, Desktop ≥ 1.6.3) / 3D 人像景深穿字
+        - label: Kinetic word-by-word captions / 逐词高亮动效字幕
+        - label: Top hook banner or verdict bar / 顶部钩子标题或评测打分条
+        - label: Bilingual subtitles (ZH + EN) / 中英双语字幕
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: What do you like most about this style? / 你最喜欢它的哪个细节？
+      description: Optional — typography, pacing, colors, transitions, or specific timestamps.
+      placeholder: e.g. 0:02–0:06 the bold serif headline behind the speaker's shoulder...

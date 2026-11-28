@@ -9,7 +9,7 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const { loadTs } = require('./load-ts.cjs')
 
 const studio = path.resolve(__dirname, '../src/features/studio')
-const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
+const langs = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']
 const catalogs = Object.fromEntries(langs.map(lang => [lang, require('../src/i18n/locales/' + lang + '.json')]))
 const recovery = loadTs(path.join(studio, 'browserCookieRecovery.ts'))
 
@@ -141,7 +141,7 @@ test('#481 import expands the browser picker and keeps the chosen browser on sub
       './transcriptionRecovery': { isRecoveryCode: () => false, probeConfig: () => ({}) },
       './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
       './settingsReturn': { SETTINGS_SAVED_EVENT: 'autoclip:model-settings-saved' },
-      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
       './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
     }
@@ -213,7 +213,7 @@ test('#481 a normal import keeps the browser picker inside the closed preference
       './transcriptionRecovery': { isRecoveryCode: () => false, probeConfig: () => ({}) },
       './useTranscriptionRecovery': { useTranscriptionRecovery: () => [{ phase: 'idle', percent: null }, { open() {}, close() {}, install: async () => {}, retry: async () => {} }] },
       './settingsReturn': { SETTINGS_SAVED_EVENT: 'autoclip:model-settings-saved' },
-      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+      '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
       './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
     }

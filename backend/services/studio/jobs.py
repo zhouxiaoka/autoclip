@@ -827,7 +827,17 @@ def _complete_thought_bounds(project_id, clips):
     except Exception:  # noqa: BLE001
         call = None
     with llm_usage.stage('boundaries'), llm_usage.timed('boundaries'):
-        return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
+        import subprocess
+        silences = None
+        try:
+            src = source(project_id)
+            if audio.has_audio(src):
+                silences = boundaries.audio_silences(src)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            # Optional silence snapping must never abort production if ffprobe/ffmpeg
+            # hits a transient Windows OSError (PYTHON-FASTAPI-8K).
+            logger.warning('audio silence probe unavailable for project %s; continuing without silence snap', project_id)
+        return boundaries.refine_clips(rows, clips, call, silences)
 
 
 MAX_DRAFT_OVERLAP = 0.5  # share of the shorter clip two content drafts may have in common

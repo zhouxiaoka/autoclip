@@ -146,6 +146,30 @@ def reaction_times(video, duration, target):
     return chosen
 
 
+def _parse_sec(value) -> float | None:
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    raw = value.strip().lower().rstrip('s秒').strip()
+    if ':' in raw:
+        parts = raw.split(':')
+        try:
+            nums = [float(p) for p in parts]
+        except ValueError:
+            return None
+        if len(nums) == 2:
+            return nums[0] * 60 + nums[1]
+        if len(nums) == 3:
+            return nums[0] * 3600 + nums[1] * 60 + nums[2]
+        return None
+    try:
+        parsed = float(raw)
+        return parsed if math.isfinite(parsed) else None
+    except ValueError:
+        return None
+
+
 def verify_reaction(video, at, duration, target):
     # An independent check of the strongest audio change can recover an event
     # even if the first-ranked coarse candidate was elsewhere in the match.
@@ -167,32 +191,37 @@ def verify_reaction(video, at, duration, target):
             [{"type": "text", "text": prompt}]
             + intelligence.sample(video, times, Path(tmp)),
         )
-    items = answer.get("events")
-    if not isinstance(items, list):
-        raise ModelResponseInvalid("视觉反应复核格式无效，请重试")
-    if not items:
+    if not isinstance(answer, dict):
         return None
-    try:
-        ev = items[0]
-        action, reaction = float(ev["action"]), float(ev["reaction"])
-        if not left <= action < reaction <= right + 0.05:
-            return None
-        if (
-            not isinstance(ev["label"], str)
-            or not isinstance(ev["evidence"], str)
-            or not ev["evidence"].strip()
-        ):
-            return None
-        spare = max(0, target - (reaction - action))
-        return Scene(
-            id=uuid.uuid4().hex,
-            label=ev["label"][:120],
-            evidence=ev["evidence"][:500],
-            start=max(left, action - 0.6 * spare),
-            end=min(right, reaction + 0.4 * spare),
-        )
-    except (TypeError, ValueError, KeyError):
-        raise ModelResponseInvalid("视觉反应复核格式无效，请重试") from None
+    items = answer.get("events")
+    if isinstance(items, dict):
+        items = [items]
+    elif items is None and isinstance(answer.get("event"), dict):
+        items = [answer["event"]]
+    if not isinstance(items, list):
+        return None
+    if not items or not isinstance(items[0], dict):
+        return None
+    ev = items[0]
+    action, reaction = _parse_sec(ev.get("action")), _parse_sec(ev.get("reaction"))
+    if action is None or reaction is None:
+        return None
+    if not left <= action < reaction <= right + 0.05:
+        return None
+    if (
+        not isinstance(ev.get("label"), str)
+        or not isinstance(ev.get("evidence"), str)
+        or not ev["evidence"].strip()
+    ):
+        return None
+    spare = max(0, target - (reaction - action))
+    return Scene(
+        id=uuid.uuid4().hex,
+        label=ev["label"][:120],
+        evidence=ev["evidence"][:500],
+        start=max(left, action - 0.6 * spare),
+        end=min(right, reaction + 0.4 * spare),
+    )
 
 
 # A result screen or an unambiguous victory banner takes precedence over

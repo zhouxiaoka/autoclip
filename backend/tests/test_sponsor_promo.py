@@ -739,7 +739,7 @@ def test_sign_script_refuses_a_private_key_inside_the_repo(tmp_path):
 
 def test_locale_routing_disjoint_defaults_and_localized_register_urls(monkeypatch, tmp_path, profiles):
     private, public = _keys()
-    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"]
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de", "it", "pl", "th", "nl", "uk", "hi", "ar"]
     payload = _payload(sequence=15, sponsors=[
         {
             "id": "apimart",
@@ -806,11 +806,22 @@ def test_locale_routing_disjoint_defaults_and_localized_register_urls(monkeypatc
         {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh", "en"]},
         {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["en"]},
     ],
+    [
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["sv"]},
+        {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["sv"]},
+    ],
+    [
+        {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True},
+        {"id": "api88", "order": 2, "status": "healthy", "new_user_default": True, "locales": ["sv"]},
+    ],
     [{"id": "apimart", "order": 1, "status": "healthy", "locales": []}],
     [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["zh", "zh"]}],
-    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["nl"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["../zh"]}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "locales": ["EN"]}],
     [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {"en": "https://evil.example/steal"}}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {"sv": "https://evil.example/steal"}}],
     [{"id": "apimart", "order": 1, "status": "healthy", "register_urls": {}}],
+    [{"id": "apimart", "order": 1, "status": "healthy", "notices": {"sv": "<script>bad</script>"}}],
 ])
 def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tmp_path, profiles, bad_sponsors):
     private, public = _keys()
@@ -824,10 +835,244 @@ def test_locale_routing_rejects_overlapping_defaults_and_bad_localized_fields(tm
     assert client.view()["source"] == "bundled"
 
 
+def test_forward_compatible_future_iso_locales_and_dynamic_provider_locales(tmp_path, profiles):
+    private, public = _keys()
+    payload = _payload(
+        sequence=21,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[
+            _dynamic_provider(
+                id="cloudgw",
+                name={"en": "CloudGW", "zh": "云网关", "sv": "MolnGW"},
+                hint={"en": "Global gateway", "sv": "Svensk text"},
+                offer={"sv": "50 kr"},
+                locales=["en", "it", "sv"],
+            ),
+            _dynamic_provider(
+                id="nordicgw",
+                name={"en": "NordicGW", "no": "NordiskGW"},
+                base_url="https://router.nordicgw.example/v1",
+                register_url="https://www.nordicgw.example/?ref=1",
+                docs_url="https://docs.nordicgw.example/",
+                locales=["no"],
+            ),
+        ],
+        sponsors=[
+            {
+                "id": "cloudgw",
+                "order": 1,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["en", "it", "sv"],
+                "notices": {"en": "Degraded", "sv": "Tillfälligt långsam"},
+                "register_urls": {
+                    "en": "https://www.cloudgw.example/?ref=en",
+                    "sv": "https://www.cloudgw.example/?ref=sv",
+                },
+            },
+            {
+                "id": "nordicgw",
+                "order": 2,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["no"],
+            },
+        ],
+    )
+    client = _client(
+        tmp_path / "fwd",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, payload),
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert client.refresh_sync() == "ok"
+    en_view = client.view(locale="en")
+    it_view = client.view(locale="it")
+    zh_view = client.view(locale="zh")
+    no_locale_view = client.view()
+
+    assert en_view["choices"] == ["cloudgw", "other"]
+    assert it_view["choices"] == ["cloudgw", "other"]
+    assert zh_view["choices"] == ["other"]
+    assert "nordicgw" not in no_locale_view["choices"]
+    assert en_view["notices"]["cloudgw"] == {"en": "Degraded"}
+    by_id = {p["id"]: p for p in en_view["providers"]}
+    assert by_id["cloudgw"]["locales"] == ["en", "it"]
+    assert by_id["cloudgw"]["name"] == {"en": "CloudGW", "zh": "云网关"}
+    assert "offer" not in by_id["cloudgw"]
+    assert by_id["nordicgw"]["locales"] == []
+
+    # Invalid dynamic provider locales must still be rejected
+    for bad_locales in ([], ["zh", "zh"], ["../zh"], ["123"]):
+        bad_payload = _payload(
+            sequence=22,
+            schema=sponsor_promo.SCHEMA_V2,
+            providers=[_dynamic_provider(locales=bad_locales)],
+            sponsors=[{"id": "apimart", "order": 1, "status": "healthy"}],
+        )
+        bad_client = _client(
+            tmp_path / f"bad-{abs(hash(str(bad_locales)))}",
+            private,
+            public,
+            lambda url, timeout, max_bytes, p=bad_payload: _envelope(private, p),
+            v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+        )
+        assert bad_client.refresh_sync() == "providers"
+
+
+def test_sponsor_cloud_configurable_badges_and_security_validation(tmp_path, profiles):
+    private, public = _keys()
+    payload = _payload(
+        sequence=25,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider(id="cloudgw")],
+        sponsors=[
+            {
+                "id": "apimart",
+                "order": 1,
+                "status": "healthy",
+                "new_user_default": True,
+                "badge": "",
+            },
+            {
+                "id": "cometapi",
+                "order": 2,
+                "status": "healthy",
+                "badge": {"zh": "赞助", "en": "Sponsor", "sv": "Sponsor SV"},
+            },
+            {
+                "id": "cloudgw",
+                "order": 3,
+                "status": "healthy",
+                "badge": "¥5 free credit",
+            },
+        ],
+    )
+    client = _client(
+        tmp_path / "badges",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, payload),
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert client.refresh_sync() == "ok"
+    view = client.view(locale="en")
+    assert view["badges"] == {
+        "apimart": "",
+        "cometapi": {"zh": "赞助", "en": "Sponsor"},
+        "cloudgw": {"en": "¥5 free credit"},
+    }
+
+    for bad_badge in ("<script>x</script>", "https://evil.example", {}, {"../zh": "x"}, "x" * 60):
+        bad_payload = _payload(
+            sequence=26,
+            sponsors=[{"id": "apimart", "order": 1, "status": "healthy", "badge": bad_badge}],
+        )
+        bad_client = _client(
+            tmp_path / f"bad-badge-{abs(hash(str(bad_badge)))}",
+            private,
+            public,
+            lambda url, timeout, max_bytes, p=bad_payload: _envelope(private, p),
+        )
+        assert bad_client.refresh_sync() == "sponsors"
+
+
+def test_sponsor_first_run_flag_decouples_first_run_modal_from_settings_recommended(tmp_path, profiles):
+    private, public = _keys()
+    payload = _payload(
+        sequence=27,
+        schema=sponsor_promo.SCHEMA_V2,
+        providers=[_dynamic_provider(id="cloudgw")],
+        sponsors=[
+            {
+                "id": "apimart",
+                "order": 1,
+                "status": "healthy",
+                "new_user_default": True,
+                "locales": ["zh", "en"],
+            },
+            {
+                "id": "cloudgw",
+                "order": 2,
+                "status": "healthy",
+                "locales": ["zh", "en"],
+                "first_run": True,
+            },
+            {
+                "id": "cometapi",
+                "order": 3,
+                "status": "healthy",
+                "locales": ["en"],
+                "first_run": False,
+                "register_url": "https://www.cometapi.com/?ref=kris",
+            },
+            {
+                "id": "novita",
+                "order": 4,
+                "status": "healthy",
+                "locales": ["en"],
+                "first_run": False,
+                "register_url": "https://novita.ai/?ref=nzvindf",
+            },
+        ],
+    )
+    client = _client(
+        tmp_path / "fr",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, payload),
+        v2_url="https://static.example/autoclip/sponsor-promo-v2.json",
+    )
+    assert client.refresh_sync() == "ok"
+    en = client.view(locale="en")
+    assert en["choices"] == ["apimart", "cloudgw", "cometapi", "novita", "other"]
+    assert en["default"] == "apimart"
+    assert en["first_run_choices"] == ["apimart", "cloudgw", "other"]
+    assert en["first_run_default"] == "apimart"
+    assert en["by_locale"]["en"]["first_run_choices"] == ["apimart", "cloudgw", "other"]
+    assert en["by_locale"]["zh"]["first_run_choices"] == ["apimart", "cloudgw", "other"]
+    assert en["register_urls"]["cometapi"] == "https://www.cometapi.com/?ref=kris"
+
+    # When the default sponsor itself has first_run=False, first_run_default falls back to the first visible modal choice.
+    fallback_payload = _payload(
+        sequence=28,
+        sponsors=[
+            {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "first_run": False},
+            {"id": "cometapi", "order": 2, "status": "healthy", "first_run": True},
+        ],
+    )
+    fb_client = _client(
+        tmp_path / "fr-fallback",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, fallback_payload),
+    )
+    assert fb_client.refresh_sync() == "ok"
+    fb = fb_client.view(locale="en")
+    assert fb["choices"] == ["apimart", "cometapi", "other"]
+    assert fb["default"] == "apimart"
+    assert fb["first_run_choices"] == ["cometapi", "other"]
+    assert fb["first_run_default"] == "cometapi"
+
+    # Non-boolean first_run must be rejected.
+    bad_payload = _payload(
+        sequence=29,
+        sponsors=[{"id": "apimart", "order": 1, "status": "healthy", "first_run": "no"}],
+    )
+    bad_client = _client(
+        tmp_path / "fr-bad",
+        private,
+        public,
+        lambda url, timeout, max_bytes: _envelope(private, bad_payload),
+    )
+    assert bad_client.refresh_sync() == "sponsors"
+
+
 def test_cometapi_is_trusted_for_overseas_promo_and_rejects_foreign_host(tmp_path, profiles):
     assert sponsor_promo.builtin_sponsor_hosts()["cometapi"] == "www.cometapi.com"
     private, public = _keys()
-    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"]
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de", "it", "pl", "th", "nl", "uk", "hi", "ar"]
     good = _payload(sequence=30, sponsors=[
         {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
         {
@@ -858,7 +1103,7 @@ def test_novita_and_poyo_are_trusted_for_overseas_promo(tmp_path, profiles):
     assert hosts["novita"] == "novita.ai"
     assert hosts["poyo"] == "poyo.ai"
     private, public = _keys()
-    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de"]
+    overseas = ["en", "ja", "ko", "es", "fr", "pt", "ru", "id", "tr", "vi", "de", "it", "pl", "th", "nl", "uk", "hi", "ar"]
     good = _payload(sequence=32, sponsors=[
         {"id": "apimart", "order": 1, "status": "healthy", "new_user_default": True, "locales": ["zh"]},
         {

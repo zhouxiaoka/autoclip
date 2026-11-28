@@ -9,7 +9,7 @@ import {
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
 import ProviderQualityMarks from './providerQualityMarks'
-import { promotionAllowsUpsell, promotionRecommends, promotionRegisterUrl } from './sponsorPromoState'
+import { promotionAllowsUpsell, promotionBadge, promotionRecommends, promotionRegisterUrl } from './sponsorPromoState'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
   all: 'settings.providers.filter.all',
@@ -98,6 +98,7 @@ function ProviderCard({
   const connected = isCatalogConnected(settings, preset, asrReady)
   const recommended = promotionRecommends(preset.id)
   const upsell = promotionAllowsUpsell(preset.id)
+  const customBadge = promotionBadge(preset.id)
   const caps = preset.capabilities.filter((capability): capability is Exclude<CapabilityFilter, 'all'> => capability !== 'all' && capability in FILTER_KEY)
   return (
     <button
@@ -112,8 +113,18 @@ function ProviderCard({
       <span className="ac-provider-card-body">
         <span className="ac-provider-card-title">
           {t(displayNameOf(preset))}
-          {(preset.sponsor || recommended) && recommended && <span className="ac-badge">{t('推荐')}</span>}
-          {preset.sponsor && !recommended && upsell && <span className="ac-badge">{t('settings.providers.badge.sponsor')}</span>}
+          {customBadge !== undefined
+            ? (customBadge ? <span className="ac-badge">{customBadge}</span> : null)
+            : (
+              <>
+                {(preset.sponsor || recommended) && recommended && <span className="ac-badge">{t('推荐')}</span>}
+                {preset.sponsor && !recommended && upsell && (
+                  preset.dynamic
+                    ? (preset.sponsor.offer ? <span className="ac-badge">{preset.sponsor.offer}</span> : null)
+                    : <span className="ac-badge">{t('settings.providers.badge.sponsor')}</span>
+                )}
+              </>
+            )}
         </span>
         {caps.length > 0 && (
           <span className="ac-provider-caps">
@@ -149,7 +160,7 @@ export default function ProviderCatalog({
   onOpen: (id: string) => void
   onAdd?: () => void
 }) {
-  const visible = filterCatalog(query, filter)
+  const visible = filterCatalog(query, filter, settings)
   const groups = groupCatalog(visible)
   const customs = unmatchedCompatibleConnections(settings).filter(connection => matchesCustom(connection, query, filter))
   const expandMore = moreOpen || shouldExpandMore(query, filter, groups.more.length)

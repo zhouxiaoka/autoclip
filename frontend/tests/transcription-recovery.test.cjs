@@ -201,7 +201,7 @@ test('install prompt copy exists in all 8 languages', () => {
     '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。不想等可以改用云端转写。',
     '没有字幕的视频，第一次要下载本地转写组件（约 220 MB，国内网络约 15 分钟）。']
     const slowNetwork = ['视频没有字幕，需要本地转写组件（约 220 MB，国内约 15 分钟），或改用云端转写。', ...keys.slice(-2)]
-  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
+  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']) {
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     for (const key of keys) assert.ok(typeof data[key] === 'string' && data[key].length > 0, `${lang}: ${key}`)
     if (lang !== 'zh') {
@@ -1533,7 +1533,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false, spe
     './importPreferencesStore': { readImportPreferences: () => null },
     './UrlPreview': { default: 'url-preview', shouldSuggestFirstWindow: () => false },
     './studio.css': {}, './quick-output.css': {},
-    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null },
+    '../settings/OutputCaptionsSetting': { OutputCaptionsSwitch: () => null }, '../settings/OutputBrandingSetting': { OutputBrandingSwitch: () => null },
   }
   // with autostart the real pasteStart decides, so a global paste really reaches arm and its lock.
   if (autostart) delete mocks['./pasteStart']

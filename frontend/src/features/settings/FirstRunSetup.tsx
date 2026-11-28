@@ -20,6 +20,7 @@ import {
   findDynamicProvider,
   localizedDynamicText,
   promotionAllowsUpsell,
+  promotionBadge,
   promotionRecommends,
   promotionRegisterUrl,
   readPromoSnapshot,
@@ -131,13 +132,13 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
       const applied = readSponsorPromo()
       const snap = readPromoSnapshot()
       const resolved = resolvePromoSlice(snap, languageRef.current) || resolvePromoSlice(applied, languageRef.current)
-      const nextChoices = resolved?.choices
+      const nextChoices = resolved?.firstRunChoices || resolved?.choices
       if (!nextChoices) return
       setNotices(snap?.notices || applied?.notices || {})
       const locked = touched.current || frozen.current || stepRef.current !== 'choose'
       setChoices(choicesFor(nextChoices, choiceRef.current, locked))
       if (locked) return
-      const nextDefault = resolved?.defaultChoice || FIRST_RUN_DEFAULT
+      const nextDefault = resolved?.firstRunDefault || resolved?.defaultChoice || FIRST_RUN_DEFAULT
       choiceRef.current = nextDefault
       setChoice(nextDefault)
     }
@@ -250,10 +251,21 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
               const dynamic = id === 'other' || preset ? undefined : findDynamicProvider(id)
               const offerText = preset?.sponsor?.offer || (dynamic ? localizedDynamicText(dynamic.offer, language) : '')
               const promoted = id !== 'other' && promotionAllowsUpsell(id)
+              const customBadge = id === 'other' ? undefined : promotionBadge(id, language)
               return <button key={id} type="button" role="radio" className="ac-choice" aria-checked={choice === id}
                 onClick={() => { touched.current = true; choiceRef.current = id; setChoice(id) }}>
                 <span className="ac-choice-text">
-                  <b>{title()}{promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}{promoted && !promotionRecommends(id) && offerText && <span className="ac-badge">{`${t('赞助')} · ${offerText}`}</span>}</b>
+                  <b>
+                    {title()}
+                    {customBadge !== undefined
+                      ? (customBadge ? <span className="ac-badge">{customBadge}</span> : null)
+                      : (
+                        <>
+                          {promotionRecommends(id) && <span className="ac-badge">{t('推荐')}</span>}
+                          {promoted && !promotionRecommends(id) && offerText && <span className="ac-badge">{dynamic ? offerText : `${t('赞助')} · ${offerText}`}</span>}
+                        </>
+                      )}
+                  </b>
                   <span>{choiceDetail(id, otherName, language)}</span>
                 </span>
                 {choice === id && <Icon.Check />}

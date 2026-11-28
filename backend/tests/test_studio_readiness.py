@@ -227,7 +227,9 @@ def test_http_readiness_is_registered_before_project_routes(isolated, monkeypatc
     response = TestClient(app).get('/api/v1/studio/readiness')
     assert response.status_code == 200, response.text
     body = response.json()
-    assert set(body) == {'analysis_mode', 'ready', 'checks'}
+    assert set(body) == {'analysis_mode', 'ready', 'checks', 'batch_import_receipts'}
+    assert type(body['batch_import_receipts']) is bool
+    assert body['batch_import_receipts'] is True
     assert set(body['checks']) == {'analysis', 'transcription', 'visual', 'ffmpeg'}
     for check in body['checks'].values():
         assert {'ok', 'code', 'repair'} <= set(check)

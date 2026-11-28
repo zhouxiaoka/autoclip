@@ -1,6 +1,6 @@
 id: xhs_note
 version: 2
-name: {zh: 干货便签, en: Knowledge Note}
+name: { zh: "种草手卡", en: "Note Card" }
 fit:
   formats: {sit_down_interview: 0.95, keynote_stage: 0.9, podcast_studio: 0.85, street_interview: 0.3}
   needs_face: true

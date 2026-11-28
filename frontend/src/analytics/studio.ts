@@ -119,8 +119,18 @@ export function trackOutputPlayed(projectId: string, properties: VariantProperti
   captureBusinessEvent('studio_output_played', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 
-/** Anonymous three-level rating; free text is never collected. */
-export function trackOutputRating(projectId: string, properties: { output_rating: 'ready' | 'needs_edit' | 'unusable' } & VariantProperties) {
+export const OUTPUT_ISSUE_TAGS = ['text_overlap', 'cover_text', 'bad_crop', 'bad_selection', 'audio_sync'] as const
+export type OutputIssueTag = (typeof OUTPUT_ISSUE_TAGS)[number]
+
+/** Anonymous rating and optional allowlisted bad-case tags; free text never enters PostHog. */
+export function trackOutputRating(
+  projectId: string,
+  properties: {
+    output_rating: 'ready' | 'needs_edit' | 'unusable'
+    rating_trigger?: 'card_dislike' | 'post_download'
+    issue_tags?: readonly OutputIssueTag[]
+  } & VariantProperties,
+) {
   captureBusinessEvent('studio_output_rated', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 

@@ -6,7 +6,7 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 const { createInstance } = require('i18next')
 const root = path.join(__dirname, '../src/i18n')
-const langs = ['zh','zh-TW','en','ja','ko','es','pt','ru','fr','id','tr','vi','de']
+const langs = ['zh','zh-TW','en','ja','ko','es','pt','ru','fr','id','tr','vi','de','it','pl','th','nl','uk','hi','ar']
 const catalogs = Object.fromEntries(langs.map(l => [l, JSON.parse(fs.readFileSync(path.join(root, 'locales', l + '.json'), 'utf8'))]))
 test('locale JSON objects have no duplicate keys', () => {
   for (const lang of langs) {
@@ -32,7 +32,7 @@ test('locale detection respects saved preference, regional variants and ordered 
   assert.equal(resolveLanguage('fr', ['es-MX']), 'fr')
   for (const tag of ['es-MX','es-419','es-ES']) assert.equal(resolveLanguage('system', [tag]), 'es')
   for (const tag of ['pt-BR','pt-PT']) assert.equal(resolveLanguage(null, [tag]), 'pt')
-  assert.equal(resolveLanguage(null, ['ar-SA', 'ru-RU', 'en']), 'ru')
+  assert.equal(resolveLanguage(null, ['sv-SE', 'ru-RU', 'en']), 'ru')
   assert.equal(resolveLanguage('__proto__', ['zh-TW']), 'zh-TW')
   for (const tag of ['zh-TW','zh-HK','zh-MO','zh-Hant','zh-Hant-TW','zh_TW']) assert.equal(resolveLanguage(null, [tag]), 'zh-TW')
   for (const tag of ['zh-CN','zh-SG','zh-Hans','zh']) assert.equal(resolveLanguage(null, [tag]), 'zh')
@@ -40,7 +40,14 @@ test('locale detection respects saved preference, regional variants and ordered 
   assert.equal(resolveLanguage(null, ['id-ID']), 'id')
   assert.equal(resolveLanguage(null, ['tr-TR']), 'tr')
   assert.equal(resolveLanguage(null, ['vi-VN']), 'vi')
-  assert.equal(resolveLanguage(null, ['nl-NL']), 'en')
+  assert.equal(resolveLanguage(null, ['it-IT']), 'it')
+  assert.equal(resolveLanguage(null, ['pl-PL']), 'pl')
+  assert.equal(resolveLanguage(null, ['th-TH']), 'th')
+  assert.equal(resolveLanguage(null, ['nl-NL']), 'nl')
+  assert.equal(resolveLanguage(null, ['uk-UA']), 'uk')
+  assert.equal(resolveLanguage(null, ['hi-IN']), 'hi')
+  assert.equal(resolveLanguage(null, ['ar-SA']), 'ar')
+  assert.equal(resolveLanguage(null, ['sv-SE']), 'en')
 })
 test('unavailable or corrupt storage falls back to system language', () => {
   assert.equal(loadResolver({getItem:()=>{throw Error('denied')}}).readPreference(), 'system')

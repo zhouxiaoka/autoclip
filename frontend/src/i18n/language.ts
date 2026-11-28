@@ -1,4 +1,7 @@
-export const supportedLanguages = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de'] as const
+export const supportedLanguages = [
+  'zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de',
+  'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar',
+] as const
 export type Language = typeof supportedLanguages[number]
 export type LanguagePreference = Language | 'system'
 export const LANGUAGE_STORAGE_KEY = 'autoclip.language'

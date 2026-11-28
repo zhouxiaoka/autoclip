@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs" / "analytics" / "event_catalog.json"
 PACKAGED = ROOT / "backend" / "core" / "event_catalog.json"
 LOCALES = ROOT / "frontend" / "src" / "i18n" / "locales"
-LANGS = ("zh", "zh-TW", "en", "ja", "ko", "es", "pt", "ru", "fr", "id", "tr", "vi", "de")
+LANGS = ("zh", "zh-TW", "en", "ja", "ko", "es", "pt", "ru", "fr", "id", "tr", "vi", "de", "it", "pl", "th", "nl", "uk", "hi", "ar")
 RETIRED = (
     "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。",
     "API Key 无效或已过期，请检查后重试",

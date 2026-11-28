@@ -33,6 +33,13 @@ LOCALE_TO_README = {
     "tr": README_I18N_DIR / "README-TR.md",
     "vi": README_I18N_DIR / "README-VI.md",
     "de": README_I18N_DIR / "README-DE.md",
+    "it": README_I18N_DIR / "README-IT.md",
+    "pl": README_I18N_DIR / "README-PL.md",
+    "th": README_I18N_DIR / "README-TH.md",
+    "nl": README_I18N_DIR / "README-NL.md",
+    "uk": README_I18N_DIR / "README-UK.md",
+    "hi": README_I18N_DIR / "README-HI.md",
+    "ar": README_I18N_DIR / "README-AR.md",
 }
 
 

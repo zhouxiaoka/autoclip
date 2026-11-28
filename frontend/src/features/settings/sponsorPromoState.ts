@@ -6,6 +6,8 @@ export interface LocalePromoSlice {
   choices: string[]
   defaultChoice: string
   registerUrls: Record<string, string>
+  firstRunChoices?: string[]
+  firstRunDefault?: string
 }
 
 export interface DynamicProviderSpec {
@@ -21,14 +23,18 @@ export interface DynamicProviderSpec {
   offer?: Record<string, string>
   iconUrl?: string
   candidates?: Partial<Record<'analysis' | 'vision' | 'asr' | 'image', string[]>>
+  locales?: string[]
 }
 
 export interface PromoSnapshot {
   choices: string[]
   defaultChoice: string
+  firstRunChoices?: string[]
+  firstRunDefault?: string
   statuses: Record<string, string>
   registerUrls: Record<string, string>
   notices: Record<string, Record<string, string>>
+  badges?: Record<string, string | Record<string, string>>
   byLocale?: Record<string, LocalePromoSlice>
   providers?: DynamicProviderSpec[]
   sequence?: number
@@ -64,6 +70,14 @@ export function readDynamicProviders(): DynamicProviderSpec[] {
 export function findDynamicProvider(id?: string | null): DynamicProviderSpec | undefined {
   if (!id || !current?.providers?.length) return undefined
   return current.providers.find(item => item.id === id)
+}
+
+export function dynamicProviderVisibleForLocale(id?: string | null, locale?: string | null): boolean {
+  const dynamic = findDynamicProvider(id)
+  if (!dynamic || dynamic.locales === undefined) return true
+  const loc = normalizePromoLocale(locale ?? activeLocale)
+  if (!loc) return dynamic.locales.length > 0
+  return dynamic.locales.includes(loc)
 }
 
 export function localizedDynamicText(
@@ -106,6 +120,8 @@ export function resolvePromoSlice(snap: PromoSnapshot | null, locale?: string | 
     choices: snap.choices,
     defaultChoice: snap.defaultChoice,
     registerUrls: snap.registerUrls,
+    ...(snap.firstRunChoices ? { firstRunChoices: snap.firstRunChoices } : {}),
+    ...(snap.firstRunDefault ? { firstRunDefault: snap.firstRunDefault } : {}),
   }
 }
 
@@ -138,6 +154,10 @@ function trustedHostFor(id: string): string {
   return dynamic ? hostOf(dynamic.registerUrl) : ''
 }
 
+export function promotionDelisted(id?: string | null): boolean {
+  return !!id && current?.statuses?.[id] === 'out_of_service'
+}
+
 export function promotionEligible(id: string, locale?: string | null): boolean {
   if (current?.statuses?.[id] === 'out_of_service') return false
   const slice = resolvePromoSlice(current, locale)
@@ -164,6 +184,21 @@ export function promotionRecommends(id: string, locale?: string | null): boolean
   const slice = resolvePromoSlice(current, locale)
   if (!slice) return id === 'apimart'
   return id === slice.defaultChoice
+}
+
+/**
+ * Cloud-configured badge override for a promoted provider.
+ * - undefined: no override (use default client badge behavior)
+ * - null: explicitly hidden via cloud badge=""
+ * - non-empty string: localized badge text from cloud config
+ */
+export function promotionBadge(id: string, locale?: string | null): string | null | undefined {
+  if (!promotionCurrentlyPromoted(id, locale)) return undefined
+  const raw = current?.badges?.[id]
+  if (raw === undefined) return undefined
+  if (raw === '') return null
+  const text = localizedDynamicText(raw, locale)
+  return text || undefined
 }
 
 /**

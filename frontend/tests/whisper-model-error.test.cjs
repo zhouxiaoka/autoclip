@@ -20,7 +20,7 @@ const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 // happy-dom is ESM-only; dynamic import works on Node 20 and 22 (require(esm) is not unflagged on every 22.x).
 const loadWindow = async () => (await import('happy-dom')).Window
-const LANGS = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
+const LANGS = ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']
 const SOURCE = path.join(__dirname, '../src/components/SpeechRecognitionConfig.tsx')
 
 function runtimeResponse() {
@@ -139,7 +139,7 @@ test('sensitivity: breaking the received-model-list code makes the display asser
 })
 
 test('download failure copy exists in all eight locales', () => {
-  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']) {
+  for (const lang of ['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']) {
     const cat = JSON.parse(fs.readFileSync(path.join(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     assert.ok(cat[KEY], lang)
     if (lang !== 'zh') assert.notEqual(cat[KEY], KEY, lang)

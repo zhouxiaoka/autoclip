@@ -6,7 +6,7 @@ const React=require('react'),{renderToStaticMarkup}=require('react-dom/server')
 
 const CODE='vision_unavailable_subtitle_fallback'
 const MESSAGE='视觉服务暂不可用，已切换为字幕分析继续制作。'
-const langs=['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de']
+const langs=['zh', 'zh-TW', 'en', 'ja', 'ko', 'es', 'pt', 'ru', 'fr', 'id', 'tr', 'vi', 'de', 'it', 'pl', 'th', 'nl', 'uk', 'hi', 'ar']
 const catalogs=Object.fromEntries(langs.map(lang=>[lang,require('../src/i18n/locales/'+lang+'.json')]))
 
 function load(file,mocks={}){
@@ -40,7 +40,8 @@ test('S5 AUTO fallback message renders from the plan in all eight locales',()=>{
     suggested_goals:['content'],preferences:{goal:'content',aspect:'original',language:'source'},overrides:{},
    },
   }))
-  assert.ok(html.includes(catalogs[lang][MESSAGE]),lang+' must show the localized fallback message')
+  const decoded=html.replaceAll('&#x27;',"'").replaceAll('&amp;','&').replaceAll('&quot;','"')
+  assert.ok(decoded.includes(catalogs[lang][MESSAGE]),lang+' must show the localized fallback message')
  }
 })
 

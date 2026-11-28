@@ -154,11 +154,36 @@ test('by_locale slices are validated against trusted hosts and out_of_service ru
     },
   }), null)
 
-  assert.equal(promo.applySponsorPromo({
+  // 19-locale expansion (nl, it, ar, etc.) is supported; unknown valid ISO codes (sv) are ignored gracefully;
+  // malformed locale keys are still rejected.
+  const expanded = promo.applySponsorPromo({
     choices: ['other'],
     default: 'other',
     by_locale: {
       nl: { choices: ['other'], default: 'other', register_urls: {} },
+      ar: { choices: ['apimart', 'other'], default: 'apimart', register_urls: {} },
+      sv: { choices: ['other'], default: 'other', register_urls: {} },
+    },
+  })
+  assert.ok(expanded)
+  assert.equal(JSON.stringify(expanded.byLocale.nl.choices), JSON.stringify(['other']))
+  assert.equal(JSON.stringify(expanded.byLocale.ar.choices), JSON.stringify(['apimart', 'other']))
+  assert.equal(expanded.byLocale.sv, undefined)
+
+  assert.equal(promo.applySponsorPromo({
+    choices: ['other'],
+    default: 'other',
+    by_locale: {
+      '../zh': { choices: ['other'], default: 'other', register_urls: {} },
+    },
+  }), null)
+
+  // Invalid host inside a future ISO locale slice is still rejected
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    by_locale: {
+      sv: { choices: ['apimart', 'other'], default: 'apimart', register_urls: { apimart: 'https://evil.example/steal' } },
     },
   }), null)
 })
@@ -356,4 +381,70 @@ test('v2 dynamic providers hot-update through sponsorPromoWatch (create, update,
   assert.equal(saved.connection.base_url, 'https://router.cloudgw.example/api/v1')
   assert.equal(catalogView.isUnmatchedCompatible(saved.connection), true)
   unsub()
+})
+
+test('cloud-configurable sponsor badges parse cleanly and reject unsafe strings', () => {
+  const applied = promo.applySponsorPromo({
+    choices: ['apimart', 'cometapi', 'other'],
+    default: 'apimart',
+    statuses: { apimart: 'healthy', cometapi: 'healthy' },
+    badges: {
+      apimart: '',
+      cometapi: { zh: '赞助', en: 'Sponsor', sv: 'Sponsor SV' },
+    },
+  })
+  assert.ok(applied)
+  assert.equal(applied.badges.apimart, '')
+  assert.equal(applied.badges.cometapi.zh, '赞助')
+  assert.equal(applied.badges.cometapi.en, 'Sponsor')
+  assert.equal(applied.badges.cometapi.sv, undefined)
+
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    badges: { apimart: '<script>bad</script>' },
+  }), null)
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    badges: { apimart: 'https://evil.example' },
+  }), null)
+})
+
+test('first_run_choices subsets are validated and preserved separately from settings choices', () => {
+  const applied = promo.applySponsorPromo({
+    choices: ['apimart', 'cometapi', 'novita', 'other'],
+    default: 'apimart',
+    first_run_choices: ['apimart', 'other'],
+    first_run_default: 'apimart',
+    statuses: { apimart: 'healthy', cometapi: 'healthy', novita: 'healthy' },
+    by_locale: {
+      en: {
+        choices: ['apimart', 'cometapi', 'other'],
+        default: 'apimart',
+        first_run_choices: ['apimart', 'other'],
+        first_run_default: 'apimart',
+        register_urls: {},
+      },
+    },
+  })
+  assert.ok(applied)
+  assert.equal(JSON.stringify(applied.choices), JSON.stringify(['apimart', 'cometapi', 'novita', 'other']))
+  assert.equal(JSON.stringify(applied.firstRunChoices), JSON.stringify(['apimart', 'other']))
+  assert.equal(applied.firstRunDefault, 'apimart')
+  assert.equal(JSON.stringify(applied.byLocale.en.firstRunChoices), JSON.stringify(['apimart', 'other']))
+
+  // Reject first_run_choices containing an id outside choices or missing trailing 'other'
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    first_run_choices: ['cometapi', 'other'],
+    first_run_default: 'cometapi',
+  }), null)
+  assert.equal(promo.applySponsorPromo({
+    choices: ['apimart', 'other'],
+    default: 'apimart',
+    first_run_choices: ['apimart'],
+    first_run_default: 'apimart',
+  }), null)
 })

@@ -6,6 +6,7 @@ Sentry 崩溃上报。DSN 未配置或用户关闭时全程 no-op，不发网络
 """
 from __future__ import annotations
 
+import errno
 import json
 import tempfile
 import threading
@@ -115,6 +116,9 @@ def studio_error_code(error: Exception) -> str:
     io_code = _local_io_code(error)
     if io_code:
         return io_code
+    network_code = _transport_code(error)
+    if network_code:
+        return network_code
     return "unexpected"
 
 
@@ -122,20 +126,48 @@ def studio_error_code(error: Exception) -> str:
 # without one of these codes is a different denial (metadata, a directory) and
 # stays unexpected so it is still reported.
 _SHARING_WINERRORS = frozenset({32, 33})
+_DISK_ERRNOS = frozenset({errno.ENOSPC, errno.EDQUOT, errno.EROFS})
+_DISK_WINERRORS = frozenset({112, 39})
 
 
 def _local_io_code(error: BaseException) -> str | None:
     """Known local I/O failures that must not be stored as unexpected.
 
     A file another process still holds (WinError 32/33, including when Python
-    raises that as PermissionError) is ``file_locked``. ffmpeg/ffprobe exiting
-    non-zero is ``frame_extract_failed``, the same code the user-visible sentence
-    already uses.
+    raises that as PermissionError) is ``file_locked``. Disk-full / read-only
+    filesystem errors are ``disk``. ffmpeg/ffprobe exiting non-zero is
+    ``frame_extract_failed``, the same code the user-visible sentence already uses.
     """
     if isinstance(error, subprocess.CalledProcessError):
         return "frame_extract_failed"
-    if isinstance(error, OSError) and getattr(error, "winerror", None) in _SHARING_WINERRORS:
-        return "file_locked"
+    if isinstance(error, OSError):
+        winerr = getattr(error, "winerror", None)
+        if winerr in _SHARING_WINERRORS:
+            return "file_locked"
+        if getattr(error, "errno", None) in _DISK_ERRNOS or winerr in _DISK_WINERRORS:
+            return "disk"
+    return None
+
+
+def _transport_code(error: BaseException) -> str | None:
+    """Direct HTTP/network/TLS transport errors raised outside openai.APIError.
+
+    Note: bare Python ``TimeoutError`` intentionally remains ``unexpected`` with
+    ``unexpected_type='TimeoutError'`` per the telemetry contract; typed
+    ``httpx.TimeoutException`` maps to ``timeout``.
+    """
+    import ssl
+    try:
+        import httpx
+        httpx_timeout = (httpx.TimeoutException,)
+        httpx_request = (httpx.RequestError,)
+    except ImportError:
+        httpx_timeout = ()
+        httpx_request = ()
+    if httpx_timeout and isinstance(error, httpx_timeout):
+        return "timeout"
+    if isinstance(error, (ConnectionError, ssl.SSLError, *httpx_request)):
+        return "network"
     return None
 
 

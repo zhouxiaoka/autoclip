@@ -103,7 +103,7 @@ const saveWithSystemDownload = async (
     captureBusinessEvent('media_download_saved', { ...props, download_mode: 'native', size_bytes: result.size, legacy: true })
   })
   const { message } = await import('antd')
-  message.success(t('已保存到下载文件夹'))
+  message.success(t('文件已保存'))
   return saved
 }
 

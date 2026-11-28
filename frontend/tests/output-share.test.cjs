@@ -68,7 +68,8 @@ test('rating is asked after a successful download at most once per project and o
 test('use-case invite goes to GitHub Discussions and nothing is uploaded',()=>{
  assert.match(share,/USE_CASE_URL = `\$\{REPO_URL\}\/discussions\/new\?category=use-cases`/)
  assert.match(feedback,/openExternalLink\(USE_CASE_URL\)/)
- assert.doesNotMatch(feedback,/textarea|<input/)
+ assert.doesNotMatch(feedback,/type="file"|FormData|multipart/i)
+ assert.match(feedback,/不含视频与字幕内容/)
 })
 
 test('share and rating analytics only carry allowlisted enums',()=>{

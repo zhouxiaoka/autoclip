@@ -16,7 +16,7 @@
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square&color=4F46E5" alt="GitHub release" height="20"></a>&nbsp;
   <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square&color=FFD700&logo=github&logoColor=white&label=Stars" alt="GitHub stars" height="20"></a>&nbsp;
   <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square&color=10B981" alt="Downloads" height="20"></a>&nbsp;
-  <img src="https://img.shields.io/badge/Languages-13-0EA5E9?style=flat-square" alt="13 Languages" height="20">&nbsp;
+  <img src="https://img.shields.io/badge/Languages-20-0EA5E9?style=flat-square" alt="20 Languages" height="20">&nbsp;
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT" height="20"></a>
 </p>
 
@@ -34,6 +34,8 @@
 <p>
   <a href="https://zhouxiaoka.github.io/autoclip_intro/"><strong>Website</strong></a>
   &nbsp;&middot;&nbsp;
+  <a href="https://zhouxiaoka.github.io/autoclip_intro/templates/"><strong>Template Gallery (34)</strong></a>
+  &nbsp;&middot;&nbsp;
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><strong>Download</strong></a>
   &nbsp;&middot;&nbsp;
   <a href="https://zhouxiaoka.github.io/autoclip_intro/features/game-streams/"><strong>Live Replays (v1.6)</strong></a>
@@ -48,7 +50,7 @@
 </p>
 
 <p>
-  <strong>English</strong> · <a href="docs/i18n/README-ZH.md">简体中文</a> · <a href="docs/i18n/README-ZH-TW.md">繁體中文</a> · <a href="docs/i18n/README-JA.md">日本語</a> · <a href="docs/i18n/README-KO.md">한국어</a> · <a href="docs/i18n/README-ES.md">Español</a> · <a href="docs/i18n/README-PT.md">Português</a> · <a href="docs/i18n/README-RU.md">Русский</a> · <a href="docs/i18n/README-FR.md">Français</a> · <a href="docs/i18n/README-ID.md">Bahasa Indonesia</a> · <a href="docs/i18n/README-TR.md">Türkçe</a> · <a href="docs/i18n/README-VI.md">Tiếng Việt</a> · <a href="docs/i18n/README-DE.md">Deutsch</a>
+  <strong>English</strong> · <a href="docs/i18n/README-ZH.md">简体中文</a> · <a href="docs/i18n/README-ZH-TW.md">繁體中文</a> · <a href="docs/i18n/README-JA.md">日本語</a> · <a href="docs/i18n/README-KO.md">한국어</a> · <a href="docs/i18n/README-ES.md">Español</a> · <a href="docs/i18n/README-PT.md">Português</a> · <a href="docs/i18n/README-RU.md">Русский</a> · <a href="docs/i18n/README-FR.md">Français</a> · <a href="docs/i18n/README-ID.md">Bahasa Indonesia</a> · <a href="docs/i18n/README-TR.md">Türkçe</a> · <a href="docs/i18n/README-VI.md">Tiếng Việt</a> · <a href="docs/i18n/README-DE.md">Deutsch</a> · <a href="docs/i18n/README-IT.md">Italiano</a> · <a href="docs/i18n/README-PL.md">Polski</a> · <a href="docs/i18n/README-TH.md">ไทย</a> · <a href="docs/i18n/README-NL.md">Nederlands</a> · <a href="docs/i18n/README-UK.md">Українська</a> · <a href="docs/i18n/README-HI.md">हिन्दी</a> · <a href="docs/i18n/README-AR.md">العربية</a>
 </p>
 
 <br>
@@ -97,7 +99,8 @@ Drop in a link, local video, or **live stream replay** — AutoClip finds the be
 | **OBS Auto-Capture** | Connect OBS WebSocket (`4455`), trim losslessly (`-c copy`), and auto-queue clips right after you end stream. |
 | **Game Highlights** | Generalized highlight detection supporting **8s+** standalone plays with tighter vision/OCR budgets. |
 | **One-Click Repurpose** | Unified playable clip cards — switch target platforms in one click without losing previous exports. |
-| **13 Languages** | Full desktop UI, tray menus, and docs in 13 languages (`+ zh-TW, de, id, tr, vi`) plus Arabic RTL captions. |
+| **34-Template Studio & 3D Depth** | 5 built-in + **29 hot-updatable viral templates** (editorial serif, cinema letterbox, magenta beat cut, red list hook, KPI stats, karaoke pill, and **5 local ONNX 3-layer 3D depth templates** where giant typography passes cleanly behind the speaker at 119 FPS on CPU). Browse the live **[Template Gallery](https://zhouxiaoka.github.io/autoclip_intro/templates/)** or clone any reference video via `skills/template-cloner`. |
+| **20 Languages** | Full desktop UI, tray menus, and docs in 20 languages (`+ it, pl, th, nl, uk, hi, ar`) with Arabic RTL support. |
 
 <details>
 <summary>📸 Inside the App (5 screenshots)</summary>
@@ -283,6 +286,8 @@ Browse 16+ clips, covers, and post copy in the **[Showcase →](https://zhouxiao
 2. Open **Settings**, pick a cloud provider (or start Ollama / LM Studio), test the connection, and save — or click **Try the built-in example** with no API key.
 3. Paste a video link, drop a file, or switch to **Live Replay** to connect OBS or import a stream recording. Pick your platforms and click **Generate**.
 
+> **New to AutoClip?** Follow the **[2-Minute Desktop Quickstart (with UI GIFs) →](docs/QUICKSTART.en.md)** — step-by-step setup with zero paid configuration needed.
+
 > Installers are built publicly on GitHub Actions (`Desktop Build`) with `build-provenance.json` SHA-256 verification. First launch on an unsigned build: on **macOS** run `xattr -dr com.apple.quarantine "/Applications/AutoClip Desktop.app"` (or *System Settings → Privacy &amp; Security → Open Anyway*); on **Windows** click **More info → Run anyway** on SmartScreen. See **[Code Signing &amp; Verification Policy](CODE_SIGNING.md)** (notarization tracked in [#119](https://github.com/zhouxiaoka/autoclip/issues/119)).
 
 ### 2. CLI &amp; MCP (Claude Code, Cursor, Codex, OpenCode &amp; scripts)
@@ -404,7 +409,7 @@ Check the failed stage: subtitles/transcription, model connection, FFmpeg, disk 
 
 | Topic | Guide |
 | :--- | :--- |
-| Install &amp; first clips | [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
+| Install &amp; first clips | **[2-Minute Quickstart (with GIFs)](docs/QUICKSTART.en.md)** · [Installation Guide](docs/USER_INSTALLATION_GUIDE.en.md) |
 | Self-hosting &amp; agents | [Docker](docs/DOCKER.en.md) · [MCP &amp; AI Agents](docs/MCP.en.md) ([ZH](docs/CLI_AND_MCP.md) · [JA](docs/MCP.ja.md) · [KO](docs/MCP.ko.md) · [ES](docs/MCP.es.md) · [DE](docs/MCP.de.md)) · [Agent Skill](skills/autoclip/SKILL.md) (ZH) · [OpenCode](docs/OPENCODE.en.md) |
 | Models &amp; troubleshooting | [Multi-LLM Setup](docs/MULTI_LLM_PROVIDER_GUIDE.md) (ZH) · [FAQ](docs/FAQ.en.md) |
 | Releases &amp; privacy | [Changelog](CHANGELOG.md) · [Code Signing](CODE_SIGNING.md) · [Roadmap](docs/ROADMAP.md) (ZH) · [Community Board](docs/COMMUNITY_BOARD.md) (ZH) · [Privacy](docs/PRIVACY.en.md) |

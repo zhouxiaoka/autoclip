@@ -20,7 +20,7 @@ SURFACES = (
     'docs/i18n/README-ID.md',
     'docs/i18n/README-TR.md',
     'docs/i18n/README-VI.md',
-    'docs/i18n/README-DE.md',
+    'docs/i18n/README-DE.md', 'docs/i18n/README-IT.md', 'docs/i18n/README-PL.md', 'docs/i18n/README-TH.md', 'docs/i18n/README-NL.md', 'docs/i18n/README-UK.md', 'docs/i18n/README-HI.md', 'docs/i18n/README-AR.md',
 )
 RELEASE_URL = re.compile(r'releases/(?:tag|download)/v\d+\.\d+\.\d+')
 WHEEL_PIN = re.compile(r'autoclip-\d+\.\d+\.\d+-')

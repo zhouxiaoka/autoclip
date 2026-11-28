@@ -23,6 +23,7 @@ from backend.services.project_service import ProjectService
 from backend.services.cover_brief import Options as CoverOptions
 from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
+from backend.services.studio.import_receipts import idempotent_import
 from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan, AppendPlatformsRequest, PostCopy
 
 router = APIRouter()
@@ -91,7 +92,7 @@ def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial',
 @router.get('/readiness')
 def import_readiness():
     from backend.services.studio import readiness
-    return readiness.report()
+    return {**readiness.report(), 'batch_import_receipts': True}
 
 
 class InspectUrlBody(BaseModel):
@@ -235,6 +236,7 @@ def test_vision_settings(body: vision_settings.VisionSettingsInput):
         raise HTTPException(502, '视觉连接测试失败，请检查接口地址、密钥和模型是否支持图片输入') from None
 
 @router.post('/import')
+@idempotent_import
 async def import_visual(
     request: Request,
     goal: Literal['auto', 'content', 'highlight', 'promo'] = Form('auto'),
@@ -260,6 +262,7 @@ async def import_visual(
     source_window_start: Optional[float] = Form(None, ge=0),
     source_window_end: Optional[float] = Form(None, gt=0),
     features: str = Form(''),
+    import_operation_id: Optional[str] = Form(None, max_length=128, pattern=r'^[A-Za-z0-9_-]+$'),
     db: Session = Depends(get_db),
 ):
     if obs_capture_id:
@@ -398,7 +401,11 @@ async def import_visual(
                     await video.close()
                 return {'project_id': str(project.id), 'analysis_run_id': None}
         else:
-            project = ProjectService(db).create_project(data)
+            if isinstance(import_operation_id, str):
+                from backend.services.studio.import_receipts import operation_project_id
+                project = ProjectService(db).create_project(data, project_id=operation_project_id(import_operation_id))
+            else:
+                project = ProjectService(db).create_project(data)
     except BaseException:
         if staged is not None:
             staged.unlink(missing_ok=True)

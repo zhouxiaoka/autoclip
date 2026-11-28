@@ -349,7 +349,7 @@ build_frontend() {
     echo "==> Building frontend"
     local ver
     ver=$(app_version)
-    (cd frontend && VITE_APP_VERSION="$ver" npm ci --silent && VITE_APP_VERSION="$ver" npm run build)
+    (cd frontend && VITE_APP_VERSION="$ver" npm ci --silent && NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=4096" VITE_APP_VERSION="$ver" npm run build)
     echo "OK"
 }
 
