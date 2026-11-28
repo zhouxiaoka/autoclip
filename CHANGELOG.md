@@ -9,6 +9,28 @@
 
 _（本周尚无改动）_
 
+## [1.6.4] - 2026-11-28
+
+### 要点
+
+#### 中文
+- 新增应用内「✦ 克隆风格」AI 模板复刻工作流：拖入参考视频或粘贴链接，自动抽帧解析并生成可复用模板，支持自然语言多轮微调、3 秒实拍预览、撤销与一键导出 `.zip` 分享
+- 包装引擎升级 v2：新增模板品牌变量系统（主色 / 字号 `S/M/L` / 3D 景深开关）、`window.ACMotion` 原子动效套件与 GSAP 暂停时间轴桥接
+- 3 套官方旗舰模板（穿影巨幕、高能双拍、猩红急停）率先支持模板选择器单行品牌变量实时调节，新增「我的模板」分类页签
+- 全套克隆界面与品牌变量交互同步覆盖全部 20 语种界面，补齐隐私安全克隆埋点与单测
+
+#### English
+- Added in-app "✦ Clone Style" AI template cloner: drop a reference clip or paste a link to extract style blueprints, refine with natural language, preview a 3-second real render, undo revisions, and export shareable `.zip` template packs
+- Upgraded Packaging Engine v2 with declarative template brand variables (accent color, `S/M/L` font scale, 3D depth toggle), the `window.ACMotion` atomic motion kit, and a paused-timeline GSAP bridge
+- Enabled live single-row brand-variable customization on 3 flagship templates (Depth Titan, Pulse Clash, Crimson Drop) and added a "My Templates" shelf category
+- Localized all new cloner and variable UI across all 20 languages and added privacy-safe clone lifecycle telemetry
+
+### 新增
+
+- **应用内 AI 风格克隆（Clone once, Clip forever）**：在模板选择器新增「✦ 克隆风格」3 步极简弹窗，支持上传参考视频或输入链接抽帧，借助视觉模型推断配色、字体、动效与 3D 景深蓝图，自动合成可复用的标准模板包并渲染 3 秒双语实拍预览；支持自然语言指令微调、一键撤销、保存到「我的模板」及 `.zip` 导出复用。
+- **包装引擎 v2 与 `ACMotion` 动效套件**：`TemplateSpec` 新增 `variables` 与 `motion_runtime` 字段，支持用户级品牌变量持久化（`<data_dir>/templates/.user-vars.json`）并在渲染前自动注入 `fill.vars`；`ac-template-sdk.js` 内置 `window.ACMotion`（`springPop` / `blurIn` / `clipWipe` / `kineticSlam` / `chunkCaption` / `renderVignette` / `renderGrain` / `bindTimeline`）。
+- **旗舰模板变量快捷条**：穿影巨幕（`depth_billboard`）、高能双拍（`red_white_kinetic`）、猩红急停（`impact_red`）率先接入主色圆点、字号 `S/M/L` 与 3D 景深开关。
+
 ## [1.6.3] - 2026-11-27
 
 ### 要点
@@ -817,7 +839,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.3...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.4...HEAD
+- [1.6.4]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.3...v1.6.4
 - [1.6.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.2...v1.6.3
 - [1.6.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.1...v1.6.2
 - [1.6.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.6.0...v1.6.1
