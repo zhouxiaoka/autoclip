@@ -225,6 +225,7 @@ export async function fetchCloneReadiness(): Promise<{ vision_capable: boolean; 
 export async function startTemplateClone(opts: {
   referenceUrl?: string
   file?: File | null
+  previewFile?: File | null
   promptHint?: string
   depthMode?: 'auto' | 'on' | 'off'
 }): Promise<CloneJobState> {
@@ -234,6 +235,7 @@ export async function startTemplateClone(opts: {
   if (opts.promptHint) body.append('prompt_hint', opts.promptHint)
   body.append('depth_mode', opts.depthMode || 'auto')
   if (opts.file) body.append('file', opts.file, opts.file.name || 'reference.mp4')
+  if (opts.previewFile) body.append('preview_file', opts.previewFile, opts.previewFile.name || 'preview.mp4')
   const res = await fetch(buildApiUrl('/studio/templates/clone'), { method: 'POST', body })
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}))

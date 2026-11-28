@@ -2577,5 +2577,8 @@
   "editing_style.clone.save_use": "保存并使用",
   "editing_style.export": "导出",
   "editing_style.clone.lang_zh": "中文",
-  "editing_style.clone.name_zh_ph": "中文名"
+  "editing_style.clone.name_zh_ph": "中文名",
+  "editing_style.clone.use_own_video": "用当前视频预览",
+  "editing_style.brand_kit_save": "存为品牌色",
+  "editing_style.brand_kit_apply": "套用品牌色"
 }

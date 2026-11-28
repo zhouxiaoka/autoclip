@@ -91,6 +91,22 @@ export default function EditingStylePicker({
   const [cloneOpen, setCloneOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement | null>(null)
+  const [brandKit, setBrandKit] = useState<{ accent_color: string; font_scale: string } | null>(() => {
+    try {
+      const raw = window.localStorage?.getItem('autoclip_brand_kit_v1')
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as { accent_color?: unknown; font_scale?: unknown }
+      if (typeof parsed.accent_color === 'string' && typeof parsed.font_scale === 'string') {
+        return { accent_color: parsed.accent_color.toUpperCase(), font_scale: parsed.font_scale }
+      }
+    } catch { /* ignore storage errors */ }
+    return null
+  })
+  const saveBrandKit = (accentColor: string, fontScale: string) => {
+    const next = { accent_color: accentColor.toUpperCase(), font_scale: fontScale }
+    setBrandKit(next)
+    try { window.localStorage?.setItem('autoclip_brand_kit_v1', JSON.stringify(next)) } catch { /* ignore */ }
+  }
   const [canPrev, setCanPrev] = useState(false)
   const [canNext, setCanNext] = useState(false)
   const rowRef = useRef<HTMLDivElement | null>(null)
@@ -796,6 +812,7 @@ export default function EditingStylePicker({
     </Modal>
     <TemplateCloneModal
       open={cloneOpen}
+      previewFile={file}
       onClose={() => setCloneOpen(false)}
       onSaved={id => {
         setCloneOpen(false)
@@ -853,6 +870,28 @@ export default function EditingStylePicker({
                 className={`ac-clone-toggle${depthVal ? ' is-on' : ''}`}
                 onClick={() => void updateTemplateVars(selItem.id, { ...cur, depth_enabled: !depthVal })}
               />
+            </div>
+          ) : null}
+          {vars.some(v => v.key === 'accent_color') ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {brandKit && (brandKit.accent_color !== accent || brandKit.font_scale !== fontScale) ? (
+                <button
+                  type="button"
+                  className="ac-clone-pill"
+                  style={{ height: 26, fontSize: 11.5 }}
+                  onClick={() => void updateTemplateVars(selItem.id, { ...cur, accent_color: brandKit.accent_color, font_scale: brandKit.font_scale })}
+                >
+                  {t('editing_style.brand_kit_apply')}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="ac-clone-pill"
+                style={{ height: 26, fontSize: 11.5 }}
+                onClick={() => saveBrandKit(accent, fontScale)}
+              >
+                {t('editing_style.brand_kit_save')}
+              </button>
             </div>
           ) : null}
           {selItem.source === 'installed' ? (

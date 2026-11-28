@@ -2577,5 +2577,8 @@
   "editing_style.clone.save_use": "Save & Use",
   "editing_style.export": "Export",
   "editing_style.clone.lang_zh": "ZH",
-  "editing_style.clone.name_zh_ph": "Chinese Name"
+  "editing_style.clone.name_zh_ph": "Chinese Name",
+  "editing_style.clone.use_own_video": "พรีวิวด้วยวิดีโอของฉัน",
+  "editing_style.brand_kit_save": "บันทึกแบรนด์",
+  "editing_style.brand_kit_apply": "ใช้สีแบรนด์"
 }

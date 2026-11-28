@@ -1,0 +1,60 @@
+id: kinetic_slam_pro
+version: 2
+motion_runtime: gsap
+name: { zh: "重锤动效", en: "Kinetic Slam" }
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 0.95, podcast_studio: 0.9, keynote_stage: 0.95}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.36
+  head_zone: [240, 1140]
+  zoom:
+    mode: creep
+    creep: 0.028
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.08:saturation=1.06"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 165, alt_top: 165}
+    subtitle: {top: 1360, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: street_9x16, from_overlay: true}
+caption_layout:
+  font_px: 48
+  inset_px: 88
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "GSAP 时间轴引擎驱动：弹性重锤开场胶囊 + 节拍爆点动态字幕，自带主色与字号调节", en: "GSAP paused-timeline motion: elastic slam opener badge and rhythmic kinetic pulse captions"}
+  tags: [gsap, kinetic, motion, viral, animated]
+  category: general
+  order: 68
+  package_version: "1.0.0"
+  min_app_version: "1.6.4"
+  author: AutoClip
+  preview_layout: crop
+variables:
+  - key: accent_color
+    kind: color
+    default: "#FFE548"
+    label: {zh: "主色", en: "Accent"}
+  - key: font_scale
+    kind: select
+    default: "M"
+    options: ["S", "M", "L"]
+    label: {zh: "字号", en: "Size"}
+qa: {}

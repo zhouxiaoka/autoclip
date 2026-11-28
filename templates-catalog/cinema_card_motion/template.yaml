@@ -1,0 +1,60 @@
+id: cinema_card_motion
+version: 2
+motion_runtime: gsap
+name: { zh: "流光卡片", en: "Motion Card" }
+fit:
+  formats: {vlog: 1.0, sit_down_interview: 1.0, podcast_studio: 0.95, keynote_stage: 0.9}
+  needs_face: false
+canvas: {aspects: [portrait], overlay_px: [1080, 1920], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.36
+  head_zone: [240, 1140]
+  zoom:
+    mode: creep
+    creep: 0.018
+  transitions: {broll: none, max: 0}
+  grade: "eq=contrast=1.05:saturation=0.96"
+  picture_layout: crop
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 170, alt_top: 170}
+    subtitle: {top: 1380, max_rows: 2}
+  safe_area: tiktok
+  limits: {emphasis_gap_s: 2.5}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, speakers]
+audio: {bgm: none}
+cover: {layout: editorial_9x16, from_overlay: true}
+caption_layout:
+  font_px: 44
+  inset_px: 88
+  source_limit: 42
+  paging_mode: phrase
+  bilingual_align: per_cue
+  strip_speaker_prefix: true
+  en_key_propagates: false
+  burn_cover_title: true
+  keep_punctuation: true
+meta:
+  desc: {zh: "GSAP 时间轴引擎驱动：暗色磨砂卡片滑入 + 底部流光进度线 + 柔焦字幕浮现", en: "GSAP paused-timeline motion: frosted dark glass header card with animated accent sweep and soft-focus captions"}
+  tags: [gsap, editorial, glass, card, animated]
+  category: general
+  order: 67
+  package_version: "1.0.0"
+  min_app_version: "1.6.4"
+  author: AutoClip
+  preview_layout: crop
+variables:
+  - key: accent_color
+    kind: color
+    default: "#34D399"
+    label: {zh: "主色", en: "Accent"}
+  - key: font_scale
+    kind: select
+    default: "M"
+    options: ["S", "M", "L"]
+    label: {zh: "字号", en: "Size"}
+qa: {}

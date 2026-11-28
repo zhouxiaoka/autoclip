@@ -232,14 +232,64 @@
     return '<defs><filter id="ac-grain"><feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" stitchTiles="stitch"/></filter></defs>' +
       '<rect x="0" y="0" width="1080" height="1920" filter="url(#ac-grain)" opacity="' + op.toFixed(3) + '"/>';
   }
+  function _ease(name, p) {
+    var x = clamp01(p);
+    if (name === 'back.out') {
+      var c1 = 1.70158, c3 = c1 + 1;
+      return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+    }
+    if (name === 'elastic.out') {
+      return x === 0 || x === 1 ? x : (1 - Math.exp(-6.5 * x) * Math.cos(10.5 * x));
+    }
+    if (name === 'expo.out') return x >= 1 ? 1 : (1 - Math.pow(2, -10 * x));
+    if (name === 'power4.out') return 1 - Math.pow(1 - x, 4);
+    return easeOutCubic(x);
+  }
+  function createTimeline() {
+    var tracks = [];
+    var tl = {
+      paused: true,
+      pause: function () { tl.paused = true; return tl; },
+      fromTo: function (target, fromVars, toVars, startSec, durSec, easeName) {
+        tracks.push({
+          target: target,
+          from: fromVars || {},
+          to: toVars || {},
+          t0: Number(startSec) || 0,
+          dur: Math.max(0.001, Number(durSec) || 0.3),
+          ease: easeName || 'power4.out'
+        });
+        return tl;
+      },
+      time: function (tSeconds) {
+        var t = Number(tSeconds) || 0;
+        for (var i = 0; i < tracks.length; i++) {
+          var tr = tracks[i];
+          var raw = (t - tr.t0) / tr.dur;
+          var p = raw <= 0 ? 0 : (raw >= 1 ? 1 : _ease(tr.ease, raw));
+          var keys = Object.keys(tr.to);
+          for (var k = 0; k < keys.length; k++) {
+            var key = keys[k];
+            var a = Number(tr.from[key] != null ? tr.from[key] : 0);
+            var b = Number(tr.to[key]);
+            tr.target[key] = a + (b - a) * p;
+          }
+        }
+        return tl;
+      }
+    };
+    return tl;
+  }
   function bindTimeline(tl, digestFn) {
     global.__acTimeline = tl;
     if (tl && typeof tl.pause === 'function') tl.pause();
-    global.renderFrame = function (tSeconds) {
+    var fn = function (tSeconds) {
       var t = Number(tSeconds) || 0;
       if (tl && typeof tl.time === 'function') tl.time(t);
       return (typeof digestFn === 'function' ? digestFn(t) : '') || ('TL_' + Math.round(t * 30));
     };
+    global.renderFrame = fn;
+    return fn;
   }
 
   global.ACMotion = {
@@ -256,6 +306,7 @@
     safeBands: safeBands,
     renderVignette: renderVignette,
     renderGrain: renderGrain,
+    createTimeline: createTimeline,
     bindTimeline: bindTimeline
   };
 })(window);

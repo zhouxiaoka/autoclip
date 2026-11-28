@@ -540,14 +540,29 @@ def synthesize_template_dir(template_id: str, bp: StyleBlueprint, dest_dir: Path
     return dest_dir
 
 
+def _probe_duration(video_path: Path) -> float:
+    ffprobe = shutil.which('ffprobe') or 'ffprobe'
+    try:
+        out = subprocess.check_output(
+            [ffprobe, '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', str(video_path)],
+            text=True, timeout=10,
+        ).strip()
+        val = float(out)
+        return val if val > 0 else 10.0
+    except Exception:
+        return 10.0
+
+
 def render_clone_preview(
     template_dir: Path,
     template_id: str,
     *,
     lang: Literal['zh', 'en'] = 'zh',
+    source_video: Path | None = None,
     user_root: Path | None = None,
 ) -> dict[str, Path]:
     """Validate synthesized template via load_folder and render 3s real-case preview assets."""
+    template_dir = template_dir.resolve()
     registry.load_folder(template_dir)
 
     # Temporarily stage under isolated preview user_root so render_draft resolves it cleanly
@@ -562,6 +577,17 @@ def render_clone_preview(
     from backend.services.studio.render import render_draft
     from backend.services.studio.store import directory
 
+    use_custom = bool(source_video and source_video.is_file())
+    vid_src = source_video if use_custom else _example_source_video()
+    assert vid_src is not None
+    if use_custom:
+        dur = _probe_duration(vid_src)
+        s0 = 0.0 if dur <= 3.5 else min(2.0, max(0.0, dur - 3.0))
+        s1 = min(dur, s0 + 3.0) if dur > 0.5 else 3.0
+    else:
+        s0, s1 = 40.0, 43.0
+    mid = round(s0 + (s1 - s0) * 0.48, 2)
+
     orig_root_fn = registry.user_templates_root
     registry.user_templates_root = lambda: tpl_root  # type: ignore[assignment]
     try:
@@ -570,19 +596,19 @@ def render_clone_preview(
         pdir.mkdir(parents=True, exist_ok=True)
         cues = (
             [
-                PackagingCue(start=40.1, end=41.5, text='走过低谷之后，'),
-                PackagingCue(start=41.5, end=43.0, text='回升才更有意思。'),
+                PackagingCue(start=round(s0 + 0.1, 2), end=mid, text='走过低谷之后，'),
+                PackagingCue(start=mid, end=round(s1, 2), text='回升才更有意思。'),
             ]
             if lang == 'zh'
             else [
-                PackagingCue(start=40.1, end=41.5, text='After every tough downswing,'),
-                PackagingCue(start=41.5, end=43.0, text='the upswing feels effortless.'),
+                PackagingCue(start=round(s0 + 0.1, 2), end=mid, text='After every tough downswing,'),
+                PackagingCue(start=mid, end=round(s1, 2), text='the upswing feels effortless.'),
             ]
         )
         draft = Draft(
             id=f'{template_id}_{lang}',
             title='好产品让复杂消失' if lang == 'zh' else 'Effortless Craft',
-            scenes=[Scene(id='s1', start=40.0, end=43.0)],
+            scenes=[Scene(id='s1', start=round(s0, 2), end=round(s1, 2))],
             aspect='portrait',
             original_audio=False,
             layout='crop',
@@ -590,7 +616,7 @@ def render_clone_preview(
             packaging=Packaging(version=2, template='editorial', audience_language=lang, source_language='en', cues=cues),
         )
         res = render_draft(
-            proj, _example_source_video(), draft, f'{template_id}_{lang}', lambda _: None,
+            proj, vid_src, draft, f'{template_id}_{lang}', lambda _: None,
             html_template=template_id, features={'pkg_templates_v1': True},
         )
         if res.get('template') != template_id:
@@ -657,6 +683,7 @@ def start_clone_job(
     *,
     reference_url: str = '',
     reference_file: Path | None = None,
+    preview_file: Path | None = None,
     prompt_hint: str = '',
     depth_mode: Literal['auto', 'on', 'off'] = 'auto',
     render_preview: bool = True,
@@ -676,6 +703,7 @@ def start_clone_job(
         'revisions': [],
         'revision': 0,
         'template_id': None,
+        'preview_source': str(preview_file) if (preview_file and preview_file.is_file()) else None,
         'preview_zh_url': None,
         'preview_en_url': None,
         'poster_url': None,
@@ -710,8 +738,9 @@ def start_clone_job(
             tpl_dir = synthesize_template_dir(tid, bp, jdir / 'tpl' / tid)
             registry.load_folder(tpl_dir)
             if render_preview:
-                render_clone_preview(tpl_dir, tid, lang='zh')
-                render_clone_preview(tpl_dir, tid, lang='en')
+                src_vid = Path(state['preview_source']) if state.get('preview_source') else None
+                render_clone_preview(tpl_dir, tid, lang='zh', source_video=src_vid)
+                render_clone_preview(tpl_dir, tid, lang='en', source_video=src_vid)
 
             with _jobs_lock:
                 state['status'] = 'ready'
@@ -770,8 +799,9 @@ def refine_clone_job(
     tpl_dir = synthesize_template_dir(tid, updated, jdir / 'tpl' / tid)
     registry.load_folder(tpl_dir)
     if render_preview:
-        render_clone_preview(tpl_dir, tid, lang='zh')
-        render_clone_preview(tpl_dir, tid, lang='en')
+        src_vid = Path(st['preview_source']) if st.get('preview_source') else None
+        render_clone_preview(tpl_dir, tid, lang='zh', source_video=src_vid)
+        render_clone_preview(tpl_dir, tid, lang='en', source_video=src_vid)
 
     with _jobs_lock:
         st['revisions'].append(updated.model_dump(mode='json'))

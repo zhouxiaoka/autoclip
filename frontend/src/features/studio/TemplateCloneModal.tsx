@@ -23,13 +23,15 @@ const SWATCHES = ['#FFE548', '#34D399', '#2D6BFF', '#FF4D4F'] as const
 
 type Props = {
   open: boolean
+  previewFile?: File | null
   onClose: () => void
   onSaved: (templateId: string) => void
 }
 
-export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
+export default function TemplateCloneModal({ open, previewFile, onClose, onSaved }: Props) {
   const [referenceUrl, setReferenceUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [useOwnPreview, setUseOwnPreview] = useState(true)
   const [promptHint, setPromptHint] = useState('')
   const [depthMode, setDepthMode] = useState<'auto' | 'on' | 'off'>('auto')
   const [readiness, setReadiness] = useState<{ vision_capable: boolean; model: string }>({ vision_capable: false, model: '' })
@@ -104,6 +106,7 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
       const started = await startTemplateClone({
         referenceUrl: referenceUrl.trim(),
         file,
+        previewFile: useOwnPreview ? previewFile : null,
         promptHint: promptHint.trim(),
         depthMode,
       })
@@ -242,6 +245,16 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
                   ))}
                 </div>
               </div>
+              {previewFile ? (
+                <div className="ac-clone-inline">
+                  <span>{t('editing_style.clone.use_own_video')}</span>
+                  <button
+                    type="button"
+                    className={`ac-clone-toggle${useOwnPreview ? ' is-on' : ''}`}
+                    onClick={() => setUseOwnPreview(v => !v)}
+                  />
+                </div>
+              ) : null}
               <input
                 className="ac-clone-input"
                 value={promptHint}

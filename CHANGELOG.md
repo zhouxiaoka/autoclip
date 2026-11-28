@@ -14,15 +14,15 @@ _（本周尚无改动）_
 ### 要点
 
 #### 中文
-- 新增应用内「✦ 克隆风格」AI 模板复刻工作流：拖入参考视频或粘贴链接，自动抽帧解析并生成可复用模板，支持自然语言多轮微调、3 秒实拍预览、撤销，并打通 `.zip` 模板包一键导入 / 导出 / 卸载管理闭环
-- 包装引擎升级 v2：新增模板品牌变量系统（主色 / 字号 `S/M/L` / 3D 景深开关）、`window.ACMotion` 原子动效套件与 GSAP 暂停时间轴桥接
-- 12 套高频官方旗舰模板（含全部 5 套 3D 景深模板及净白胶囊、荧光划重点、数据爆点、杂志衬线、黄字钩子等）接入单行品牌变量实时调节，新增「我的模板」分类页签
+- 新增应用内「✦ 克隆风格」AI 模板复刻工作流：拖入参考视频或粘贴链接，自动抽帧解析并生成可复用模板，支持自然语言多轮微调、**用当前导入视频直接渲染 3 秒实拍预览**、撤销，并打通 `.zip` 模板包一键导入 / 导出 / 卸载管理闭环
+- 包装引擎升级 v2：新增模板品牌变量系统（主色 / 字号 `S/M/L` / 3D 景深开关）、**一键「存为品牌色 / 套用品牌色」记忆**、`window.ACMotion` 原子动效套件与 GSAP 暂停时间轴桥接（`ACMotion.createTimeline` + `bindTimeline`）
+- 新增 2 套 GSAP 时间轴驱动动效标杆模板（**重锤动效 `kinetic_slam_pro`**、**流光卡片 `cinema_card_motion`**），连同 12 套高频官方旗舰模板（共 **14 套**，含全部 5 套 3D 景深模板）均支持单行品牌变量实时调节，并新增「我的模板」分类页签
 - 全套克隆界面与品牌变量交互同步覆盖全部 20 语种界面，补齐隐私安全克隆埋点并同步升级 `skills/template-cloner` 技能文档
 
 #### English
-- Added in-app "✦ Clone Style" AI template cloner: drop a reference clip or paste a link to extract style blueprints, refine with natural language, preview a 3-second real render, undo revisions, and complete the `.zip` template import / export / uninstall loop
-- Upgraded Packaging Engine v2 with declarative template brand variables (accent color, `S/M/L` font scale, 3D depth toggle), the `window.ACMotion` atomic motion kit, and a paused-timeline GSAP bridge
-- Enabled live single-row brand-variable customization on 12 flagship templates (all 5 3D depth templates plus Clean Pill, Highlight Note, Stats KPI, Editorial Serif, Yellow Sans Hook, Pulse Clash, Crimson Drop) and added a "My Templates" shelf category
+- Added in-app "✦ Clone Style" AI template cloner: drop a reference clip or paste a link to extract style blueprints, refine with natural language, **preview 3-second real renders on your own selected video**, undo revisions, and complete the `.zip` template import / export / uninstall loop
+- Upgraded Packaging Engine v2 with declarative template brand variables (accent color, `S/M/L` font scale, 3D depth toggle), **one-click Brand Kit save/apply memory**, the `window.ACMotion` atomic motion kit, and a deterministic GSAP paused-timeline bridge (`ACMotion.createTimeline` + `bindTimeline`)
+- Added 2 new GSAP-timeline flagship motion templates (**Kinetic Slam** & **Motion Card**), bringing live single-row brand-variable support to **14 flagship templates** (including all 5 3D depth templates), plus a "My Templates" shelf category
 - Localized all new cloner and variable UI across all 20 languages, added privacy-safe clone lifecycle telemetry, and updated `skills/template-cloner` for v1.6.4
 
 ### 新增

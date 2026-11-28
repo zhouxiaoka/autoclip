@@ -561,11 +561,13 @@ async def start_template_clone(
     prompt_hint: str = Form(default=''),
     depth_mode: str = Form(default='auto'),
     file: UploadFile | None = File(default=None),
+    preview_file: UploadFile | None = File(default=None),
 ):
     """Start an async in-app AI style cloning job from a reference URL, local video, or prompt."""
     from backend.services.studio.templates import cloner
     mode = depth_mode if depth_mode in ('auto', 'on', 'off') else 'auto'
     ref_path = None
+    prev_path = None
     if file is not None:
         raw = await file.read(52 * 1024 * 1024)
         await file.close()
@@ -574,12 +576,21 @@ async def start_template_clone(
             tmp_dir.mkdir(parents=True, exist_ok=True)
             ref_path = tmp_dir / 'upload.mp4'
             ref_path.write_bytes(raw)
+    if preview_file is not None:
+        praw = await preview_file.read(52 * 1024 * 1024)
+        await preview_file.close()
+        if praw:
+            pdir = cloner.clone_jobs_root() / f'_preview_{uuid.uuid4().hex[:8]}'
+            pdir.mkdir(parents=True, exist_ok=True)
+            prev_path = pdir / 'preview_src.mp4'
+            prev_path.write_bytes(praw)
     if not reference_url.strip() and ref_path is None and not prompt_hint.strip():
         raise HTTPException(422, '请粘贴参考视频链接、上传本地视频或输入风格描述')
     try:
         return cloner.start_clone_job(
             reference_url=reference_url.strip(),
             reference_file=ref_path,
+            preview_file=prev_path,
             prompt_hint=prompt_hint.strip(),
             depth_mode=mode,  # type: ignore[arg-type]
         )
