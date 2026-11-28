@@ -105,10 +105,14 @@
       var beforeWords = words.slice(0, focalIdx).join(' ');
       var afterWords = words.slice(focalIdx + 1).join(' ');
 
-      // Alternate red/white hero polarity on every cue!
+      // Alternate accent/white hero polarity on every cue!
+      var vars = state.vars || {};
+      var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#EF4444';
+      var scaleMap = { S: 0.86, M: 1.0, L: 1.15 };
+      var fScale = scaleMap[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
       var heroRed = (mIdx % 2 === 0);
-      var heroFill = heroRed ? '#EF4444' : '#FFFFFF';
-      var subFill = heroRed ? '#FFFFFF' : '#EF4444';
+      var heroFill = heroRed ? accent : '#FFFFFF';
+      var subFill = heroRed ? '#FFFFFF' : accent;
 
       var pTop = easeOutQuint(mAge / 0.20);
       var pHero = spring(Math.max(0, mAge - 0.05), 0.25);
@@ -116,21 +120,21 @@
       var heroSc = 0.74 + 0.26 * pHero;
 
       if (beforeWords) {
-        var bsz = 52;
+        var bsz = Math.round(52 * fScale);
         var bw = measureW(beforeWords, bsz, 700, SANS);
         if (bw > 900) bsz = Math.max(36, Math.floor((bsz * 900) / bw));
         svg += '<g transform="translate(540,' + (1316 + (1 - pTop) * 18).toFixed(1) + ')" opacity="' + pTop.toFixed(2) + '" filter="url(#sh)">'
           + '<text x="0" y="0" text-anchor="middle" font-family="' + SANS + '" font-size="' + bsz + '" font-weight="700" letter-spacing="1" fill="' + subFill + '" stroke="#000" stroke-width="5" paint-order="stroke">' + esc(beforeWords) + '</text></g>';
       }
 
-      var hsz = 132;
+      var hsz = Math.round(132 * fScale);
       var hw = measureW(focalWord, hsz, 400, POSTER);
       if (hw > 900) hsz = Math.max(76, Math.floor((hsz * 900) / hw));
       svg += '<g transform="translate(540,1438) scale(' + heroSc.toFixed(3) + ')" opacity="' + easeOutCubic(Math.max(0, mAge - 0.03) / 0.14).toFixed(2) + '" filter="url(#sh)">'
         + '<text x="0" y="0" text-anchor="middle" font-family="' + POSTER + '" font-size="' + hsz + '" letter-spacing="2" fill="' + heroFill + '" stroke="#000" stroke-width="8" paint-order="stroke">' + esc(focalWord) + '</text></g>';
 
       if (afterWords) {
-        var asz = 52;
+        var asz = Math.round(52 * fScale);
         var aw = measureW(afterWords, asz, 700, SANS);
         if (aw > 900) asz = Math.max(36, Math.floor((asz * 900) / aw));
         svg += '<g transform="translate(540,' + (1516 + (1 - pBot) * 16).toFixed(1) + ')" opacity="' + pBot.toFixed(2) + '" filter="url(#sh)">'

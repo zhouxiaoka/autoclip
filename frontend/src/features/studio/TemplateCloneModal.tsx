@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Modal } from 'antd'
 import { t } from '../../i18n'
 import {
+  trackTemplateCloneCompleted,
+  trackTemplateCloneRefined,
+  trackTemplateCloneSaved,
+  trackTemplateCloneStarted,
+} from '../../analytics/studio'
+import {
   fetchCloneReadiness,
   getTemplateCloneJob,
   refineTemplateClone,
@@ -37,6 +43,7 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
   const [nameZh, setNameZh] = useState('')
   const [nameEn, setNameEn] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const startedAtRef = useRef<number>(0)
 
   useEffect(() => {
     if (!open) return
@@ -52,8 +59,16 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
         if (next.status === 'ready' && next.blueprint) {
           setNameZh(next.blueprint.name_zh || '')
           setNameEn(next.blueprint.name_en || '')
+          trackTemplateCloneCompleted({
+            outcome: 'success',
+            duration_ms: startedAtRef.current ? Math.max(0, Date.now() - startedAtRef.current) : undefined,
+          })
         } else if (next.status === 'failed') {
           setError(next.error || t('editing_style.clone.failed'))
+          trackTemplateCloneCompleted({
+            outcome: 'error',
+            duration_ms: startedAtRef.current ? Math.max(0, Date.now() - startedAtRef.current) : undefined,
+          })
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : t('editing_style.clone.failed'))
@@ -82,6 +97,9 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
     }
     setBusy(true)
     setError(null)
+    startedAtRef.current = Date.now()
+    const sourceKind = file ? 'file' : referenceUrl.trim() ? 'link' : 'none'
+    trackTemplateCloneStarted({ source_kind: sourceKind })
     try {
       const started = await startTemplateClone({
         referenceUrl: referenceUrl.trim(),
@@ -93,9 +111,17 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
       if (started.status === 'ready' && started.blueprint) {
         setNameZh(started.blueprint.name_zh || '')
         setNameEn(started.blueprint.name_en || '')
+        trackTemplateCloneCompleted({
+          outcome: 'success',
+          duration_ms: Math.max(0, Date.now() - startedAtRef.current),
+        })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('editing_style.clone.failed'))
+      trackTemplateCloneCompleted({
+        outcome: 'error',
+        duration_ms: Math.max(0, Date.now() - startedAtRef.current),
+      })
     } finally {
       setBusy(false)
     }
@@ -108,6 +134,7 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
     try {
       const updated = await refineTemplateClone(job.job_id, opts)
       setJob(updated)
+      trackTemplateCloneRefined({ trigger: opts.instruction ? 'manual' : 'select' })
       if (updated.blueprint) {
         setNameZh(updated.blueprint.name_zh || nameZh)
         setNameEn(updated.blueprint.name_en || nameEn)
@@ -140,6 +167,7 @@ export default function TemplateCloneModal({ open, onClose, onSaved }: Props) {
     setError(null)
     try {
       const saved = await saveTemplateClone(job.job_id, { nameZh: nameZh.trim(), nameEn: nameEn.trim() })
+      trackTemplateCloneSaved({ template: saved.installed })
       resetAll()
       onSaved(saved.installed)
     } catch (err) {

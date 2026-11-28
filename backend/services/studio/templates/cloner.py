@@ -474,13 +474,13 @@ def synthesize_template_dir(template_id: str, bp: StyleBlueprint, dest_dir: Path
         var ww = measureW(tok, baseFz, 800);
         var isAct = i === activeIdx;
         if (isAct && CFG.captionMotion === 'karaoke_pill') {{
-          parts.push('<rect x="' + (xCur - 9).toFixed(1) + '" y="' + (1470 - baseFz + 4).toFixed(1) + '" width="' + (ww + 18).toFixed(1) + '" height="' + (baseFz + 16).toFixed(1) + '" rx="12" fill="' + accent + '"/>');
+          parts.push('<rect x="' + (xCur - 5).toFixed(1) + '" y="' + (1470 - baseFz + 4).toFixed(1) + '" width="' + (ww + 10).toFixed(1) + '" height="' + (baseFz + 14).toFixed(1) + '" rx="10" fill="' + accent + '"/>');
           parts.push('<text x="' + xCur.toFixed(1) + '" y="1476" font-family="' + CFG.fontFamily + '" font-size="' + baseFz + '" font-weight="800" fill="#14151A">' + esc(tok) + '</text>');
         }} else {{
           var fillCol = isAct ? accent : CFG.textColor;
           parts.push('<text x="' + xCur.toFixed(1) + '" y="1476" font-family="' + CFG.fontFamily + '" font-size="' + baseFz + '" font-weight="800" fill="' + fillCol + '" stroke="#0B0C10" stroke-width="10" paint-order="stroke" stroke-linejoin="round">' + esc(tok) + '</text>');
         }}
-        xCur += ww + (sep ? measureW(sep, baseFz, 800) : 0);
+        xCur += ww + (sep ? measureW(sep, baseFz, 800) : 6);
       }}
       parts.push('</g>');
     }}

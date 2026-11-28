@@ -562,6 +562,22 @@
       "status": "keep",
       "domain": "studio"
     },
+    "studio_template_clone_started": {
+      "status": "keep",
+      "domain": "studio"
+    },
+    "studio_template_clone_completed": {
+      "status": "keep",
+      "domain": "studio"
+    },
+    "studio_template_clone_refined": {
+      "status": "keep",
+      "domain": "studio"
+    },
+    "studio_template_clone_saved": {
+      "status": "keep",
+      "domain": "studio"
+    },
     "studio_output_shared": {
       "status": "keep",
       "domain": "studio"
