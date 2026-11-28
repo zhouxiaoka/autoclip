@@ -1,0 +1,52 @@
+{
+  "contract": "impact-inheritance/v1",
+  "reviewed_at": "2026-11-28T11:25:21Z",
+  "reviewer": "zhouxiaoka (product owner)",
+  "reason": "Tag v1.6.3 points to the exact same commit c204d114 verified in Desktop Build (46117653613) and Internal Acceptance (46120715494); git diff is empty and all tag CI/build/smoke/provider-e2e/release jobs (46121423320) passed.",
+  "target": {
+    "commit": "c204d114c99125de9326cb55c00bb85434341e97",
+    "build_run_id": 46121423320,
+    "assets": {
+      "AutoClip.Desktop_1.6.3_aarch64.dmg": "eb654741a8e3986fb11a41c17ea3c80c2de6a1123579d52b18c330b649b36f99",
+      "AutoClip.Desktop_1.6.3_x64-setup.exe": "bff86e6d53a8bbcaf8b57d4798cbb9a94a0465ac0f4be826d810f2b56ffbee44",
+      "AutoClip.Desktop_1.6.3_x64-setup.exe.sig": "72751ce4e5e897003461e95d1ab36d39949d3b2e50243e6979be437d3ce571d2",
+      "AutoClip.Desktop_1.6.3_aarch64.app.tar.gz": "525dc2cad48830b13deff52fbe2401c4c96b6b3209ea97bf5ab73f5cbac22860",
+      "AutoClip.Desktop_1.6.3_aarch64.app.tar.gz.sig": "3bdf366e031df711758f61aa82d995e153252a9c11e61885ef69009276b1e47b",
+      "autoclip-1.6.3-cli-mcp.zip": "af6b2fb56c17244c2598119f2f150500dfc3a3b01e0491deef179f6bb4df04a6",
+      "autoclip_mcp-1.6.3-py3-none-any.whl": "ecd64adcd72bf9b67a2956e4ad2ccf3dfcb043a5b1851a967a7f8fd18f1efc5f",
+      "latest.json": "2a016d854977ac9e49bce9ed5ecb2edc740940232f0c49e7fcf1d3d7d925e8f4",
+      "python-release-sha256.txt": "bb071dfb1b3e24441d2f7e57a60a4b6d77958fd1e31cd391d4718e9e18fdba07",
+      "build-provenance.json": "040d5de9bb96893a1b4a115781562ebb1a4ed2580e71be47f5bbfd19822be056"
+    },
+    "platforms": [
+      "macos-arm64"
+    ],
+    "label": "macos-arm64/output_delivery"
+  },
+  "required_assertions": [
+    "macos-arm64-output_delivery:passed"
+  ],
+  "affected_assertions": [],
+  "inherited_assertions": [
+    "macos-arm64-output_delivery:passed"
+  ],
+  "origin": {
+    "path": "evidence/origin-macos-arm64-output_delivery.json",
+    "sha256": "85ff7da114ff465776532b5801233c91757948e4c0312e3111bbd7871d82fba2"
+  },
+  "diff": {
+    "path": "evidence/diff-c204d114-to-c204d114.json",
+    "sha256": "4a2cab5bae147be2d9126a633b78d63106e4d7e355ecdaba1d28770f87df6f95"
+  },
+  "dependencies": [
+    {
+      "path": "backend/__init__.py",
+      "sha256": "1dad9da9e9aeecd8bf14e726f315b5fb00750161552799b0a624803157168dae"
+    }
+  ],
+  "runtime_evidence": {
+    "path": "evidence/tag-build-runtime-46121423320.json",
+    "sha256": "da026dbe0d6423976d31f87ae8bcfa2f1f3bad6fe8cb9a9461265b9655515532"
+  },
+  "fresh": []
+}

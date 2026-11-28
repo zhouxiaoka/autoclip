@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "commit": "c204d114c99125de9326cb55c00bb85434341e97",
+  "build_run_id": 46117653613,
+  "assets": {
+    "AutoClip Desktop_1.6.3_aarch64.dmg": "4f9cdb93f807011868c7a797c5bf78d47013a8a607383e7d3e298592dcd8325d",
+    "AutoClip Desktop_1.6.3_x64-setup.exe": "aaccd800a5be90b675ecda0db064842b97aeedf0fce46f39beec5b7aea5ae469",
+    "AutoClip Desktop_1.6.3_x64-setup.exe.sig": "1b0b124b0fe31d629e9d80c88463c056edd9627b266476bed1b4a2ff13b2bcd5",
+    "AutoClip.Desktop_1.6.3_aarch64.app.tar.gz": "a0bef264b98d761545593bdc29b1d8808a99df5768ea0b83e81bb8783a1b83d1",
+    "AutoClip.Desktop_1.6.3_aarch64.app.tar.gz.sig": "d5cd896f99ad61b8861ec3926ea016a625e86fe86d1f86ee8624a4a88844884d"
+  },
+  "platforms": [
+    "windows-x64"
+  ],
+  "label": "windows-x64/upgrade_legacy",
+  "completed_at": "2026-11-28T07:10:54Z",
+  "assertions": [
+    "windows-x64-upgrade_legacy:passed"
+  ],
+  "build": {
+    "path": "evidence/origin-build-46117653613.json",
+    "sha256": "4bcf44eeba030b7e71b51c4d7b7932e452b53453bc74fa3ef538eb6fd7734bf9"
+  },
+  "provenance": {
+    "path": "evidence/origin-provenance-46117653613.json",
+    "sha256": "36f4a0aa9fbdccc7bab5deab94e8010263c749551fcdd44621781c7fdb01292b"
+  },
+  "evidence": {
+    "path": "evidence/windows-1.6.3-summary.json",
+    "sha256": "444005caf0e97616cbca90510fd1a8ab4dde8746b6c6fe8d420d53697155990b"
+  }
+}

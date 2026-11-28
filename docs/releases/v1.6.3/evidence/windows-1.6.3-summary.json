@@ -1,0 +1,86 @@
+{
+  "version": "1.6.3",
+  "platform": "windows-x64",
+  "commit": "c204d114c99125de9326cb55c00bb85434341e97",
+  "build_run_id": 46117653613,
+  "package": {
+    "name": "AutoClip Desktop_1.6.3_x64-setup.exe",
+    "sha256": "aaccd800a5be90b675ecda0db064842b97aeedf0fce46f39beec5b7aea5ae469",
+    "bytes": 214723913
+  },
+  "installed_binary_sha256": "d29aea41873bc5f40becd8ddcb735fe0ed0389568889efda471ded55280c3b2f",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:10:21Z",
+      "summary": "Verified installer EXE SHA-256 match (214,723,913 bytes), executed silent NSIS install (INSTALL_EXIT=0, binary changed, bundled portable Python 3.13.13 + Pillow 13.0.0 + FFmpeg/FFprobe 9.0.2 + bundled PP-HumanSeg ONNX model), and verified cold-start subject_matte.available()==True and exact-LF import receipt marker."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:10:54Z",
+      "summary": "Backed up existing 1.6.2 AppData before in-place upgrade; confirmed user sentinel preserved (sentinel_kept=true), stale obsolete backend file removed (stale_cleaned=true), DashScope settings and allow_send_frame=false survived cleanly, and live Session-2 desktop app launched cleanly as v1.6.3."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:10:56Z",
+      "summary": "Real China-mainland network without proxy: sponsor_promo_client resolved signed sequence=5 (source=cache, dynamic providers shengsuanyun + aimlapi) via Shanghai COS fallback; remote template catalog synced 29 templates (including all 5 depth_* templates) in 5.71s and installed depth_billboard in 19.01s; live Session-2 UIA verified Settings Providers (clean Shengsuanyun offer badge, AI/ML API without Sponsor tag, unconfigured out_of_service hidden) and Settings App (v1.6.3, Default Export Folder, OutputBrandingSwitch)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:14:06Z",
+      "summary": "Real 45s spoken MP4 without SRT processed via DashScope cloud ASR + qwen4-max and rendered with 1.6.3 3D depth template depth_billboard in 190.5s (matte_fallback_logged=false); output 46.89s 1080x1920 H.264/AAC MP4 (12,497,421 bytes, sha256=63704392..., 0 decode errors); Publish Kit ZIP 12,497,850 bytes; frames visually verified showing behind-head 3D typography."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:15:11Z",
+      "summary": "Real 45s spoken MP4 + SRT imported on Windows with PR #701 import_operation_id after O_BINARY fix (exact LF marker written, idempotent replay returned identical project_id, second distinct operation created independent project_id); rendered in 65.2s with brand_outro_enabled=false -> 45.07s 1080x1920 MP4 (11,462,471 bytes, sha256=c53ef90e..., 0 decode errors)."
+    },
+    "link_import": {
+      "status": "waived",
+      "waiver_reason": "Cloud VM datacenter IP triggered Bilibili HTTP 412 anti-bot; installed 1.6.3 exited cleanly in 3.1s with error_code=source_blocked and Cookie guidance (0 crash). Real 1-hour spoken Bilibili URL + 60s window passed on macOS arm64 1.6.3 DMG and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:16:47Z",
+      "summary": "Isolated temp data dir with DashScope qwen4-max (capability=multimodal, analysis_mode=visual, allow_visual_screening=true) processed silent 45s video end-to-end in 89.3s; rendered 12.30s 1080x1920 H.264 MP4 (2,611,132 bytes, sha256=767cef0e..., 0 decode errors); frame visually verified; main QA profile allow_send_frame=false untouched."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:16:57Z",
+      "summary": "Isolated installed 1.6.3 Windows backend against loopback HTTP 500 mock completed with bounded 5 POST attempts, exited running state cleanly (status=failed, error_code=provider_error), and preserved source MP4."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:19:12Z",
+      "summary": "Live Session-2 desktop UI verified v1.6.3 windows/x86_64 rendering (Home OutputBrandingSwitch, Settings Providers clean badges, Settings App Default Export Folder with no Tauri dialog capability errors); verified all 3 rendered MP4 outputs via bundled ffprobe 9.0.2 and full-stream ffmpeg null decode (0 errors), visual 3D depth frame inspection, and Publish Kit ZIP integrity.",
+      "outputs": [
+        {
+          "case": "local_without_subtitles_depth_billboard",
+          "bytes": 12497421,
+          "duration_sec": 46.89,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        },
+        {
+          "case": "local_with_subtitles_batch",
+          "bytes": 11462471,
+          "duration_sec": 45.07,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        },
+        {
+          "case": "visual_generation",
+          "bytes": 2611132,
+          "duration_sec": 12.3,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        }
+      ]
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:17:03Z",
+      "summary": "Isolated installed 1.6.3 Windows backend verified: (1) analytics=false, crash_reports=false produced 0 outbound requests; (2) AUTOCLIP_BUILD_ENVIRONMENT=validation with analytics=true emitted studio_generation_finished via terminal_outbox with app_version=1.6.3, analytics_environment=validation, os=windows, arch=x86_64, runtime=desktop, outcome=success, and zero leaked secrets or personal paths."
+    }
+  }
+}

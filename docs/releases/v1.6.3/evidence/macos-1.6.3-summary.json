@@ -1,0 +1,94 @@
+{
+  "version": "1.6.3",
+  "platform": "macos-arm64",
+  "commit": "c204d114c99125de9326cb55c00bb85434341e97",
+  "build_run_id": 46117653613,
+  "package": {
+    "name": "AutoClip Desktop_1.6.3_aarch64.dmg",
+    "sha256": "4f9cdb93f807011868c7a797c5bf78d47013a8a607383e7d3e298592dcd8325d",
+    "bytes": 351668790
+  },
+  "installed_binary_sha256": "22d102a34f1b709955e6f85af55e23ec57d96391abbca6c002a1a96af051a4d3",
+  "cases": {
+    "clean_install": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:12:08Z",
+      "summary": "Verified DMG SHA-256 match (351,668,790 bytes), extracted isolated .app via ditto, confirmed codesign valid, bundled portable Python 3.13.13 + Pillow 13.0.0 + static FFmpeg/FFprobe 9.0.2 + bundled PP-HumanSeg ONNX model, and cold-start subject_matte.available()==True."
+    },
+    "upgrade_legacy": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:16:49Z",
+      "summary": "Backed up existing desktop settings/DB before live GUI launch; verified DashScope configuration (qwen4-max + qwen-audio-3.1-asr-flash), allow_send_frame=false, readiness=true, batch_import_receipts=true, and clean AppleScript quit with 0 orphan backend processes."
+    },
+    "model_settings": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:12:16Z",
+      "summary": "Verified live signed cloud promo refresh (source=cache, sequence=5, dynamic providers shengsuanyun + aimlapi), output-branding toggle persistence (false -> true), remote template catalog sync (1.94s, 29 remote templates including 5 depth_* templates), and depth_billboard hot-install (2.42s, SHA-256 verified)."
+    },
+    "local_without_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:13:27Z",
+      "summary": "Real 45s spoken MP4 without SRT processed via DashScope cloud ASR + qwen4-max and rendered with 1.6.3 3D depth template depth_billboard in 70.8s (matte_fallback_logged=false); output 46.89s 1080x1920 H.264/AAC MP4 (9,107,680 bytes, sha256=0079d018..., 0 decode errors); Publish Kit ZIP 9,108,154 bytes; frames visually verified showing behind-head 3D typography and brand outro."
+    },
+    "local_with_subtitles": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:14:01Z",
+      "summary": "Real 45s spoken MP4 + SRT imported with PR #701 import_operation_id receipt (idempotent replay returned identical project_id; second distinct operation created independent project_id); rendered in 34.1s with brand_outro_enabled=false -> 45.07s 1080x1920 MP4 (7,639,703 bytes, sha256=dbe26862..., 0 decode errors)."
+    },
+    "link_import": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:14:56Z",
+      "summary": "Real 1-hour public spoken Bilibili URL with 60s source window (0-60s) downloaded, transcribed, and rendered in 54.9s; output 32.49s 1080x1920 MP4 (6,275,429 bytes, sha256=e0bb26de..., 0 decode errors)."
+    },
+    "visual_generation": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:15:58Z",
+      "summary": "Isolated temp data dir with DashScope qwen4-max (capability=multimodal, analysis_mode=visual, allow_visual_screening=true) processed silent 45s video end-to-end in 60.9s; rendered 12.23s 1080x1920 H.264 MP4 (2,043,766 bytes, sha256=87f7a739..., 0 decode errors); frame visually verified; main QA profile allow_send_frame=false untouched."
+    },
+    "failure_recovery": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:16:03Z",
+      "summary": "Isolated installed 1.6.3 backend against loopback HTTP 500 mock completed with bounded 5 POST attempts, exited running state cleanly (status=failed, error_code=provider_error), and preserved source MP4."
+    },
+    "output_delivery": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:16:49Z",
+      "summary": "Verified all 4 rendered MP4 outputs via bundled ffprobe 9.0.2 and full-stream ffmpeg null decode (0 errors across all streams), visual frame inspection (including 3-layer ONNX behind-head typography), Publish Kit ZIP integrity, and live macOS GUI launch/shutdown.",
+      "outputs": [
+        {
+          "case": "local_without_subtitles_depth_billboard",
+          "bytes": 9107680,
+          "duration_sec": 46.89,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        },
+        {
+          "case": "local_with_subtitles_batch",
+          "bytes": 7639703,
+          "duration_sec": 45.07,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        },
+        {
+          "case": "link_import",
+          "bytes": 6275429,
+          "duration_sec": 32.49,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        },
+        {
+          "case": "visual_generation",
+          "bytes": 2043766,
+          "duration_sec": 12.23,
+          "resolution": "1080x1920",
+          "decode_errors": 0
+        }
+      ]
+    },
+    "privacy_telemetry": {
+      "status": "passed",
+      "completed_at": "2026-11-28T07:16:08Z",
+      "summary": "Isolated installed 1.6.3 backend verified: (1) analytics=false, crash_reports=false produced 0 outbound requests; (2) AUTOCLIP_BUILD_ENVIRONMENT=validation with analytics=true emitted studio_generation_finished via terminal_outbox with app_version=1.6.3, analytics_environment=validation, os=macos, arch=aarch64, runtime=desktop, outcome=success, and zero leaked secrets or personal paths."
+    }
+  }
+}

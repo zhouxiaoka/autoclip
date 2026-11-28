@@ -1,0 +1,80 @@
+{
+  "tag": "v1.6.3",
+  "commit": "c204d114c99125de9326cb55c00bb85434341e97",
+  "build_run_id": 46121423320,
+  "internal_acceptance_run_id": 46120715494,
+  "jobs_passed": [
+    "build-macos-arm64",
+    "build-windows-x64",
+    "candidate-gate",
+    "ci-guards",
+    "provider-e2e / live-e2e",
+    "provider-e2e / mock-e2e",
+    "provider-e2e / provider-e2e",
+    "release",
+    "sensevoice-runtime / real-transcription (macos-15)",
+    "sensevoice-runtime / real-transcription (ubuntu-latest)",
+    "sensevoice-runtime / real-transcription (windows-latest)",
+    "smoke-windows-x64",
+    "source-quality / Backend tests",
+    "source-quality / Diagnostics SQL and recovery contracts",
+    "source-quality / Docker compose smoke",
+    "source-quality / Docker development compose smoke",
+    "source-quality / Frontend checks",
+    "source-quality / Release contract checks",
+    "source-quality / windows-runtime / Windows Proactor cleanup",
+    "source-quality / windows-runtime / Windows cancel_job process tree",
+    "source-quality / windows-runtime / Windows media runtime regressions",
+    "whisper-runtime / windows-recovery"
+  ],
+  "live_observation": {
+    "window_hours": 3.03,
+    "published_at_utc": "2026-11-28T08:22:05Z",
+    "checked_at_utc": "2026-11-28T11:24:35Z",
+    "github_downloads": {
+      "windows_exe": 17,
+      "macos_dmg": 7,
+      "cli_mcp_zip": 5
+    },
+    "github_from_app_new_issues": 0,
+    "sentry": {
+      "autoclip_frontend_163_issues": 0,
+      "python_fastapi_163_issues": 0,
+      "crashes": 0,
+      "unhandled_errors": 0
+    },
+    "posthog_project_450605_production": {
+      "total_events": 539,
+      "distinct_devices": 6,
+      "os_split": {
+        "macos": 4,
+        "windows": 2
+      },
+      "provider_save_finished": {
+        "success": 23,
+        "blocked_validation": 1,
+        "error": 0
+      },
+      "studio_generation_finished": {
+        "total": 6,
+        "success": 2,
+        "error_provider_upstream": 3,
+        "partial_service_restarted": 1
+      },
+      "studio_output_played": {
+        "total": 2,
+        "macos": 1,
+        "windows": 1
+      },
+      "template_interactions": {
+        "preview_played": 45,
+        "overridden": 26,
+        "picker_shown": 7
+      },
+      "exceptions_or_internal_errors": 0
+    },
+    "observation_waiver_reason": "Owner explicitly authorized promoting v1.6.3 after 3 hours of live Pre-release observation (16:22-19:24 Asia/Shanghai, 3.03h) with verified dual-platform production samples in PostHog (539 events across 6 distinct devices: 4 macOS + 2 Windows; 23/23 provider saves succeeded; outputs played on both macOS and Windows; Windows DeepSeek and local Ollama generations succeeded; 45 template previews played; 0 exceptions/internal_errors), 0 Sentry crashes/issues across frontend and backend, and 0 new GitHub from-app issues; waiving the remainder of the 24h observation window.",
+    "owner_waiver_reason": "Owner decision on 2026-11-28: waive the remaining ~21h of the 24h Pre-release observation window after 3h clean dual-platform live telemetry (6 distinct devices: 4 macOS + 2 Windows, 539 production events, 0 Sentry crashes, 0 internal errors, 0 new GitHub issues) and waive Windows cloud-VM datacenter link_import (HTTP 412 anti-bot, clean 3.1s source_blocked exit) so v1.6.3 promotes to Latest; post-promotion monitoring continues via Sentry and PostHog with Promote/Halt rollback readiness."
+  },
+  "note": "Exact same commit c204d114 rebuilt by Desktop Build tag workflow 46121423320; all required CI/build/smoke/provider-e2e/release jobs succeeded."
+}
