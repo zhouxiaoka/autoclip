@@ -11,9 +11,10 @@ import {
   type BuiltinTemplateChoice, type EditingStyle, type HtmlTemplateChoice,
 } from './editingStyle'
 import {
-  installRemoteTemplate, resolveLocalizedCopy, syncTemplateCatalog, uninstallUserTemplate, useTemplateCatalog,
+  exportTemplateUrl, installRemoteTemplate, resolveLocalizedCopy, syncTemplateCatalog, uninstallUserTemplate, updateTemplateVars, useTemplateCatalog,
   type TemplateCatalogItem,
 } from './templateCatalogClient'
+import TemplateCloneModal from './TemplateCloneModal'
 
 type InputKind = 'mouse' | 'keyboard'
 type Trigger = 'hover' | 'focus' | 'keyboard' | 'button' | 'select'
@@ -55,6 +56,7 @@ const CATEGORY_ORDER = ['gaming', 'interview', 'knowledge', 'general'] as const
 
 function categoryLabel(cat: string): string {
   if (cat === 'all') return t('editing_style.category.all')
+  if (cat === 'mine') return t('editing_style.category.mine')
   if (cat === 'gaming') return t('editing_style.category.gaming')
   if (cat === 'interview') return t('editing_style.category.interview')
   if (cat === 'knowledge') return t('editing_style.category.knowledge')
@@ -86,11 +88,13 @@ export default function EditingStylePicker({
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState<string>('all')
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [cloneOpen, setCloneOpen] = useState(false)
   const [canPrev, setCanPrev] = useState(false)
   const [canNext, setCanNext] = useState(false)
   const rowRef = useRef<HTMLDivElement | null>(null)
   const locale = getLocale()
   const itemById = new Map<string, TemplateCatalogItem>(catalogItems.map(item => [item.id, item]))
+  const hasMine = useMemo(() => installed.some(item => item.source === 'installed'), [installed])
   const categories = useMemo(() => {
     const present = new Set<string>()
     for (const item of [...installed, ...remote]) present.add(itemCategory(item))
@@ -98,10 +102,15 @@ export default function EditingStylePicker({
       ...CATEGORY_ORDER.filter(cat => present.has(cat)),
       ...Array.from(present).filter(cat => !(CATEGORY_ORDER as readonly string[]).includes(cat)).sort(),
     ]
-    return ordered.length > 1 ? ['all', ...ordered] : []
-  }, [installed, remote])
+    const list = ordered.length > 1 ? ['all', ...(hasMine ? ['mine'] : []), ...ordered] : []
+    return list
+  }, [installed, remote, hasMine])
   const visibleAll = useMemo(
-    () => activeCategory === 'all' ? catalogItems : catalogItems.filter(item => itemCategory(item) === activeCategory),
+    () => activeCategory === 'all'
+      ? catalogItems
+      : activeCategory === 'mine'
+        ? catalogItems.filter(item => item.source === 'installed')
+        : catalogItems.filter(item => itemCategory(item) === activeCategory),
     [catalogItems, activeCategory],
   )
   const totalCount = catalogItems.length
@@ -483,6 +492,14 @@ export default function EditingStylePicker({
     <div className="studio-style-toolbar">
       <p className="studio-muted" style={{ margin: 0 }}>{t('editing_style.lead_ready')}</p>
       <div className="studio-style-toolbar-actions">
+        <button
+          type="button"
+          className="studio-style-all-btn"
+          disabled={disabled}
+          onClick={() => setCloneOpen(true)}
+        >
+          {t('editing_style.clone.btn')}
+        </button>
         {totalCount > 5 ? (
           <button
             type="button"
@@ -745,6 +762,71 @@ export default function EditingStylePicker({
         })}
       </div>
     </Modal>
+    <TemplateCloneModal
+      open={cloneOpen}
+      onClose={() => setCloneOpen(false)}
+      onSaved={id => {
+        setCloneOpen(false)
+        chooseFromGallery(id)
+      }}
+    />
+    {(() => {
+      const selItem = itemById.get(selected)
+      const vars = selItem?.variables || []
+      if (!selItem || !vars.length) return null
+      const cur = selItem.user_vars || {}
+      const accent = String(cur.accent_color || vars.find(v => v.key === 'accent_color')?.default || '#FFE548').toUpperCase()
+      const fontScale = String(cur.font_scale || vars.find(v => v.key === 'font_scale')?.default || 'M')
+      const depthVal = Boolean(cur.depth_enabled ?? vars.find(v => v.key === 'depth_enabled')?.default ?? false)
+      return (
+        <div className="ac-clone-var-cell" style={{ marginTop: 10, padding: '8px 14px', flexWrap: 'wrap', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{t('editing_style.clone.accent')}</span>
+            <div className="ac-clone-swatches">
+              {(['#FFE548', '#34D399', '#2D6BFF', '#FF4D4F'] as const).map(hex => (
+                <button
+                  key={hex}
+                  type="button"
+                  className={`ac-clone-sw${accent === hex ? ' is-on' : ''}`}
+                  style={{ background: hex }}
+                  onClick={() => void updateTemplateVars(selItem.id, { ...cur, accent_color: hex })}
+                />
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{t('editing_style.clone.font_size')}</span>
+            <div className="ac-clone-seg">
+              {(['S', 'M', 'L'] as const).map(sz => (
+                <button
+                  key={sz}
+                  type="button"
+                  className={fontScale === sz ? 'is-on' : ''}
+                  onClick={() => void updateTemplateVars(selItem.id, { ...cur, font_scale: sz })}
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+          </div>
+          {vars.some(v => v.key === 'depth_enabled') ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{t('editing_style.clone.depth')}</span>
+              <button
+                type="button"
+                className={`ac-clone-toggle${depthVal ? ' is-on' : ''}`}
+                onClick={() => void updateTemplateVars(selItem.id, { ...cur, depth_enabled: !depthVal })}
+              />
+            </div>
+          ) : null}
+          {selItem.source === 'installed' ? (
+            <a className="ac-clone-pill" style={{ height: 26, fontSize: 11.5, textDecoration: 'none' }} href={exportTemplateUrl(selItem.id)} download>
+              {t('editing_style.export')}
+            </a>
+          ) : null}
+        </div>
+      )
+    })()}
     <div className="studio-style-why" aria-live="polite">
       {catalogError ? <span>{catalogError}</span> : loading ? <span className="studio-style-why-wait">{t('editing_style.analyzing')}</span> : overridden && recommendation ? <>
         <b>{t('editing_style.override', { style: styleName(manual), recommended: styleName(recommendation.template) })}</b>

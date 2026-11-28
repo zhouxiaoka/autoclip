@@ -605,9 +605,14 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
 
     from backend.services.packaging_runtime import launch_kwargs
     from backend.services.studio.templates.registry import get, resolve_dir
+    from backend.services.studio.templates.user_vars import resolved_vars
 
     out_dir = _capture_out_dir.get()
-    width, height = get(template).canvas.overlay_px
+    spec = get(template)
+    width, height = spec.canvas.overlay_px
+    effective_fill = fill
+    if spec.variables and 'vars' not in fill:
+        effective_fill = {**fill, 'vars': resolved_vars(spec)}
     page_url = (resolve_dir(template) / entry).as_uri()
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(**launch_kwargs())
@@ -616,7 +621,7 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
             for _ordinal in range(min(PAGES, max(1, frame_count))):
                 page = await browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=1)
                 await page.goto(page_url)
-                await page.evaluate('(fill) => window.setData(fill)', fill)
+                await page.evaluate('(fill) => window.setData(fill)', effective_fill)
                 # Ask for the sliced families with the glyphs on the line. check(font)
                 # stays false while an unused unicode-range file is pending, and fit()
                 # then refuses to shrink, so the English line stays past the box.

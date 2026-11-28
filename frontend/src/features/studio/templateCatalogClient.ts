@@ -9,6 +9,16 @@ export type LocalizedCopy = {
   locales?: Record<string, string>
 }
 
+export type TemplateVariableSpec = {
+  key: string
+  kind: 'color' | 'number' | 'boolean' | 'select'
+  label: LocalizedCopy
+  default: string | number | boolean
+  min?: number | null
+  max?: number | null
+  options?: string[]
+}
+
 export type TemplateCatalogItem = {
   id: string
   name: LocalizedCopy
@@ -25,6 +35,8 @@ export type TemplateCatalogItem = {
   latest_version: string
   badge?: string | null
   size_bytes?: number
+  variables?: TemplateVariableSpec[]
+  user_vars?: Record<string, string | number | boolean>
   poster_url: string | null
   preview_mp4_url: string | null
   preview_webm_url: string | null
@@ -166,6 +178,150 @@ export async function importLocalTemplateArchive(file: File): Promise<{ installe
   }
   const data = await res.json() as TemplateCatalogResponse & { installed: string }
   return { installed: data.installed, templates: applyResponse(data) }
+}
+
+export type CloneBlueprint = {
+  name_zh: string
+  name_en: string
+  desc_zh: string
+  desc_en: string
+  accent_color: string
+  text_color: string
+  caption_motion: string
+  header_style: string
+  font_style: string
+  font_scale: 'S' | 'M' | 'L'
+  depth_enabled: boolean
+  grain_enabled: boolean
+  category: string
+}
+
+export type CloneJobState = {
+  job_id: string
+  status: 'running' | 'ready' | 'failed'
+  step: 'extract' | 'analyze' | 'render' | 'ready'
+  error: string | null
+  frames: string[]
+  blueprint: CloneBlueprint | null
+  revision: number
+  can_undo: boolean
+  template_id: string | null
+  preview_zh_url: string | null
+  preview_en_url: string | null
+  poster_url: string | null
+}
+
+export async function fetchCloneReadiness(): Promise<{ vision_capable: boolean; model: string }> {
+  try {
+    await ensureApi()
+    const res = await fetch(buildApiUrl('/studio/templates/clone/readiness'))
+    if (!res.ok) return { vision_capable: false, model: '' }
+    return await res.json()
+  } catch {
+    return { vision_capable: false, model: '' }
+  }
+}
+
+export async function startTemplateClone(opts: {
+  referenceUrl?: string
+  file?: File | null
+  promptHint?: string
+  depthMode?: 'auto' | 'on' | 'off'
+}): Promise<CloneJobState> {
+  await ensureApi()
+  const body = new FormData()
+  if (opts.referenceUrl) body.append('reference_url', opts.referenceUrl)
+  if (opts.promptHint) body.append('prompt_hint', opts.promptHint)
+  body.append('depth_mode', opts.depthMode || 'auto')
+  if (opts.file) body.append('file', opts.file, opts.file.name || 'reference.mp4')
+  const res = await fetch(buildApiUrl('/studio/templates/clone'), { method: 'POST', body })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail?.detail || 'clone failed')
+  }
+  return await res.json()
+}
+
+export async function getTemplateCloneJob(jobId: string): Promise<CloneJobState> {
+  await ensureApi()
+  const res = await fetch(buildApiUrl(`/studio/templates/clone/${encodeURIComponent(jobId)}`))
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail?.detail || 'poll failed')
+  }
+  return await res.json()
+}
+
+export async function refineTemplateClone(
+  jobId: string,
+  opts: { variableOverrides?: Record<string, unknown>; instruction?: string },
+): Promise<CloneJobState> {
+  await ensureApi()
+  const res = await fetch(buildApiUrl(`/studio/templates/clone/${encodeURIComponent(jobId)}/refine`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      variable_overrides: opts.variableOverrides ?? null,
+      instruction: opts.instruction ?? '',
+    }),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail?.detail || 'refine failed')
+  }
+  return await res.json()
+}
+
+export async function revertTemplateClone(jobId: string): Promise<CloneJobState> {
+  await ensureApi()
+  const res = await fetch(buildApiUrl(`/studio/templates/clone/${encodeURIComponent(jobId)}/revert`), { method: 'POST' })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail?.detail || 'revert failed')
+  }
+  return await res.json()
+}
+
+export async function saveTemplateClone(
+  jobId: string,
+  opts: { nameZh?: string; nameEn?: string },
+): Promise<{ installed: string; templates: TemplateCatalogItem[] }> {
+  await ensureApi()
+  const res = await fetch(buildApiUrl(`/studio/templates/clone/${encodeURIComponent(jobId)}/save`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name_zh: opts.nameZh ?? null, name_en: opts.nameEn ?? null }),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail?.detail || 'save failed')
+  }
+  const data = await res.json() as TemplateCatalogResponse & { installed: string }
+  return { installed: data.installed, templates: applyResponse(data) }
+}
+
+export async function updateTemplateVars(
+  templateId: string,
+  vars: Record<string, string | number | boolean>,
+): Promise<Record<string, string | number | boolean>> {
+  await ensureApi()
+  const res = await fetch(buildApiUrl(`/studio/templates/${encodeURIComponent(templateId)}/vars`), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vars }),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail?.detail || 'update vars failed')
+  }
+  const data = await res.json() as { vars: Record<string, string | number | boolean> }
+  currentItems = currentItems.map(it => it.id === templateId ? { ...it, user_vars: data.vars } : it)
+  emit()
+  return data.vars
+}
+
+export function exportTemplateUrl(templateId: string): string {
+  return buildApiUrl(`/studio/templates/${encodeURIComponent(templateId)}/export`)
 }
 
 export function resetTemplateCatalogForTests(): void {

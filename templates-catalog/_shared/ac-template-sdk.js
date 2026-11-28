@@ -167,4 +167,95 @@
     activeGloss: activeGloss,
     occupiedRects: occupiedRects
   };
+
+  /* AutoClip Motion Kit v2 (ac-motion-kit): deterministic atomic motion primitives,
+     multi-language caption chunking, reusable SVG overlay components, brand variables,
+     and optional GSAP paused-timeline bridge. */
+  function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
+  function easeOutCubic(x) { var p = clamp01(x); return 1 - Math.pow(1 - p, 3); }
+  function easeOutQuint(x) { var p = clamp01(x); return 1 - Math.pow(1 - p, 5); }
+  function springPop(age, dur) {
+    var p = clamp01((Number(age) || 0) / (dur || 0.28));
+    if (p >= 1) return 1;
+    return 1 - Math.exp(-7.5 * p) * Math.cos(9.5 * p);
+  }
+  function blurIn(age, dur, maxBlur) {
+    var p = easeOutCubic((Number(age) || 0) / (dur || 0.26));
+    return { opacity: p, blur: (1 - p) * (maxBlur || 10), y: (1 - p) * 14 };
+  }
+  function clipWipe(age, dur) {
+    return easeOutQuint((Number(age) || 0) / (dur || 0.3));
+  }
+  function kineticSlam(age, dur) {
+    var p = easeOutQuint((Number(age) || 0) / (dur || 0.22));
+    return { scale: 1.32 - 0.32 * p, opacity: clamp01(p * 1.4) };
+  }
+  function staggerIndex(count, progress) {
+    if (!count || count <= 0) return -1;
+    return Math.min(count - 1, Math.max(0, Math.floor(clamp01(progress) * count)));
+  }
+  function getVar(state, key, fallback) {
+    if (state && state.vars && state.vars[key] !== undefined && state.vars[key] !== null) {
+      return state.vars[key];
+    }
+    return fallback;
+  }
+  function chunkCaption(moment, lang, maxCjkChunk) {
+    if (!moment || !moment.zh || !moment.zh.length) return [];
+    var raw = [];
+    for (var i = 0; i < moment.zh.length; i++) {
+      if (moment.zh[i] && moment.zh[i].s) raw.push(String(moment.zh[i].s));
+    }
+    if (raw.length === 1 && /[\u4e00-\u9fff]/.test(raw[0]) && raw[0].length > (maxCjkChunk || 5)) {
+      var s = raw[0], step = maxCjkChunk || 4, out = [];
+      for (var j = 0; j < s.length; j += step) out.push(s.slice(j, j + step));
+      return out;
+    }
+    if (raw.length === 1 && lang === 'en' && raw[0].indexOf(' ') >= 0) {
+      return raw[0].split(/\s+/).filter(Boolean);
+    }
+    return raw;
+  }
+  function safeBands() {
+    return { topHookY: [130, 360], depthCrownY: [480, 540], lowerCaptionY: [1360, 1620] };
+  }
+  function renderVignette(strength) {
+    var a = clamp01(strength == null ? 0.55 : strength);
+    return '<defs><linearGradient id="ac-vig" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#000" stop-opacity="0"/>' +
+      '<stop offset="100%" stop-color="#000" stop-opacity="' + a.toFixed(2) + '"/>' +
+      '</linearGradient></defs><rect x="0" y="1220" width="1080" height="700" fill="url(#ac-vig)"/>';
+  }
+  function renderGrain(opacity) {
+    var op = clamp01(opacity == null ? 0.08 : opacity);
+    if (op <= 0.005) return '';
+    return '<defs><filter id="ac-grain"><feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" stitchTiles="stitch"/></filter></defs>' +
+      '<rect x="0" y="0" width="1080" height="1920" filter="url(#ac-grain)" opacity="' + op.toFixed(3) + '"/>';
+  }
+  function bindTimeline(tl, digestFn) {
+    global.__acTimeline = tl;
+    if (tl && typeof tl.pause === 'function') tl.pause();
+    global.renderFrame = function (tSeconds) {
+      var t = Number(tSeconds) || 0;
+      if (tl && typeof tl.time === 'function') tl.time(t);
+      return (typeof digestFn === 'function' ? digestFn(t) : '') || ('TL_' + Math.round(t * 30));
+    };
+  }
+
+  global.ACMotion = {
+    clamp01: clamp01,
+    easeOutCubic: easeOutCubic,
+    easeOutQuint: easeOutQuint,
+    springPop: springPop,
+    blurIn: blurIn,
+    clipWipe: clipWipe,
+    kineticSlam: kineticSlam,
+    staggerIndex: staggerIndex,
+    getVar: getVar,
+    chunkCaption: chunkCaption,
+    safeBands: safeBands,
+    renderVignette: renderVignette,
+    renderGrain: renderGrain,
+    bindTimeline: bindTimeline
+  };
 })(window);

@@ -290,6 +290,41 @@ class CoverSpec(BaseModel):
     from_overlay: bool = True
 
 
+_HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+
+
+class TemplateVariableSpec(BaseModel):
+    """Declarative user-customizable brand/layout variable exposed in UI & fill.vars."""
+    model_config = ConfigDict(extra='forbid')
+    key: str = Field(pattern=r'^[a-z][a-z0-9_]{1,31}$')
+    kind: Literal['color', 'number', 'boolean', 'select']
+    label: LocalizedText
+    default: str | float | bool
+    min: float | None = None
+    max: float | None = None
+    options: list[str] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode='after')
+    def check_default_matches_kind(self):
+        if self.kind == 'color':
+            if not isinstance(self.default, str) or not _HEX_COLOR_RE.match(self.default):
+                raise UserFacingError(f'模板变量 {self.key} 的颜色默认值必须为 #RRGGBB')
+        elif self.kind == 'boolean':
+            if not isinstance(self.default, bool):
+                raise UserFacingError(f'模板变量 {self.key} 的默认值必须为布尔值')
+        elif self.kind == 'number':
+            if isinstance(self.default, bool) or not isinstance(self.default, (int, float)):
+                raise UserFacingError(f'模板变量 {self.key} 的默认值必须为数字')
+            if self.min is not None and float(self.default) < self.min:
+                raise UserFacingError(f'模板变量 {self.key} 的默认值低于最小值')
+            if self.max is not None and float(self.default) > self.max:
+                raise UserFacingError(f'模板变量 {self.key} 的默认值高于最大值')
+        elif self.kind == 'select':
+            if not self.options or not isinstance(self.default, str) or self.default not in self.options:
+                raise UserFacingError(f'模板变量 {self.key} 的默认值必须在 options 列表中')
+        return self
+
+
 class TemplateSpec(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str
@@ -304,6 +339,8 @@ class TemplateSpec(BaseModel):
     cover: CoverSpec
     caption_layout: CaptionLayoutSpec | None = None
     meta: MetaSpec | None = None
+    variables: list[TemplateVariableSpec] = Field(default_factory=list, max_length=12)
+    motion_runtime: Literal['svg', 'gsap'] = 'svg'
     qa: dict = Field(default_factory=dict)
 
     @field_validator('id')
@@ -317,6 +354,9 @@ class TemplateSpec(BaseModel):
     def empty_qa(self):
         if self.qa:
             raise UserFacingError('v1 不覆盖质检阈值')
+        keys = [v.key for v in self.variables]
+        if len(keys) != len(set(keys)):
+            raise UserFacingError('模板 variables 中的 key 不能重复')
         return self
 
     def effective_caption_layout(self) -> CaptionLayoutSpec:
@@ -324,3 +364,6 @@ class TemplateSpec(BaseModel):
 
     def effective_meta(self) -> MetaSpec:
         return self.meta or MetaSpec()
+
+    def default_vars(self) -> dict[str, str | float | bool]:
+        return {v.key: v.default for v in self.variables}
