@@ -2,7 +2,7 @@
   "schema_version": 1,
   "tag": "v1.6.3",
   "commit": "c204d114c99125de9326cb55c00bb85434341e97",
-  "release_type": "regular",
+  "release_type": "routine",
   "build_run_id": 46121423320,
   "evidence_contract": "impact-inheritance/v1",
   "assets": {
