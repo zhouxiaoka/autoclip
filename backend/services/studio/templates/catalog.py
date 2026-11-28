@@ -653,6 +653,7 @@ def list_template_items(
         if not visible:
             # Soft-hide from new selection while keeping installed/built-in files intact for existing drafts.
             continue
+        from backend.services.studio.templates.user_vars import resolved_vars
         has_poster = _local_preview_path(loaded.root, 'poster.webp') is not None
         has_mp4 = _local_preview_path(loaded.root, 'preview.mp4') is not None
         has_webm = _local_preview_path(loaded.root, 'preview.webm') is not None
@@ -671,6 +672,8 @@ def list_template_items(
             'update_available': bool(remote and _version_gt(remote.version, m.package_version)),
             'latest_version': remote.version if remote else m.package_version,
             'badge': eff_badge,
+            'variables': [v.model_dump(mode='json') for v in spec.variables],
+            'user_vars': resolved_vars(spec, user_root=user_root) if spec.variables else {},
             'poster_url': f'{asset_prefix}/{spec.id}/assets/poster.webp' if has_poster else (remote.poster_url if remote else None),
             'preview_mp4_url': f'{asset_prefix}/{spec.id}/assets/preview.mp4' if has_mp4 else (remote.preview_mp4_url if remote else None),
             'preview_webm_url': f'{asset_prefix}/{spec.id}/assets/preview.webm' if has_webm else (remote.preview_webm_url if remote else None),

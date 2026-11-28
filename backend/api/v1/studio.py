@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from backend.api.v1.gate_errors import gate_refusal
 from backend.core.database import get_db
-from backend.core.failure_codes import sentence
+from backend.core.failure_codes import UserFacingError, sentence
 from backend.core.quota_precheck import QuotaExhausted
 from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
@@ -546,6 +546,149 @@ async def import_template_archive(archive: UploadFile = File(...)):
     except catalog.TemplateCatalogError as error:
         raise HTTPException(422, str(error)) from None
     return {'installed': installed.spec.id, 'version': installed.spec.effective_meta().package_version, **catalog.list_template_items(include_remote=True)}
+
+
+@router.get('/templates/clone/readiness')
+def template_clone_readiness():
+    """Report whether the configured AI model supports vision frame analysis for style cloning."""
+    from backend.services.studio.templates import cloner
+    return cloner.vision_readiness()
+
+
+@router.post('/templates/clone')
+async def start_template_clone(
+    reference_url: str = Form(default=''),
+    prompt_hint: str = Form(default=''),
+    depth_mode: str = Form(default='auto'),
+    file: UploadFile | None = File(default=None),
+):
+    """Start an async in-app AI style cloning job from a reference URL, local video, or prompt."""
+    from backend.services.studio.templates import cloner
+    mode = depth_mode if depth_mode in ('auto', 'on', 'off') else 'auto'
+    ref_path = None
+    if file is not None:
+        raw = await file.read(52 * 1024 * 1024)
+        await file.close()
+        if raw:
+            tmp_dir = cloner.clone_jobs_root() / f'_upload_{uuid.uuid4().hex[:8]}'
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            ref_path = tmp_dir / 'upload.mp4'
+            ref_path.write_bytes(raw)
+    if not reference_url.strip() and ref_path is None and not prompt_hint.strip():
+        raise HTTPException(422, '请粘贴参考视频链接、上传本地视频或输入风格描述')
+    try:
+        return cloner.start_clone_job(
+            reference_url=reference_url.strip(),
+            reference_file=ref_path,
+            prompt_hint=prompt_hint.strip(),
+            depth_mode=mode,  # type: ignore[arg-type]
+        )
+    except UserFacingError as error:
+        raise HTTPException(422, str(error)) from None
+
+
+@router.get('/templates/clone/{job_id}')
+def get_template_clone_status(job_id: str):
+    """Poll status, extracted frames, blueprint, and 3s preview URLs for a style clone job."""
+    from backend.services.studio.templates import cloner
+    try:
+        return cloner.get_clone_job(job_id)
+    except UserFacingError as error:
+        raise HTTPException(404, str(error)) from None
+
+
+class TemplateCloneRefineRequest(BaseModel):
+    variable_overrides: dict | None = None
+    instruction: str = ''
+
+
+@router.post('/templates/clone/{job_id}/refine')
+def refine_template_clone(job_id: str, body: TemplateCloneRefineRequest):
+    """Apply instant variable overrides or a 1-line natural-language tweak and refresh 3s preview."""
+    from backend.services.studio.templates import cloner
+    try:
+        return cloner.refine_clone_job(
+            job_id,
+            variable_overrides=body.variable_overrides,
+            instruction=body.instruction,
+        )
+    except UserFacingError as error:
+        raise HTTPException(422, str(error)) from None
+
+
+@router.post('/templates/clone/{job_id}/revert')
+def revert_template_clone(job_id: str):
+    """Undo the last refinement revision on an active style clone job."""
+    from backend.services.studio.templates import cloner
+    try:
+        return cloner.revert_clone_job(job_id)
+    except UserFacingError as error:
+        raise HTTPException(422, str(error)) from None
+
+
+class TemplateCloneSaveRequest(BaseModel):
+    name_zh: str | None = None
+    name_en: str | None = None
+
+
+@router.post('/templates/clone/{job_id}/save')
+def save_template_clone(job_id: str, body: TemplateCloneSaveRequest):
+    """Persist the cloned template into user_templates and return the refreshed catalog."""
+    from backend.services.studio.templates import catalog, cloner
+    try:
+        saved = cloner.save_clone_job(job_id, name_zh=body.name_zh, name_en=body.name_en)
+    except UserFacingError as error:
+        raise HTTPException(422, str(error)) from None
+    return {**saved, **catalog.list_template_items(include_remote=True)}
+
+
+@router.get('/templates/clone/{job_id}/assets/{rel_path:path}')
+def template_clone_asset(job_id: str, rel_path: str):
+    """Serve temporary keyframes or 3s preview video for an active clone job."""
+    from backend.services.studio.templates import cloner
+    try:
+        asset = cloner.resolve_clone_asset(job_id, rel_path)
+    except UserFacingError:
+        raise HTTPException(404, '预览文件不存在') from None
+    media_type = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+    }.get(asset.suffix.lower(), 'application/octet-stream')
+    return FileResponse(asset, media_type=media_type)
+
+
+@router.get('/templates/{template_id}/export')
+def export_template(template_id: str):
+    """Export an installed template as a shareable .zip package."""
+    from fastapi.responses import Response
+    from backend.services.studio.templates import cloner
+    try:
+        filename, payload = cloner.export_template_zip(template_id)
+    except UserFacingError as error:
+        raise HTTPException(404, str(error)) from None
+    return Response(
+        content=payload,
+        media_type='application/zip',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
+class TemplateVarsUpdateRequest(BaseModel):
+    vars: dict = Field(default_factory=dict)
+
+
+@router.put('/templates/{template_id}/vars')
+def update_template_vars(template_id: str, body: TemplateVarsUpdateRequest):
+    """Save per-template brand variable overrides (accent_color, font_scale, depth_enabled, etc.)."""
+    from backend.services.studio.templates import registry, user_vars
+    loaded = registry.get_loaded(template_id)
+    if loaded is None:
+        raise HTTPException(404, f'未找到模板: {template_id}')
+    merged = user_vars.write_user_vars(loaded.spec, body.vars)
+    return {'template_id': template_id, 'vars': merged}
 
 
 @router.post('/templates/{template_id}/install')
