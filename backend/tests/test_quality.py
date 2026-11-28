@@ -1,6 +1,7 @@
 """出片质量：时长画像、时间线校正、评分对齐与筛选兜底（不调模型）"""
 import json
 import sys
+from itertools import pairwise
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -64,6 +65,44 @@ def test_refine_snaps_to_cue_and_drops_too_short():
 def _t(x):
     o = x.get("outline")
     return o if isinstance(o, str) else str(o)
+
+
+def test_merging_a_shifted_pick_does_not_drag_the_kept_clip_back_into_its_neighbour():
+    # 小重叠把后一段的起点推到下一条 cue，它原本的区间仍压在前一段上。
+    # 这时再合并，起点若仍取 min 就会越回前一段，导出的两条切片互相重叠。
+    cues = [_cue(i, i + 2, f"c{i}") for i in range(0, 200, 2)]
+    items = [
+        {"outline": "前一段", "start_time": "00:00:10,000", "end_time": "00:00:40,000"},
+        {"outline": "后一段", "start_time": "00:00:39,000", "end_time": "00:00:50,000"},
+        {"outline": "再后一段", "start_time": "00:00:30,000", "end_time": "00:01:30,000"},
+    ]
+    out, _ = refine_timeline(items, cues, profile_for(200))
+    spans = [(to_seconds(x["start_time"]), to_seconds(x["end_time"])) for x in out]
+    assert spans == sorted(spans)
+    for (_, previous_end), (current_start, _) in pairwise(spans):
+        assert current_start >= previous_end
+
+
+def test_merged_clips_never_overlap_even_when_picks_arrive_out_of_order():
+    # 随机但固定的模型挑段：任何两条输出的时间轴都不允许互相覆盖（前端按顺序拼合集）。
+    import random
+    rng = random.Random(7)
+    for _ in range(60):
+        cues, cursor = [], 0.0
+        for i in range(40):
+            length = rng.choice([0.8, 1.5, 2.0, 3.0])
+            cues.append(_cue(cursor, cursor + length, f"c{i}"))
+            cursor += length + rng.choice([0.0, 0.1, 1.0, 6.0])
+        items = []
+        for i in range(rng.choice([3, 6, 10])):
+            start = rng.uniform(0, cursor * 0.7)
+            items.append({"outline": f"o{i}", "start_time": to_srt_time(start),
+                          "end_time": to_srt_time(start + rng.choice([2.0, 12.0, 25.0, 40.0, 200.0]))})
+        out, _ = refine_timeline(items, cues, profile_for(cursor))
+        spans = [(to_seconds(x["start_time"]), to_seconds(x["end_time"])) for x in out]
+        assert all(end > start for start, end in spans)
+        for (_, previous_end), (current_start, _) in pairwise(spans):
+            assert current_start >= previous_end
 
 
 def test_align_scores_falls_back_when_count_mismatch():
