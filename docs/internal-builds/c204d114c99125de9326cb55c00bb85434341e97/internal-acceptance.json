@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "stage": "internal",
+  "version": "1.6.3",
+  "commit": "c204d114c99125de9326cb55c00bb85434341e97",
+  "build_run_id": 46117653613,
+  "assets": {
+    "AutoClip Desktop_1.6.3_aarch64.dmg": "4f9cdb93f807011868c7a797c5bf78d47013a8a607383e7d3e298592dcd8325d",
+    "AutoClip Desktop_1.6.3_x64-setup.exe": "aaccd800a5be90b675ecda0db064842b97aeedf0fce46f39beec5b7aea5ae469",
+    "AutoClip Desktop_1.6.3_x64-setup.exe.sig": "1b0b124b0fe31d629e9d80c88463c056edd9627b266476bed1b4a2ff13b2bcd5",
+    "AutoClip.Desktop_1.6.3_aarch64.app.tar.gz": "a0bef264b98d761545593bdc29b1d8808a99df5768ea0b83e81bb8783a1b83d1",
+    "AutoClip.Desktop_1.6.3_aarch64.app.tar.gz.sig": "d5cd896f99ad61b8861ec3926ea016a625e86fe86d1f86ee8624a4a88844884d",
+    "internal-build-provenance.json": "36f4a0aa9fbdccc7bab5deab94e8010263c749551fcdd44621781c7fdb01292b"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server 2025 Datacenter x64",
+      "machine": "Cloud x64 VM in China mainland (Session 2 interactive desktop); not a physical Windows 11 desktop",
+      "runtime": "Packaged portable Python 3.13.13 + Pillow 13.0.0 + bundled FFmpeg/FFprobe 9.0.2 + bundled PP-HumanSeg ONNX + bundled Playwright Node",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:10:21Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:10:54Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:10:56Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:14:06Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:15:11Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Windows QA cloud VM datacenter IP encounters Bilibili HTTP 412 anti-bot (verified clean 3.1s exit with error_code=source_blocked and Cookie guidance, 0 crash); real 1-hour spoken Bilibili URL + 60s window link_import passed on macOS arm64 1.6.3 DMG (c204d114) and CI smoke-windows-x64 verified bundled yt-dlp + FFmpeg + Node."
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:16:47Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:16:57Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:19:12Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:17:03Z",
+          "evidence": "evidence/windows-1.6.3-summary.json"
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS 26.6.2 arm64 (Apple Silicon)",
+      "machine": "Apple Silicon Mac; native arm64 DMG bundle; isolated QA app copy and isolated data dirs",
+      "runtime": "Packaged portable Python 3.13.13 + Pillow 13.0.0 + bundled static FFmpeg/FFprobe 9.0.2 + bundled PP-HumanSeg ONNX + bundled Playwright",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:12:08Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:16:49Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:12:16Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:13:27Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:14:01Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:14:56Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:15:58Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:16:03Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:16:49Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "completed_at": "2026-11-28T07:16:08Z",
+          "evidence": "evidence/macos-1.6.3-summary.json"
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "v163-3d-depth-onnx-framing-runtime-and-cos-catalog",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-28T07:14:06Z",
+      "evidence": "evidence/regressions-1.6.3.json"
+    },
+    {
+      "id": "v163-batch-import-o-binary-export-dir-branding-and-i18n",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-28T07:19:12Z",
+      "evidence": "evidence/regressions-1.6.3.json"
+    },
+    {
+      "id": "v163-promo-badges-delist-pillow13-and-windows-hardening",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "completed_at": "2026-11-28T07:19:12Z",
+      "evidence": "evidence/regressions-1.6.3.json"
+    }
+  ],
+  "blockers": [],
+  "owner_waiver": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-28T07:20:46Z",
+    "reason": "Owner authorized waiving windows-x64/link_import on the China-mainland cloud QA VM where datacenter IP encounters Bilibili HTTP 412 anti-bot (verified clean 3.1s exit with error_code=source_blocked and 0 crash); all other 19/20 dual-platform installed-package cases (10/10 macOS arm64 + 9/10 Windows x64), all v1.6.3 feature/defect regressions (including real 3D ONNX depth_billboard renders, Windows O_BINARY batch-import receipt fix, Shanghai COS template/promo mirrors, multimodal visual_generation, Pillow 13.0.0, and validation telemetry), and Desktop Build 46117653613 (24/24 jobs) passed."
+  },
+  "approval": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-11-28T07:20:46Z"
+  }
+}

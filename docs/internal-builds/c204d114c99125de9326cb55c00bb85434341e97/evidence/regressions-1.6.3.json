@@ -1,0 +1,43 @@
+{
+  "version": "1.6.3",
+  "commit": "c204d114c99125de9326cb55c00bb85434341e97",
+  "build_run_id": 46117653613,
+  "regressions": {
+    "v163-3d-depth-onnx-framing-runtime-and-cos-catalog": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-28T07:13:27Z",
+        "summary": "Verified fix for packaged framing-runtime loading in subject_matte.py/render.py (failed on 58f320c2, passed on c204d114): cold-start subject_matte.available()==True without prior framing call; synced 29 remote templates (all 5 depth_* templates) in 1.94s, installed depth_billboard in 2.42s, and rendered 46.89s 1080x1920 3-layer ONNX depth clip (matte_fallback_logged=false, 0 decode errors, behind-head 3D typography visually confirmed)."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-28T07:14:06Z",
+        "summary": "Verified fix for packaged framing-runtime loading and archive mirror failover timeout on China-mainland Windows VM (58f320c2 failed cold-start matte and stalled 25.65s on archive): cold-start subject_matte.available()==True; synced 29 remote templates (all 5 depth_* templates) in 5.71s, installed depth_billboard with SHA-256 verification, and rendered 46.89s 1080x1920 3-layer ONNX depth clip (matte_fallback_logged=false, 0 decode errors, behind-head 3D typography visually confirmed)."
+      }
+    },
+    "v163-batch-import-o-binary-export-dir-branding-and-i18n": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-28T07:14:01Z",
+        "summary": "Verified PR #701 batch_import_receipts=true, at-most-once idempotent replay returning identical project_id, independent second batch project creation, OutputBrandingSwitch PUT persistence (false -> true) and brand_outro_enabled=false export, and 20-locale README/UI contract compliance."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-28T07:19:12Z",
+        "summary": "Verified S1 Windows-only O_BINARY fix in import_receipts.py (71cf20d7 failed with HTTP 503 due to CRLF marker translation; c204d114 passed with exact-LF marker, idempotent replay match, independent second batch project, and 45.07s 0-error render); live Session-2 UIA verified PR #700 Default Export Folder with Tauri dialog:default capability, Home OutputBrandingSwitch, and 20-locale language dropdown."
+      }
+    },
+    "v163-promo-badges-delist-pillow13-and-windows-hardening": {
+      "macos-arm64": {
+        "status": "passed",
+        "completed_at": "2026-11-28T07:12:16Z",
+        "summary": "Verified Pillow 13.0.0 (CVE-2026-112393) and tar 7.5.24 (CVE-2026-59873) in shipped bundle, live signed cloud promo sequence=5 (dynamic providers shengsuanyun + aimlapi, forward-compatible 19-locale promo routing, badge/first_run controls), and out_of_service delist behavior."
+      },
+      "windows-x64": {
+        "status": "passed",
+        "completed_at": "2026-11-28T07:19:12Z",
+        "summary": "Verified Pillow 13.0.0 in shipped Windows portable Python 3.13.13, live China-mainland Shanghai COS signed promo sequence=5, live Session-2 UIA clean Shengsuanyun offer badge and AI/ML API without Sponsor tag (unconfigured out_of_service hidden), and Windows timezone/silence-probe/Bailian-fallback hardening."
+      }
+    }
+  }
+}
