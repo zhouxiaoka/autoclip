@@ -269,3 +269,29 @@ def test_source_directory_still_blocks_replay_when_project_and_receipt_rows_are_
     with database.session_scope() as db:
         db.delete(db.get(Project,first['project_id']));db.commit()
     assert upload(client,source).status_code==503 and len(calls)==1
+
+
+def test_receipt_marker_and_ledger_open_in_binary_mode_on_windows(tmp_path, monkeypatch):
+    """Windows os.open() defaults to O_TEXT (CRLF translation), which corrupts the LF marker unless O_BINARY is passed."""
+    import os
+    from backend.services.studio import import_receipts as receipts
+
+    fake_o_binary = 0x8000
+    real_open = os.open
+    seen_flags: list[tuple[str, int]] = []
+
+    def tracking_open(path, flags, mode=0o777):
+        seen_flags.append((os.path.basename(str(path)), flags))
+        return real_open(path, flags & ~fake_o_binary, mode)
+
+    monkeypatch.setattr(os, 'O_BINARY', fake_o_binary, raising=False)
+    monkeypatch.setattr(os, 'open', tracking_open)
+
+    ledger = tmp_path / 'studio-import-receipts.sqlite3'
+    assert receipts.claim(ledger, 'op-win', 'payload-win') is None
+    receipts.complete(ledger, 'op-win', 'payload-win', {'project_id': 'proj-win', 'analysis_run_id': None})
+    assert receipts.claim(ledger, 'op-win', 'payload-win') == {'project_id': 'proj-win', 'analysis_run_id': None}
+    assert seen_flags, 'expected os.open calls'
+    for name, flags in seen_flags:
+        if name.startswith('studio-import-receipts'):
+            assert flags & fake_o_binary, f'{name} opened without O_BINARY (Windows CRLF hazard)'

@@ -47,7 +47,11 @@ def initialized_marker(path: Path) -> Path:
 def ensure_initialized_marker(path: Path):
     marker = initialized_marker(path)
     try:
-        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        fd = os.open(
+            marker,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0),
+            0o600,
+        )
     except FileExistsError:
         if marker.is_symlink() or marker.read_bytes() != _INITIALIZED:
             raise sqlite3.DatabaseError('receipt initialization marker invalid')
@@ -72,10 +76,14 @@ def connect(path: Path):
     if not path.exists() and os.path.lexists(initialized_marker(path)):
         raise sqlite3.DatabaseError('initialized receipt ledger missing')
     try:
-        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        fd = os.open(
+            path,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0),
+            0o600,
+        )
         created = True
     except FileExistsError:
-        fd = os.open(path, os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0))
+        fd = os.open(path, os.O_RDWR | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0))
         created = False
     try:
         if not created and os.fstat(fd).st_size == 0:
