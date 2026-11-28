@@ -71,7 +71,11 @@
       var p = easeOutQuint(mAge / 0.24);
       var words = raw.split(/\s+/).filter(Boolean);
       var fIdx = pickFocalIndex(words);
-      var fsz = 56;
+      var vars = state.vars || {};
+      var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#FACC15';
+      var scaleMap = { S: 0.86, M: 1.0, L: 1.16 };
+      var fScale = scaleMap[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+      var fsz = Math.round(56 * fScale);
       var totalW = 0;
       for (var i = 0; i < words.length; i++) totalW += measureW(words[i] + ' ', fsz, i === fIdx ? 700 : 500, SANS);
       if (totalW > 900) fsz = Math.max(38, Math.floor((fsz * 900) / totalW));
@@ -82,7 +86,7 @@
       for (var j = 0; j < words.length; j++) {
         var isF = j === fIdx;
         var wt = isF ? 700 : 500;
-        var col = isF ? '#FACC15' : '#FFFFFF';
+        var col = isF ? accent : '#FFFFFF';
         svg += '<text x="' + xCur + '" y="1445" font-family="' + SANS + '" font-size="' + fsz + '" font-weight="' + wt + '" fill="' + col + '">' + esc(words[j]) + '</text>';
         xCur += Math.round(measureW(words[j] + ' ', fsz, wt, SANS));
       }

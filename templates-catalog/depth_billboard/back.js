@@ -78,16 +78,24 @@
       return 'BACK_GAP';
     }
 
+    var vars = state.vars || {};
+    if (vars.depth_enabled === false) {
+      root.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"></svg>';
+      return 'BACK_OFF';
+    }
     var words = raw.split(/\s+/).filter(Boolean);
     var fIdx = pickFocalIndex(words);
     var hero = (words[fIdx] || words[0] || 'FOCUS').replace(/[^A-Za-z0-9\-']/g, '').toUpperCase() || 'FOCUS';
     var mIdx = momentIndex(t);
-    // Alternate crisp white & vivid crimson accent across beats, single monumental word behind crown!
-    var fill = (mIdx % 2 === 0) ? '#F8FAFC' : '#EF4444';
+    // Alternate crisp white & vivid accent across beats, single monumental word behind crown!
+    var accent = (typeof vars.accent_color === 'string' && vars.accent_color) ? vars.accent_color : '#EF4444';
+    var scaleMap = { S: 0.86, M: 1.0, L: 1.14 };
+    var fScale = scaleMap[String(vars.font_scale || 'M').toUpperCase()] || 1.0;
+    var fill = (mIdx % 2 === 0) ? '#F8FAFC' : accent;
     var sc = (0.86 + 0.14 * inP) * (0.94 + 0.06 * outP);
     var dy = (1 - easeOutQuint(mAge / 0.30)) * 55 + (1 - outP) * 32;
 
-    var sz = 250;
+    var sz = Math.round(250 * fScale);
     var w = measureW(hero, sz, 400, POSTER);
     if (w > 980) sz = Math.max(128, Math.floor((sz * 980) / w));
 

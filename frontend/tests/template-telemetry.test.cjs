@@ -69,4 +69,27 @@ test('override event helper keeps enums and drops free text', () => {
   const bad = workflow.safeStudioProperties({ template: '/Users/secret/path', to_template: '包含中文的标题' })
   assert.equal(bad.template, undefined)
   assert.equal(bad.to_template, undefined)
+
+  // Clone lifecycle helpers emit enums/counts only and strip URLs, paths, and free-text instructions.
+  events.length = 0
+  exports.trackTemplateCloneStarted({ source_kind: 'link', url: 'https://example.com/secret/clip.mp4', instruction: '换成霓虹紫' })
+  exports.trackTemplateCloneCompleted({ outcome: 'success', duration_ms: 4200, path: '/Users/a/ref.mp4' })
+  exports.trackTemplateCloneRefined({ trigger: 'manual', instruction: '字幕大一点' })
+  exports.trackTemplateCloneSaved({ template: 'my_clone_style', title: '私密名称' })
+  assert.deepEqual(events.map(e => e.name), [
+    'studio_template_clone_started',
+    'studio_template_clone_completed',
+    'studio_template_clone_refined',
+    'studio_template_clone_saved',
+  ])
+  assert.equal(events[0].props.source_kind, 'link')
+  assert.equal(events[1].props.outcome, 'success')
+  assert.equal(events[1].props.duration_ms, 4200)
+  assert.equal(events[2].props.trigger, 'manual')
+  assert.equal(events[3].props.template, 'my_clone_style')
+  const cloneBlob = JSON.stringify(events)
+  assert.equal(cloneBlob.includes('example.com'), false)
+  assert.equal(cloneBlob.includes('霓虹紫'), false)
+  assert.equal(cloneBlob.includes('/Users'), false)
+  assert.equal(cloneBlob.includes('私密名称'), false)
 })

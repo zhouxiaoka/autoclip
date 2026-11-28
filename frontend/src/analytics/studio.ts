@@ -84,6 +84,23 @@ export function trackTemplateRestore(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_template_restore_recommended', safeStudioProperties(properties))
 }
 
+/** AI Style Cloner lifecycle events: enums and counts only; URLs, filenames and free-text instructions never leave the app. */
+export function trackTemplateCloneStarted(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_clone_started', safeStudioProperties(properties))
+}
+
+export function trackTemplateCloneCompleted(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_clone_completed', safeStudioProperties(properties))
+}
+
+export function trackTemplateCloneRefined(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_clone_refined', safeStudioProperties(properties))
+}
+
+export function trackTemplateCloneSaved(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_clone_saved', safeStudioProperties(properties))
+}
+
 /** New import events stay quiet until the caller confirms a real flag assignment. */
 function trackAssigned(name: string, properties: Record<string, unknown>, assigned: boolean) {
   if (!assigned) return
