@@ -47,6 +47,7 @@ DEFAULT_CATALOG_MIRRORS = (
 CATALOG_CACHE_TTL_SEC = 3600
 CATALOG_TIMEOUT_SEC = 12.0
 CATALOG_PRIMARY_TIMEOUT_SEC = 6.0
+ARCHIVE_PRIMARY_TIMEOUT_SEC = 8.0
 ARCHIVE_TIMEOUT_SEC = 30.0
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 15 * 1024 * 1024
@@ -494,9 +495,11 @@ def install_remote_template(
     archive_bytes = b''
     used_url = entry.download_url
     last_error: TemplateCatalogError | None = None
-    for candidate_url in _archive_download_urls(entry.download_url):
+    candidates = _archive_download_urls(entry.download_url)
+    for idx, candidate_url in enumerate(candidates):
+        timeout = ARCHIVE_PRIMARY_TIMEOUT_SEC if idx < len(candidates) - 1 else ARCHIVE_TIMEOUT_SEC
         try:
-            status, body, _ = do_fetch(candidate_url, timeout=ARCHIVE_TIMEOUT_SEC, max_bytes=MAX_ARCHIVE_BYTES)
+            status, body, _ = do_fetch(candidate_url, timeout=timeout, max_bytes=MAX_ARCHIVE_BYTES)
         except TemplateCatalogError as error:
             last_error = error
             logger.debug('Template archive mirror failed (%s): %s', candidate_url, error)

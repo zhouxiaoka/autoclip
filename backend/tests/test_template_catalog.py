@@ -403,17 +403,20 @@ def test_install_remote_template_falls_back_to_cos_mirror_and_system_proxy_direc
             )
         ],
     )
-    tried: list[str] = []
+    tried: list[tuple[str, float]] = []
 
-    def archive_fetcher(url: str, **_kw):
-        tried.append(url)
+    def archive_fetcher(url: str, **kw):
+        tried.append((url, kw.get('timeout')))
         if 'github.com' in url:
             raise catalog.TemplateCatalogError('timeout')
         return 200, zip_bytes, {}
 
     loaded = catalog.install_remote_template('mirror_demo', catalog=manifest, fetcher=archive_fetcher)
     assert loaded.spec.id == 'mirror_demo'
-    assert tried == [gh_url, cos_url]
+    assert tried == [
+        (gh_url, catalog.ARCHIVE_PRIMARY_TIMEOUT_SEC),
+        (cos_url, catalog.ARCHIVE_TIMEOUT_SEC),
+    ]
 
     # 2. _open_with_proxy_fallback retries direct when OS/registry proxy is set (urllib.request.getproxies()) even if env vars are empty
     for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'):

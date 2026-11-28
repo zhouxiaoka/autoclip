@@ -101,3 +101,45 @@ def test_subject_matte_graceful_fallback_on_invalid_duration(tmp_path):
         dest=tmp_path / 'm.mp4',
     )
     assert res is None
+
+
+def test_subject_matte_loads_cv2_via_framing_runtime(monkeypatch):
+    """Packaged builds install cv2 in framing-runtime; subject_matte must go through framing.load_cv2()."""
+    from backend.services.studio import framing
+
+    calls: list[str] = []
+    fake_cv2 = object()
+
+    def fake_load():
+        calls.append('load_cv2')
+        return fake_cv2
+
+    monkeypatch.setattr(framing, 'load_cv2', fake_load)
+    assert subject_matte.available() is True
+    assert calls == ['load_cv2']
+
+    monkeypatch.setattr(framing, 'load_cv2', lambda: None)
+    assert subject_matte.available() is False
+
+
+def test_subject_matte_ensure_ready_auto_installs_framing_runtime(monkeypatch):
+    """When framing-runtime is not installed yet, ensure_ready triggers framing.start_install() and waits."""
+    from backend.services.studio import framing
+
+    installed = {'ready': False}
+    started = {'count': 0}
+
+    def fake_load():
+        return object() if installed['ready'] else None
+
+    def fake_start():
+        started['count'] += 1
+        installed['ready'] = True
+        return {'started': True}
+
+    monkeypatch.setattr(framing, 'load_cv2', fake_load)
+    monkeypatch.setattr(framing, 'start_install', fake_start)
+    monkeypatch.setattr(framing, 'get_status', lambda: {'status': 'installed' if installed['ready'] else 'not_installed'})
+
+    assert subject_matte.ensure_ready(wait_sec=5.0) is True
+    assert started['count'] == 1

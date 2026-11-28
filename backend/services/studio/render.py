@@ -325,15 +325,17 @@ def _encode_draft(
                 and overlay_spec.base.subject_layer
                 and overlay_spec.overlay.back_entry
             ):
-                back_job = packaging_html.prepare_overlay(
-                    project_id, html_template, overlay_packaging,
-                    sum(audio.scene_duration(scene) for scene in draft.scenes),
-                    features=features, safe_area=safe_area, scenes=draft.scenes,
-                    creator_pack_overrides=effective_cp_overrides,
-                    entry=overlay_spec.overlay.back_entry,
-                )
-                if back_job and back_job.path:
-                    back_overlay_path = back_job.path
+                from backend.services.studio import subject_matte
+                if subject_matte.ensure_ready():
+                    back_job = packaging_html.prepare_overlay(
+                        project_id, html_template, overlay_packaging,
+                        sum(audio.scene_duration(scene) for scene in draft.scenes),
+                        features=features, safe_area=safe_area, scenes=draft.scenes,
+                        creator_pack_overrides=effective_cp_overrides,
+                        entry=overlay_spec.overlay.back_entry,
+                    )
+                    if back_job and back_job.path:
+                        back_overlay_path = back_job.path
         except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise
         except (TemplateRegistryError, OSError) as error:

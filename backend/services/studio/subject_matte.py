@@ -13,7 +13,9 @@ from __future__ import annotations
 import logging
 import subprocess
 import threading
+import time
 from pathlib import Path
+from typing import Any
 
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
@@ -24,23 +26,66 @@ _NET_LOCK = threading.Lock()
 _NET_CACHE = None
 
 
+def _load_cv2(*, auto_install: bool = False, wait_sec: float = 90.0) -> Any | None:
+    """Load cv2 via ``framing.load_cv2()`` so packaged ``framing-runtime`` is on sys.path.
+
+    When ``auto_install`` is True and the runtime is not yet installed, starts the
+    on-demand framing runtime install (outside clip job request budget) and waits up
+    to ``wait_sec`` seconds for it to finish.
+    """
+    from backend.services.studio import framing
+
+    cv2 = framing.load_cv2()
+    if cv2 is not None or not auto_install:
+        return cv2
+    try:
+        from backend.core.job_budget import pause_clip_job_budget
+    except Exception:
+        pause_clip_job_budget = None
+
+    def _install_and_wait():
+        try:
+            framing.start_install()
+        except Exception as exc:  # noqa: BLE001 - optional enhancement
+            logger.warning('Framing runtime install for subject matte could not start: %s', exc)
+            return None
+        deadline = time.monotonic() + max(0.0, wait_sec)
+        while time.monotonic() < deadline:
+            loaded = framing.load_cv2()
+            if loaded is not None:
+                return loaded
+            if framing.get_status().get('status') != 'installing':
+                break
+            time.sleep(2.0)
+        return framing.load_cv2()
+
+    if pause_clip_job_budget is not None:
+        with pause_clip_job_budget():
+            return _install_and_wait()
+    return _install_and_wait()
+
+
 def available() -> bool:
     """Return True when the bundled PP-HumanSeg ONNX model and cv2/numpy are ready."""
     if not MODEL.is_file():
         return False
-    try:
-        import cv2  # noqa: F401
-        import numpy  # noqa: F401
-        return True
-    except Exception:
+    return _load_cv2(auto_install=False) is not None
+
+
+def ensure_ready(*, wait_sec: float = 90.0) -> bool:
+    """Ensure the bundled ONNX model and framing-runtime cv2/numpy are ready."""
+    if not MODEL.is_file():
         return False
+    return _load_cv2(auto_install=True, wait_sec=wait_sec) is not None
 
 
 def _load_net():
     global _NET_CACHE
     with _NET_LOCK:
         if _NET_CACHE is None:
-            import cv2
+            cv2 = _load_cv2(auto_install=False)
+            if cv2 is None:
+                raise RuntimeError('cv2 unavailable for subject matte')
             _NET_CACHE = cv2.dnn.readNetFromONNX(str(MODEL))
         return _NET_CACHE
 
@@ -62,10 +107,12 @@ def generate_scene_matte(
     Returns ``dest`` on success, or ``None`` if segmentation is unavailable or fails
     so the caller can degrade gracefully to standard 2-layer compositing.
     """
-    if not available() or duration <= 0:
+    if duration <= 0 or not MODEL.is_file():
+        return None
+    cv2 = _load_cv2(auto_install=True)
+    if cv2 is None:
         return None
     try:
-        import cv2
         import numpy as np
     except Exception:
         return None
